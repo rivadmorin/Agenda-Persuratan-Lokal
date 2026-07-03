@@ -19,52 +19,73 @@
     "columns": [
       {
         "key": "noUrut",
-        "label": "Nomor Urut Surat",
+        "label": "NOMOR",
         "type": "text",
         "required": true,
         "order": 1
       },
       {
-        "key": "noSurat",
-        "label": "Nomor Surat",
-        "type": "text",
+        "key": "tanggalTerima",
+        "label": "TANGGAL TERIMA",
+        "type": "date",
         "required": true,
         "order": 2
       },
       {
         "key": "tanggalSurat",
-        "label": "Tanggal Surat",
+        "label": "TANGGAL SURAT",
         "type": "date",
         "required": true,
         "order": 3
       },
       {
-        "key": "tanggalTerima",
-        "label": "Tanggal Terima",
-        "type": "date",
+        "key": "jenisSurat",
+        "label": "JENIS SURAT",
+        "type": "text",
         "required": true,
         "order": 4
       },
       {
-        "key": "pengirim",
-        "label": "Pengirim",
+        "key": "noSurat",
+        "label": "NOMOR SURAT",
         "type": "text",
         "required": true,
         "order": 5
       },
       {
-        "key": "perihal",
-        "label": "Perihal/Isi Ringkas",
+        "key": "penomoran",
+        "label": "PENOMORAN",
         "type": "text",
-        "required": true,
+        "required": false,
         "order": 6
       },
       {
-        "key": "keterangan",
-        "label": "Keterangan",
+        "key": "suratDari",
+        "label": "SURAT DARI",
+        "type": "text",
+        "required": true,
+        "order": 7
+      },
+      {
+        "key": "perihal",
+        "label": "PERIHAL",
+        "type": "text",
+        "required": true,
+        "order": 8
+      },
+      {
+        "key": "disposisi",
+        "label": "DISPOSISI",
         "type": "text",
         "required": false,
-        "order": 7
+        "order": 9
+      },
+      {
+        "key": "catatan",
+        "label": "CATATAN",
+        "type": "text",
+        "required": false,
+        "order": 10
       }
     ]
   }

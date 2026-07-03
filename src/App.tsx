@@ -44,6 +44,7 @@ import Settings from './components/Settings';
 import UserManagement from './components/UserManagement';
 import Dashboard from './components/Dashboard';
 import ReceiptModal from './components/ReceiptModal';
+import CursorInteraction from './components/CursorInteraction';
 
 // Types
 import { User, AppConfig, MailRecord, ServerInfo, SystemTask } from './types';
@@ -1570,6 +1571,9 @@ export default function App() {
         defaultSignerLeft={receiptDefaultLeft}
         defaultSignerRight={receiptDefaultRight}
       />
+
+      {/* Modern Cursor Follower and Interaction Ripples */}
+      <CursorInteraction />
     </div>
   );
 }

@@ -39,97 +39,76 @@ Sebelum memasang aplikasi, pastikan komputer Anda telah memenuhi persyaratan ber
 
 ---
 
-## 📥 Panduan Instalasi (Installation)
+## 📥 Panduan Setup Cepat & Manajemen (Unified Scripts)
 
-Ikuti langkah-langkah di bawah ini untuk memasang aplikasi di lingkungan lokal Anda:
+Aplikasi telah dilengkapi dengan **satu skrip setup interaktif** untuk masing-masing sistem operasi (Windows & Linux Debian) yang memudahkan proses **Instalasi otomatis**, **Konfigurasi API**, **Auto-start / Background Service**, serta **Uninstall bersih**.
 
-1. **Unduh atau Kloning Repositori**:
-   Ekstrak file ZIP proyek ke direktori kerja Anda, atau lakukan kloning jika menggunakan Git:
-   ```bash
-   git clone <url-repositori-anda>
-   cd <nama-folder-proyek>
-   ```
+### 💻 1. Di Windows (PowerShell)
+Gunakan skrip `setup.ps1` untuk instalasi interaktif satu langkah:
 
-2. **Pasang Dependensi**:
-   Jalankan perintah berikut untuk mengunduh dan memasang semua pustaka yang dibutuhkan oleh sistem:
-   ```bash
-   npm install
+1. Klik tombol **Start**, cari **PowerShell**, klik kanan lalu pilih **Run as Administrator**.
+2. Masuk ke direktori proyek Anda:
+   ```powershell
+   cd "C:\path\ke\folder-proyek"
    ```
-   *Atau jika Anda menggunakan yarn:*
-   ```bash
-   yarn install
+3. Jalankan skrip setup:
+   ```powershell
+   Set-ExecutionPolicy Bypass -Scope Process -Force; .\setup.ps1
    ```
-
-3. **Konfigurasi Variabel Lingkungan (Environment Variables)**:
-   Buat file bernama `.env` di direktori utama (*root*) aplikasi dengan menyalin contoh dari `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-   Isi token autentikasi API jika Anda ingin mengaktifkan layanan AI backend:
-   ```env
-   GEMINI_API_KEY=masukkan_api_key_gemini_anda_di_sini
-   ```
+4. **Fitur di Windows:**
+   * Memeriksa dan memandu instalasi Node.js.
+   * Memasang dependensi (`npm install`) & melakukan kompilasi otomatis (`npm run build`).
+   * Konfigurasi `.env` dengan input `GEMINI_API_KEY` interaktif.
+   * **Auto-Start Latar Belakang (Silent Mode):** Membuat skrip peluncur tak kasat mata (`launch.vbs` + `start-app.bat`) di folder Startup Windows sehingga server berjalan otomatis tanpa jendela CMD hitam yang mengganggu.
+   * **Shortcut Desktop:** Membuat pintasan web langsung di desktop Anda untuk akses sekali klik.
 
 ---
 
-## 🏃‍♂️ Cara Menjalankan Aplikasi (Running the Application)
+### 🐧 2. Di Linux (Debian / Ubuntu / derivatif)
+Gunakan skrip `setup.sh` untuk instalasi interaktif satu langkah:
 
-### 1. Mode Pengembangan (Development Mode)
-Untuk menjalankan aplikasi dalam mode pengembangan lokal dengan fitur penyegaran otomatis (*hot reload*):
-```bash
-npm run dev
-```
-Buka peramban (*browser*) Anda lalu akses alamat:
-👉 **`http://localhost:3000`**
-
-### 2. Mode Produksi (Production Build & Start)
-Jika Anda ingin menguji atau mendeploy aplikasi dengan performa maksimal dan ukuran file yang dioptimalkan:
-
-A. **Kompilasi Aplikasi (Build)**:
-```bash
-npm run build
-```
-Proses ini akan menghasilkan folder `dist/` yang berisi file aset statis frontend serta kompilasi server backend Node.js (`dist/server.cjs`).
-
-B. **Jalankan Server Produksi (Start)**:
-```bash
-npm run start
-```
-Aplikasi akan berjalan di lingkungan produksi mandiri pada port `3000`.
+1. Buka terminal Anda.
+2. Masuk ke direktori proyek Anda:
+   ```bash
+   cd /path/ke/folder-proyek
+   ```
+3. Jalankan skrip setup (gunakan `sudo` jika ingin mengonfigurasi Systemd service secara otomatis):
+   ```bash
+   sudo ./setup.sh
+   ```
+4. **Fitur di Linux:**
+   * Memasang Node.js v20 LTS dan npm otomatis dari repositori resmi NodeSource jika belum terdeteksi.
+   * Memasang dependensi (`npm install`) & mengompilasi program (`npm run build`).
+   * Konfigurasi `.env` interaktif.
+   * **Systemd Service Integration:** Memasang aplikasi sebagai *daemon system* (`agenda-surat.service`) sehingga otomatis menyala saat sistem operasi booting, dapat dihidup-matikan lewat `systemctl`, dan auto-restart jika crash.
 
 ---
 
-## 🗑️ Cara Menghapus Aplikasi (Uninstallation / Cleanup)
+## 🗑️ Cara Menghapus Aplikasi (Uninstallation)
 
-Jika Anda ingin menghapus atau membersihkan proyek ini dari komputer Anda, ikuti prosedur berikut:
+Anda tidak perlu menghapus file secara manual satu per satu. Cukup gunakan skrip setup yang sama:
 
-1. **Hentikan Server yang Sedang Berjalan**:
-   Tekan kombinasi tombol `Ctrl + C` pada terminal tempat aplikasi dijalankan untuk mematikan proses server Node.js.
+### 💻 Di Windows (PowerShell):
+1. Jalankan kembali skrip dengan hak akses administrator:
+   ```powershell
+   .\setup.ps1
+   ```
+2. Pilih menu **2) Hapus / Uninstall Aplikasi**. Skrip akan:
+   * Menghentikan semua proses server aktif di port 3000 secara paksa.
+   * Menghapus pintasan Desktop dan entri Startup otomatis.
+   * Membersihkan file build (`dist`) dan folder `node_modules`.
+   * Menawarkan opsi opsional untuk menghapus seluruh folder proyek dan data tersimpan secara permanen.
 
-2. **Bersihkan File Build dan Dependensi Terinstal**:
-   Untuk mengosongkan ruang penyimpanan tanpa menghapus kode sumber utama, Anda dapat menghapus folder hasil kompilasi (`dist`) dan modul pustaka pihak ketiga (`node_modules`):
-   * **Sistem Operasi Linux / macOS**:
-     ```bash
-     rm -rf node_modules dist
-     ```
-   * **Sistem Operasi Windows (Command Prompt)**:
-     ```cmd
-     rmdir /s /q node_modules dist
-     ```
-   * **Sistem Operasi Windows (PowerShell)**:
-     ```powershell
-     Remove-Item -Recurse -Force node_modules, dist
-     ```
-
-3. **Hapus Seluruh Folder Proyek**:
-   Bila ingin menghapus keseluruhan aplikasi beserta seluruh riwayat kode sumbernya:
-   * Kembali ke folder satu tingkat di atas proyek:
-     ```bash
-     cd ..
-     ```
-   * Hapus folder utama proyek:
-     * **Linux / macOS**: `rm -rf <nama-folder-proyek>`
-     * **Windows (PowerShell)**: `Remove-Item -Recurse -Force <nama-folder-proyek>`
+### 🐧 Di Linux (Debian):
+1. Jalankan kembali skrip:
+   ```bash
+   sudo ./setup.sh
+   ```
+2. Pilih menu **2) Hapus / Uninstall Aplikasi**. Skrip akan:
+   * Mematikan, menonaktifkan, dan menghapus unit service `/etc/systemd/system/agenda-surat.service`.
+   * Memulihkan daemon systemd (`systemctl daemon-reload`).
+   * Menghapus berkas kompilasi (`dist`) dan dependensi (`node_modules`).
+   * Memberikan opsi untuk menghapus data agenda (`data/`), file konfigurasi (`.env`), atau bahkan keseluruhan direktori proyek Anda.
 
 ---
 

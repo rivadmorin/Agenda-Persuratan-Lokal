@@ -78,15 +78,18 @@ const defaultDb = {
     backupRetentionDays: 7,
     backupRetentionWeeks: 4,
     autoRenamePdf: true,
-    pdfRenameCols: ['tanggalTerima', 'noSurat', 'pengirim'],
+    pdfRenameCols: ['tanggalTerima', 'noSurat', 'suratDari'],
     columns: [
-      { key: 'noUrut', label: 'Nomor Urut Surat', type: 'text', required: true, order: 1 },
-      { key: 'noSurat', label: 'Nomor Surat', type: 'text', required: true, order: 2 },
-      { key: 'tanggalSurat', label: 'Tanggal Surat', type: 'date', required: true, order: 3 },
-      { key: 'tanggalTerima', label: 'Tanggal Terima', type: 'date', required: true, order: 4 },
-      { key: 'pengirim', label: 'Pengirim', type: 'text', required: true, order: 5 },
-      { key: 'perihal', label: 'Perihal/Isi Ringkas', type: 'text', required: true, order: 6 },
-      { key: 'keterangan', label: 'Keterangan', type: 'text', required: false, order: 7 }
+      { key: 'noUrut', label: 'NOMOR', type: 'text', required: true, order: 1 },
+      { key: 'tanggalTerima', label: 'TANGGAL TERIMA', type: 'date', required: true, order: 2 },
+      { key: 'tanggalSurat', label: 'TANGGAL SURAT', type: 'date', required: true, order: 3 },
+      { key: 'jenisSurat', label: 'JENIS SURAT', type: 'text', required: true, order: 4 },
+      { key: 'noSurat', label: 'NOMOR SURAT', type: 'text', required: true, order: 5 },
+      { key: 'penomoran', label: 'PENOMORAN', type: 'text', required: false, order: 6 },
+      { key: 'suratDari', label: 'SURAT DARI', type: 'text', required: true, order: 7 },
+      { key: 'perihal', label: 'PERIHAL', type: 'text', required: true, order: 8 },
+      { key: 'disposisi', label: 'DISPOSISI', type: 'text', required: false, order: 9 },
+      { key: 'catatan', label: 'CATATAN', type: 'text', required: false, order: 10 }
     ]
   }
 };
@@ -262,6 +265,23 @@ function renameMailPdfFile(db: any, mail: any) {
   }
 
   return mail.pdfPath;
+}
+
+// Helper to add entire directory recursively to a JSZip object
+function addDirectoryToZip(zip: JSZip, localDirPath: string, zipPathPrefix: string = '') {
+  if (!fs.existsSync(localDirPath)) return;
+  const items = fs.readdirSync(localDirPath);
+  for (const item of items) {
+    const fullLocalPath = path.join(localDirPath, item);
+    const relativeZipPath = zipPathPrefix ? `${zipPathPrefix}/${item}` : item;
+    const stats = fs.statSync(fullLocalPath);
+    if (stats.isDirectory()) {
+      addDirectoryToZip(zip, fullLocalPath, relativeZipPath);
+    } else if (stats.isFile()) {
+      const fileBytes = fs.readFileSync(fullLocalPath);
+      zip.file(relativeZipPath, fileBytes);
+    }
+  }
 }
 
 // Perform Auto Backup & Cleanup
@@ -529,6 +549,32 @@ app.get('/api/backup/export', (req, res) => {
   }
 });
 
+app.get('/api/backup/export-zip', async (req, res) => {
+  try {
+    const zip = new JSZip();
+    
+    // 1. Add database db.json
+    if (fs.existsSync(dbPath)) {
+      zip.file('db.json', fs.readFileSync(dbPath));
+    }
+    
+    // 2. Add uploaded PDFs recursively
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      addDirectoryToZip(zip, uploadsDir, 'uploads');
+    }
+    
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename=agenda_surat_backup_lengkap_${new Date().toISOString().slice(0, 10)}.zip`);
+    res.send(zipBuffer);
+    logMessage('INFO', 'Database full backup (with PDFs) exported manually');
+  } catch (err: any) {
+    logMessage('ERROR', `Full backup export failed: ${err.message}`);
+    res.status(500).json({ message: 'Gagal mengekspor pencadangan lengkap (ZIP + PDF).' });
+  }
+});
+
 app.post('/api/backup/import', (req, res) => {
   try {
     const { backupData } = req.body;
@@ -591,6 +637,275 @@ app.post('/api/backup/clear', (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Failed to clear database: ${err.message}`);
     res.status(500).json({ message: 'Gagal mengosongkan data.' });
+  }
+});
+
+// GET /api/backup/list
+app.get('/api/backup/list', (req, res) => {
+  try {
+    const backupDir = path.join(process.cwd(), 'data', 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const files = fs.readdirSync(backupDir);
+    const backupFiles = files
+      .filter((file) => file.endsWith('.json') || file.endsWith('.zip'))
+      .map((file) => {
+        const filePath = path.join(backupDir, file);
+        const stats = fs.statSync(filePath);
+        let label = 'Auto Backup (JSON)';
+        if (file.endsWith('.zip')) {
+          label = 'Full Backup (ZIP + PDF)';
+        } else if (file.includes('_manual_')) {
+          label = 'Manual Backup (JSON)';
+        } else if (file.includes('pre_restore')) {
+          label = 'Pre-Restore Safe-point';
+        }
+        return {
+          filename: file,
+          sizeBytes: stats.size,
+          createdAt: stats.mtime.toISOString(),
+          label,
+          isAuto: file.startsWith('db_backup_') && !file.includes('_manual_') && !file.includes('pre_restore'),
+          isManual: file.includes('_manual_'),
+          isPreRestore: file.includes('pre_restore'),
+          isZip: file.endsWith('.zip')
+        };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    res.json({ success: true, backups: backupFiles });
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to list backups: ${err.message}`);
+    res.status(500).json({ message: 'Gagal mendapatkan daftar pencadangan.' });
+  }
+});
+
+// POST /api/backup/create
+app.post('/api/backup/create', async (req, res) => {
+  try {
+    const { includePdf } = req.body;
+    const backupDir = path.join(process.cwd(), 'data', 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\./g, '-');
+
+    if (includePdf) {
+      // Create ZIP with database and uploaded PDF attachments
+      const filename = `db_backup_manual_${timestamp}.zip`;
+      const backupFile = path.join(backupDir, filename);
+      
+      const zip = new JSZip();
+      
+      // 1. Add database db.json
+      if (fs.existsSync(dbPath)) {
+        zip.file('db.json', fs.readFileSync(dbPath));
+      }
+      
+      // 2. Add uploaded PDFs recursively
+      const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+      if (fs.existsSync(uploadsDir)) {
+        addDirectoryToZip(zip, uploadsDir, 'uploads');
+      }
+      
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      fs.writeFileSync(backupFile, zipBuffer);
+      logMessage('INFO', `Manual ZIP backup with PDFs created: ${filename}`);
+      res.json({ success: true, message: 'Pencadangan manual (Database + PDF) berhasil dibuat.', filename, isZip: true });
+    } else {
+      // Create JSON only backup
+      const filename = `db_backup_manual_${timestamp}.json`;
+      const backupFile = path.join(backupDir, filename);
+      fs.copyFileSync(dbPath, backupFile);
+      logMessage('INFO', `Manual database-only backup created: ${filename}`);
+      res.json({ success: true, message: 'Pencadangan manual (Database JSON) berhasil dibuat.', filename, isZip: false });
+    }
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to create manual backup: ${err.message}`);
+    res.status(500).json({ message: `Gagal membuat pencadangan: ${err.message}` });
+  }
+});
+
+// POST /api/backup/restore-local
+app.post('/api/backup/restore-local', async (req, res) => {
+  try {
+    const { filename } = req.body;
+    if (!filename) {
+      return res.status(400).json({ message: 'Nama file cadangan tidak ditentukan.' });
+    }
+    const cleanFilename = path.basename(filename);
+    const backupFile = path.join(process.cwd(), 'data', 'backups', cleanFilename);
+    if (!fs.existsSync(backupFile)) {
+      return res.status(404).json({ message: 'Berkas cadangan tidak ditemukan.' });
+    }
+
+    const isZip = cleanFilename.endsWith('.zip');
+    const backupDir = path.join(process.cwd(), 'data', 'backups');
+    const timestamp = new Date().getTime();
+
+    // Always create a pre-restore safety copy of the current database
+    const preRestoreFilename = `db_backup_pre_restore_${timestamp}.json`;
+    fs.copyFileSync(dbPath, path.join(backupDir, preRestoreFilename));
+
+    if (isZip) {
+      const zipBuffer = fs.readFileSync(backupFile);
+      const zip = await JSZip.loadAsync(zipBuffer);
+      
+      // 1. Extract and validate db.json from ZIP
+      const dbFile = zip.file('db.json');
+      if (!dbFile) {
+        return res.status(400).json({ message: 'File db.json tidak ditemukan di dalam arsip cadangan.' });
+      }
+      const dbContent = await dbFile.async('string');
+      const parsed = JSON.parse(dbContent);
+      
+      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.mails) || !parsed.config) {
+        return res.status(400).json({ message: 'Format berkas database di dalam ZIP tidak valid.' });
+      }
+
+      // 2. Extract uploads/ directory containing PDFs back to disk
+      const uploadsKeys = Object.keys(zip.files).filter(key => key.startsWith('uploads/') && !zip.files[key].dir);
+      let extractedCount = 0;
+      for (const key of uploadsKeys) {
+        const file = zip.file(key);
+        if (file) {
+          const fileBytes = await file.async('nodebuffer');
+          const destPath = path.join(process.cwd(), 'data', key);
+          const destDir = path.dirname(destPath);
+          if (!fs.existsSync(destDir)) {
+            fs.mkdirSync(destDir, { recursive: true });
+          }
+          fs.writeFileSync(destPath, fileBytes);
+          extractedCount++;
+        }
+      }
+
+      // 3. Write back database
+      writeDb(parsed);
+      logMessage('INFO', `Database and ${extractedCount} PDF physical attachments successfully restored from ZIP backup: ${cleanFilename}`);
+      res.json({ success: true, message: `Berhasil memulihkan database dan ${extractedCount} file lampiran PDF ke kondisi: ${cleanFilename}` });
+    } else {
+      // Normal JSON restore
+      const content = fs.readFileSync(backupFile, 'utf-8');
+      const parsed = JSON.parse(content);
+      
+      if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.mails) || !parsed.config) {
+        return res.status(400).json({ message: 'Format berkas cadangan tidak valid.' });
+      }
+
+      writeDb(parsed);
+      logMessage('INFO', `Database successfully restored from JSON backup: ${cleanFilename}`);
+      res.json({ success: true, message: `Berhasil memulihkan database ke kondisi: ${cleanFilename}` });
+    }
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to restore local backup: ${err.message}`);
+    res.status(500).json({ message: `Gagal memulihkan data: ${err.message}` });
+  }
+});
+
+// POST /api/backup/import-zip
+app.post('/api/backup/import-zip', express.raw({ type: 'application/zip', limit: '100mb' }), async (req, res) => {
+  try {
+    const zipBuffer = req.body;
+    if (!zipBuffer || zipBuffer.length === 0) {
+      return res.status(400).json({ message: 'Arsip ZIP cadangan kosong atau tidak valid.' });
+    }
+
+    const zip = await JSZip.loadAsync(zipBuffer);
+    
+    // 1. Extract and validate db.json from ZIP
+    const dbFile = zip.file('db.json');
+    if (!dbFile) {
+      return res.status(400).json({ message: 'File db.json tidak ditemukan di dalam berkas ZIP.' });
+    }
+    const dbContent = await dbFile.async('string');
+    const parsed = JSON.parse(dbContent);
+    
+    if (!parsed || !Array.isArray(parsed.users) || !Array.isArray(parsed.mails) || !parsed.config) {
+      return res.status(400).json({ message: 'Format database di dalam berkas ZIP tidak valid.' });
+    }
+
+    // 2. Quick safety copy of current db before restoring
+    const backupDir = path.join(process.cwd(), 'data', 'backups');
+    const timestamp = new Date().getTime();
+    const preRestoreFilename = `db_backup_pre_restore_${timestamp}.json`;
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    fs.copyFileSync(dbPath, path.join(backupDir, preRestoreFilename));
+
+    // 3. Extract uploads/ directory files back to disk
+    const uploadsKeys = Object.keys(zip.files).filter(key => key.startsWith('uploads/') && !zip.files[key].dir);
+    let extractedCount = 0;
+    for (const key of uploadsKeys) {
+      const file = zip.file(key);
+      if (file) {
+        const fileBytes = await file.async('nodebuffer');
+        const destPath = path.join(process.cwd(), 'data', key);
+        const destDir = path.dirname(destPath);
+        if (!fs.existsSync(destDir)) {
+          fs.mkdirSync(destDir, { recursive: true });
+        }
+        fs.writeFileSync(destPath, fileBytes);
+        extractedCount++;
+      }
+    }
+
+    // 4. Save Database
+    writeDb(parsed);
+    logMessage('INFO', `Successfully imported backup ZIP with ${extractedCount} PDF attachments`);
+    res.json({ success: true, message: `Berhasil memulihkan database dan ${extractedCount} file lampiran PDF.` });
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to import ZIP backup: ${err.message}`);
+    res.status(500).json({ message: `Gagal mengimpor arsip cadangan ZIP: ${err.message}` });
+  }
+});
+
+// DELETE /api/backup/delete/:filename
+app.delete('/api/backup/delete/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename) {
+      return res.status(400).json({ message: 'Nama file tidak boleh kosong.' });
+    }
+    const cleanFilename = path.basename(filename);
+    const backupFile = path.join(process.cwd(), 'data', 'backups', cleanFilename);
+    if (!fs.existsSync(backupFile)) {
+      return res.status(404).json({ message: 'Berkas cadangan tidak ditemukan.' });
+    }
+
+    fs.unlinkSync(backupFile);
+    logMessage('INFO', `Backup file deleted: ${cleanFilename}`);
+    res.json({ success: true, message: `Berkas cadangan ${cleanFilename} berhasil dihapus.` });
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to delete backup file: ${err.message}`);
+    res.status(500).json({ message: 'Gagal menghapus berkas cadangan.' });
+  }
+});
+
+// GET /api/backup/download/:filename
+app.get('/api/backup/download/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename) {
+      return res.status(400).json({ message: 'Nama file tidak boleh kosong.' });
+    }
+    const cleanFilename = path.basename(filename);
+    const backupFile = path.join(process.cwd(), 'data', 'backups', cleanFilename);
+    if (!fs.existsSync(backupFile)) {
+      return res.status(404).json({ message: 'Berkas cadangan tidak ditemukan.' });
+    }
+
+    const isZip = cleanFilename.endsWith('.zip');
+    res.setHeader('Content-Type', isZip ? 'application/zip' : 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=${cleanFilename}`);
+    const stream = fs.createReadStream(backupFile);
+    stream.pipe(res);
+    logMessage('INFO', `Backup file downloaded: ${cleanFilename}`);
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to download backup file: ${err.message}`);
+    res.status(500).json({ message: 'Gagal mengunduh berkas cadangan.' });
   }
 });
 

@@ -28,7 +28,10 @@ import {
   BookOpen,
   GraduationCap,
   Star,
-  Inbox
+  Inbox,
+  History,
+  HardDrive,
+  Server
 } from 'lucide-react';
 
 const SettingsLogoMap: Record<string, React.ComponentType<any>> = {
@@ -216,9 +219,129 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [statusType, setStatusType] = useState<'success' | 'error'>('success');
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingZip, setIsExportingZip] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Local backups list states
+  interface BackupFile {
+    filename: string;
+    sizeBytes: number;
+    createdAt: string;
+    label: string;
+    isAuto: boolean;
+    isManual: boolean;
+    isPreRestore: boolean;
+    isZip?: boolean;
+  }
+  const [localBackups, setLocalBackups] = useState<BackupFile[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isCreatingLocalBackup, setIsCreatingLocalBackup] = useState(false);
+  const [includePdfInLocalBackup, setIncludePdfInLocalBackup] = useState(true);
+  const [isRestoringLocal, setIsRestoringLocal] = useState<string | null>(null);
+  const [isDeletingLocal, setIsDeletingLocal] = useState<string | null>(null);
+
+  const fetchLocalBackups = async () => {
+    setIsLoadingBackups(true);
+    try {
+      const res = await fetch('/api/backup/list');
+      if (res.ok) {
+        const data = await res.json();
+        setLocalBackups(data.backups || []);
+      }
+    } catch (err) {
+      console.error('Error fetching backups list:', err);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  const handleCreateLocalBackup = async () => {
+    setIsCreatingLocalBackup(true);
+    try {
+      const res = await fetch('/api/backup/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ includePdf: includePdfInLocalBackup }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        showNotification(result.isZip 
+          ? 'Pencadangan manual lengkap (Database + PDF) berhasil disimpan di server!'
+          : 'Pencadangan database manual (JSON) berhasil disimpan di server!'
+        );
+        fetchLocalBackups();
+      } else {
+        showNotification('Gagal membuat pencadangan manual.', 'error');
+      }
+    } catch (err) {
+      showNotification('Terjadi kesalahan koneksi.', 'error');
+    } finally {
+      setIsCreatingLocalBackup(false);
+    }
+  };
+
+  const handleRestoreLocalBackup = async (filename: string) => {
+    const isZipFile = filename.endsWith('.zip');
+    const warningMsg = isZipFile
+      ? `Apakah Anda yakin ingin memulihkan database dan seluruh file PDF menggunakan berkas cadangan "${filename}"? Tindakan ini akan menimpa seluruh data dan lampiran surat saat ini.`
+      : `Apakah Anda yakin ingin memulihkan database menggunakan berkas cadangan "${filename}"? Tindakan ini akan menimpa seluruh data saat ini.`;
+      
+    if (!window.confirm(warningMsg)) {
+      return;
+    }
+    setIsRestoringLocal(filename);
+    try {
+      const res = await fetch('/api/backup/restore-local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        showNotification(result.message || 'Sistem berhasil dipulihkan dari berkas cadangan!');
+        if (window.location) {
+          setTimeout(() => window.location.reload(), 1500);
+        }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        showNotification(errJson.message || 'Gagal memulihkan database dari berkas cadangan.', 'error');
+      }
+    } catch (err) {
+      showNotification('Terjadi kesalahan koneksi.', 'error');
+    } finally {
+      setIsRestoringLocal(null);
+    }
+  };
+
+  const handleDeleteLocalBackup = async (filename: string) => {
+    if (!window.confirm(`Hapus berkas cadangan "${filename}" secara permanen dari server?`)) {
+      return;
+    }
+    setIsDeletingLocal(filename);
+    try {
+      const res = await fetch(`/api/backup/delete/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        showNotification('Berkas cadangan berhasil dihapus.');
+        fetchLocalBackups();
+      } else {
+        showNotification('Gagal menghapus berkas cadangan.', 'error');
+      }
+    } catch (err) {
+      showNotification('Terjadi kesalahan koneksi.', 'error');
+    } finally {
+      setIsDeletingLocal(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchLocalBackups();
+  }, []);
 
   const handleExportBackup = async () => {
     setIsExporting(true);
@@ -234,7 +357,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
-        showNotification('Ekspor database berhasil diunduh!');
+        showNotification('Ekspor database JSON berhasil diunduh!');
       } else {
         showNotification('Gagal mengunduh ekspor database.', 'error');
       }
@@ -245,38 +368,85 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     }
   };
 
+  const handleExportBackupZip = async () => {
+    setIsExportingZip(true);
+    try {
+      const res = await fetch('/api/backup/export-zip');
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `backup_lengkap_agenda_${new Date().toISOString().slice(0, 10)}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        showNotification('Ekspor paket lengkap (Database + PDF) berhasil diunduh!');
+      } else {
+        showNotification('Gagal mengunduh paket pencadangan lengkap.', 'error');
+      }
+    } catch (err) {
+      showNotification('Terjadi kesalahan koneksi saat ekspor paket lengkap.', 'error');
+    } finally {
+      setIsExportingZip(false);
+    }
+  };
+
   const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
     setIsImporting(true);
     try {
-      const text = await file.text();
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch (err) {
-        showNotification('File backup tidak valid (Bukan format JSON).', 'error');
-        setIsImporting(false);
-        return;
-      }
+      if (file.name.endsWith('.zip')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const res = await fetch('/api/backup/import-zip', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/zip',
+          },
+          body: arrayBuffer,
+        });
 
-      const res = await fetch('/api/backup/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(parsed),
-      });
-
-      if (res.ok) {
-        showNotification('Database berhasil dipulihkan dari backup!');
-        if (window.location) {
-          setTimeout(() => window.location.reload(), 1500);
+        if (res.ok) {
+          const result = await res.json();
+          showNotification(result.message || 'Sistem berhasil dipulihkan dari berkas ZIP cadangan!');
+          if (window.location) {
+            setTimeout(() => window.location.reload(), 1500);
+          }
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          showNotification(errJson.message || 'Gagal memulihkan dari berkas ZIP.', 'error');
         }
       } else {
-        const errJson = await res.json().catch(() => ({}));
-        showNotification(errJson.error || 'Gagal memulihkan database dari backup.', 'error');
+        const text = await file.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch (err) {
+          showNotification('File backup tidak valid (Bukan format JSON).', 'error');
+          setIsImporting(false);
+          return;
+        }
+
+        const res = await fetch('/api/backup/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(parsed),
+        });
+
+        if (res.ok) {
+          showNotification('Database berhasil dipulihkan dari backup!');
+          if (window.location) {
+            setTimeout(() => window.location.reload(), 1500);
+          }
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          showNotification(errJson.error || 'Gagal memulihkan database dari backup.', 'error');
+        }
       }
     } catch (err) {
       showNotification('Terjadi kesalahan koneksi saat memulihkan database.', 'error');
@@ -993,63 +1163,124 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
           </form>
 
           {/* Backup Database info */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none space-y-5 transition-colors duration-200">
-            <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wider flex items-center gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
-              <Database className="w-4.5 h-4.5 text-blue-600" />
-              Sistem Database Backup & Pemulihan
-            </h3>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none space-y-6 transition-colors duration-200">
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wider flex items-center gap-2">
+                <Database className="w-4.5 h-4.5 text-blue-600" />
+                Sistem Database Backup & Pemulihan
+              </h3>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Aktif</span>
+              </div>
+            </div>
             
-            <div className="grid grid-cols-2 gap-4 pb-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                   Retensi Backup Otomatis (Hari)
                 </label>
-                <input
-                  type="number"
-                  value={backupRetentionDays}
-                  onChange={(e) => setBackupRetentionDays(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
-                  min={3}
-                  max={90}
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={backupRetentionDays}
+                    onChange={(e) => setBackupRetentionDays(Number(e.target.value))}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                    min={3}
+                    max={90}
+                  />
+                  <span className="inline-flex items-center px-3 bg-slate-100 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-500">HARI</span>
+                </div>
               </div>
               <div className="flex flex-col justify-end">
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-relaxed bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                  * Sistem akan otomatis menyalin file database utama dan menghapus file backup yang usang melebihi durasi hari simpan yang disetel.
+                  * Sistem secara otomatis melakukan pencadangan otomatis (auto-backup) secara terjadwal dan menghapus file cadangan usang yang melebihi batas hari retensi.
                 </span>
               </div>
             </div>
 
-            {/* Manual actions area */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-850 space-y-4">
+            {/* Manual Backup Options */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-850">
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={includePdfInLocalBackup}
+                  onChange={(e) => setIncludePdfInLocalBackup(e.target.checked)}
+                  className="mt-1 h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                />
+                <div className="flex-1">
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors uppercase tracking-wider">
+                    Sertakan File PDF Lampiran
+                  </span>
+                  <span className="block text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-relaxed mt-0.5">
+                    Jika dicentang, file pencadangan akan dibuat dalam format <strong>ZIP</strong> lengkap berisi data database JSON dan seluruh file lampiran PDF surat. Jika tidak dicentang, hanya database JSON yang dicadangkan.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {/* Quick Manual Actions Panel */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-850 space-y-4">
               <span className="block text-xs font-bold text-slate-700 dark:text-slate-350 uppercase tracking-wider">
-                Tindakan Pencadangan Manual
+                Tindakan Cepat & Transfer Data
               </span>
-              <p className="text-[11px] text-slate-450 dark:text-slate-500 font-medium">
-                Ekspor data Anda ke file lokal, pulihkan data dari file cadangan sebelumnya, atau bersihkan seluruh database jika ingin memulai dari awal.
-              </p>
               
-              <div className="grid grid-cols-3 gap-3">
-                {/* Export Button */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {/* Manual Local Backup Creation */}
+                <button
+                  type="button"
+                  disabled={isCreatingLocalBackup}
+                  onClick={handleCreateLocalBackup}
+                  className="flex flex-col items-center justify-center p-3.5 bg-blue-50/50 dark:bg-blue-950/15 hover:bg-blue-50 dark:hover:bg-blue-950/25 border border-blue-100 dark:border-blue-900/30 rounded-2xl transition-all cursor-pointer text-blue-700 dark:text-blue-400 active:scale-95"
+                  title="Buat file cadangan baru langsung di server lokal"
+                >
+                  {isCreatingLocalBackup ? (
+                    <Loader className="w-5 h-5 animate-spin mb-1.5" />
+                  ) : (
+                    <Server className="w-5 h-5 mb-1.5 text-blue-600 dark:text-blue-400" />
+                  )}
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-center">
+                    {includePdfInLocalBackup ? 'Buat ZIP + PDF' : 'Buat JSON DB'}
+                  </span>
+                </button>
+
+                {/* Export Button (JSON) */}
                 <button
                   type="button"
                   disabled={isExporting}
                   onClick={handleExportBackup}
-                  className="flex flex-col items-center justify-center p-4 bg-blue-50/50 dark:bg-blue-950/15 hover:bg-blue-50 dark:hover:bg-blue-950/25 border border-blue-100 dark:border-blue-900/30 rounded-2xl transition-all cursor-pointer text-blue-700 dark:text-blue-400 active:scale-95"
+                  className="flex flex-col items-center justify-center p-3.5 bg-indigo-50/50 dark:bg-indigo-950/15 hover:bg-indigo-50 dark:hover:bg-indigo-950/25 border border-indigo-100 dark:border-indigo-900/30 rounded-2xl transition-all cursor-pointer text-indigo-700 dark:text-indigo-400 active:scale-95"
+                  title="Unduh database utama saat ini ke komputer Anda sebagai JSON"
                 >
                   {isExporting ? (
                     <Loader className="w-5 h-5 animate-spin mb-1.5" />
                   ) : (
-                    <Download className="w-5 h-5 mb-1.5" />
+                    <Download className="w-5 h-5 mb-1.5 text-indigo-600 dark:text-indigo-450" />
                   )}
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Ekspor JSON</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-center">Ekspor JSON</span>
+                </button>
+
+                {/* Export Button (ZIP with PDFs) */}
+                <button
+                  type="button"
+                  disabled={isExportingZip}
+                  onClick={handleExportBackupZip}
+                  className="flex flex-col items-center justify-center p-3.5 bg-purple-50/50 dark:bg-purple-950/15 hover:bg-purple-50 dark:hover:bg-purple-950/25 border border-purple-100 dark:border-purple-900/30 rounded-2xl transition-all cursor-pointer text-purple-700 dark:text-purple-400 active:scale-95"
+                  title="Unduh paket backup lengkap (Database + semua PDF lampiran) ke komputer Anda sebagai ZIP"
+                >
+                  {isExportingZip ? (
+                    <Loader className="w-5 h-5 animate-spin mb-1.5" />
+                  ) : (
+                    <Download className="w-5 h-5 mb-1.5 text-purple-600 dark:text-purple-450" />
+                  )}
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-center">Ekspor ZIP + PDF</span>
                 </button>
 
                 {/* Import Button */}
-                <label className="flex flex-col items-center justify-center p-4 bg-emerald-50/50 dark:bg-emerald-950/15 hover:bg-emerald-50 dark:hover:bg-emerald-950/25 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl transition-all cursor-pointer text-emerald-700 dark:text-emerald-400 active:scale-95 text-center">
+                <label className="flex flex-col items-center justify-center p-3.5 bg-emerald-50/50 dark:bg-emerald-950/15 hover:bg-emerald-50 dark:hover:bg-emerald-950/25 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl transition-all cursor-pointer text-emerald-700 dark:text-emerald-400 active:scale-95 text-center" title="Unggah berkas JSON atau ZIP ekspor Anda untuk memulihkan seluruh data">
                   <input
                     type="file"
-                    accept=".json"
+                    accept=".json,.zip"
                     onChange={handleImportBackup}
                     className="hidden"
                     disabled={isImporting}
@@ -1057,9 +1288,9 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                   {isImporting ? (
                     <Loader className="w-5 h-5 animate-spin mb-1.5" />
                   ) : (
-                    <Upload className="w-5 h-5 mb-1.5" />
+                    <Upload className="w-5 h-5 mb-1.5 text-emerald-600 dark:text-emerald-450" />
                   )}
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Impor JSON</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-center">Impor file</span>
                 </label>
 
                 {/* Delete/Clear Button */}
@@ -1067,12 +1298,173 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                   type="button"
                   disabled={isClearing}
                   onClick={() => setShowClearConfirm(true)}
-                  className="flex flex-col items-center justify-center p-4 bg-rose-50/50 dark:bg-rose-950/15 hover:bg-rose-50 dark:hover:bg-rose-950/25 border border-rose-100 dark:border-rose-900/30 rounded-2xl transition-all cursor-pointer text-rose-700 dark:text-rose-450 active:scale-95"
+                  className="flex flex-col items-center justify-center p-3.5 bg-rose-50/50 dark:bg-rose-950/15 hover:bg-rose-50 dark:hover:bg-rose-950/25 border border-rose-100 dark:border-rose-900/30 rounded-2xl transition-all cursor-pointer text-rose-700 dark:text-rose-450 active:scale-95 text-center"
+                  title="DANGEROUS: Kosongkan database utama dan seluruh lampiran PDF"
                 >
                   <Trash2 className="w-5 h-5 mb-1.5 text-rose-600 dark:text-rose-450" />
-                  <span className="text-[11px] font-bold uppercase tracking-wider">Hapus Data</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-center">Hapus Data</span>
                 </button>
               </div>
+            </div>
+
+            {/* List of Backup Files stored on server */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-850 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-350 uppercase tracking-wider">
+                    Daftar Riwayat Cadangan di Server
+                  </span>
+                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-750 text-slate-600 dark:text-slate-400 text-[10px] font-bold rounded-full">
+                    {localBackups.length} Berkas
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchLocalBackups}
+                  disabled={isLoadingBackups}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg cursor-pointer transition-colors"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingBackups ? 'animate-spin' : ''}`} />
+                  Segarkan
+                </button>
+              </div>
+
+              {isLoadingBackups ? (
+                <div className="py-8 text-center bg-slate-50/50 dark:bg-slate-950/10 border border-slate-150 dark:border-slate-850 rounded-2xl flex flex-col items-center justify-center gap-2">
+                  <Loader className="w-6 h-6 text-blue-500 animate-spin" />
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-semibold">Memuat riwayat cadangan...</span>
+                </div>
+              ) : localBackups.length === 0 ? (
+                <div className="py-8 text-center bg-slate-50/50 dark:bg-slate-950/10 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1.5">
+                  <History className="w-8 h-8 text-slate-300 dark:text-slate-700" />
+                  <span className="text-xs text-slate-450 dark:text-slate-500 font-semibold">Belum ada file cadangan di server</span>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-550 max-w-xs leading-relaxed">
+                    Cadangan otomatis akan dibuat secara harian, atau Anda bisa menekan tombol <strong>Buat Backup</strong> untuk mencadangkannya instan.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-slate-100 dark:border-slate-800/85 rounded-2xl overflow-hidden bg-slate-50/30 dark:bg-slate-950/5 divide-y divide-slate-100 dark:divide-slate-850 max-h-72 overflow-y-auto custom-scrollbar">
+                  {localBackups.map((backup) => {
+                    const isRestoringThis = isRestoringLocal === backup.filename;
+                    const isDeletingThis = isDeletingLocal === backup.filename;
+                    
+                    const formatBytes = (bytes: number, decimals = 2) => {
+                      if (bytes === 0) return '0 Bytes';
+                      const k = 1024;
+                      const dm = decimals < 0 ? 0 : decimals;
+                      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                      const i = Math.floor(Math.log(bytes) / Math.log(k));
+                      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+                    };
+
+                    const formatBackupDate = (isoString: string) => {
+                      try {
+                        const date = new Date(isoString);
+                        return date.toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+                      } catch {
+                        return isoString;
+                      }
+                    };
+
+                    // Choose badge color based on label type
+                    let badgeClass = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/40';
+                    if (backup.isZip) {
+                      badgeClass = 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400 border border-purple-200/40 dark:border-purple-900/30';
+                    } else if (backup.isManual) {
+                      badgeClass = 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border border-blue-200/40 dark:border-blue-900/30';
+                    } else if (backup.isPreRestore) {
+                      badgeClass = 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-200/50 dark:border-amber-900/30';
+                    }
+
+                    return (
+                      <div key={backup.filename} className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors">
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <div className="mt-0.5 flex-shrink-0">
+                            {backup.isManual ? (
+                              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
+                                <HardDrive className="w-4 h-4" />
+                              </div>
+                            ) : backup.isPreRestore ? (
+                              <div className="p-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-450 rounded-lg">
+                                <History className="w-4 h-4" />
+                              </div>
+                            ) : (
+                              <div className="p-1.5 bg-slate-100 dark:bg-slate-850 text-slate-500 dark:text-slate-400 rounded-lg">
+                                <Server className="w-4 h-4" />
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate" title={backup.filename}>
+                                {backup.filename}
+                              </span>
+                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider ${badgeClass}`}>
+                                {backup.label}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-1">
+                              <span>{formatBackupDate(backup.createdAt)}</span>
+                              <span>•</span>
+                              <span>Ukuran: {formatBytes(backup.sizeBytes)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions for local backup file */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* Restore Button */}
+                          <button
+                            type="button"
+                            disabled={isRestoringLocal !== null || isDeletingLocal !== null}
+                            onClick={() => handleRestoreLocalBackup(backup.filename)}
+                            className="px-2 py-1 text-[10px] font-bold bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-md cursor-pointer transition-colors shadow-sm"
+                            title="Pulihkan database utama ke kondisi file backup ini"
+                          >
+                            {isRestoringThis ? (
+                              <Loader className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              'Pulihkan'
+                            )}
+                          </button>
+
+                          {/* Download Button */}
+                          <a
+                            href={`/api/backup/download/${encodeURIComponent(backup.filename)}`}
+                            download={backup.filename}
+                            className="p-1 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md cursor-pointer transition-colors hover:border-blue-200"
+                            title="Unduh berkas backup ini ke penyimpanan lokal Anda"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            disabled={isRestoringLocal !== null || isDeletingLocal !== null}
+                            onClick={() => handleDeleteLocalBackup(backup.filename)}
+                            className="p-1 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-450 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md cursor-pointer transition-colors hover:border-rose-200"
+                            title="Hapus permanen berkas cadangan ini dari server"
+                          >
+                            {isDeletingThis ? (
+                              <Loader className="w-3.5 h-3.5 animate-spin text-rose-500" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

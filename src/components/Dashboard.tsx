@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'motion/react';
 import {
   Inbox,
   FileText,
@@ -385,8 +386,14 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
         
         {/* Card 1: Total Agenda */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
-          <div className="space-y-1.5">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -5, scale: 1.015 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+          className="interactive-card bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer"
+        >
+          <div className="space-y-1.5 pointer-events-none">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Agenda Surat</span>
             <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white font-mono">{stats.total}</h3>
             <div className="flex items-center gap-1">
@@ -408,42 +415,60 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
               <span className="text-[10px] text-slate-400">vs bulan lalu</span>
             </div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-300">
+          <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-300 pointer-events-none">
             <Activity className="w-6 h-6" />
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 2: Berkas Dengan PDF */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
-          <div className="space-y-1.5">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -5, scale: 1.015 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 25, delay: 0.05 }}
+          className="interactive-card bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer"
+        >
+          <div className="space-y-1.5 pointer-events-none">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Berkas Dengan PDF</span>
             <h3 className="text-3xl font-extrabold text-teal-600 dark:text-teal-400 font-mono">{stats.withPdf}</h3>
             <span className="text-[10px] text-slate-400 block font-medium">
               {stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% dari seluruh berkas
             </span>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-teal-50 dark:bg-teal-950/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
+          <div className="w-12 h-12 rounded-xl bg-teal-50 dark:bg-teal-950/30 flex items-center justify-center text-teal-600 dark:text-teal-400 pointer-events-none">
             <FileText className="w-6 h-6" />
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 3: Total Surat Bulanan */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
-          <div className="space-y-1.5">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -5, scale: 1.015 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 25, delay: 0.1 }}
+          className="interactive-card bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer"
+        >
+          <div className="space-y-1.5 pointer-events-none">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Surat Bulanan</span>
             <h3 className="text-3xl font-extrabold text-purple-600 dark:text-purple-400 font-mono">{stats.thisMonthCount}</h3>
             <span className="text-[10px] text-slate-400 block font-medium">
               Surat terdaftar di bulan berjalan
             </span>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
+          <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/30 flex items-center justify-center text-purple-600 dark:text-purple-400 pointer-events-none">
             <Calendar className="w-6 h-6" />
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 5: PDF Attachment Coverage */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
-          <div className="space-y-1.5">
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ y: -5, scale: 1.015 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 25, delay: 0.15 }}
+          className="interactive-card bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer"
+        >
+          <div className="space-y-1.5 pointer-events-none w-full">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Kelengkapan PDF</span>
             <h3 className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">{stats.pdfCoverage}%</h3>
             <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
@@ -453,10 +478,10 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
               />
             </div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 pointer-events-none shrink-0 ml-4">
             <FileCheck2 className="w-6 h-6" />
           </div>
-        </div>
+        </motion.div>
 
       </div>
 
