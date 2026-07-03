@@ -79,7 +79,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
 
     // Populate actual mail records count
     mails.forEach(mail => {
-      let dateStr = mail.metadata.tanggalSurat || mail.metadata.tanggalTerima || mail.createdAt;
+      let dateStr = mail.metadata.tanggalSurat || mail.metadata.tanggalTerima || mail.metadata.tanggal_surat || mail.metadata.tanggal_terima || mail.createdAt;
       if (!dateStr) dateStr = mail.createdAt;
 
       const mailDate = new Date(dateStr);
@@ -122,7 +122,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
     let lastMonthMasuk = 0;
 
     mails.forEach(m => {
-      let dateStr = m.metadata.tanggalSurat || m.metadata.tanggalTerima || m.createdAt;
+      let dateStr = m.metadata.tanggalSurat || m.metadata.tanggalTerima || m.metadata.tanggal_surat || m.metadata.tanggal_terima || m.createdAt;
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return;
 
@@ -183,8 +183,9 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
   const topSenders = useMemo(() => {
     const counts: Record<string, number> = {};
     mails.forEach(m => {
-      if (m.metadata.pengirim) {
-        const sender = m.metadata.pengirim.trim();
+      const senderVal = m.metadata.suratDari || m.metadata.pengirim || m.metadata.surat_dari || m.metadata.dari;
+      if (senderVal) {
+        const sender = String(senderVal).trim();
         counts[sender] = (counts[sender] || 0) + 1;
       }
     });
@@ -647,10 +648,10 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
                       </div>
                       <div className="overflow-hidden">
                         <span className="font-bold text-slate-800 dark:text-slate-100 text-xs truncate block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          {mail.metadata.perihal || mail.metadata.noSurat || 'Surat Tanpa Perihal'}
+                          {mail.metadata.isiSurat || mail.metadata.perihal || mail.metadata.nomorSurat || mail.metadata.noSurat || mail.metadata.no_surat || 'Surat Tanpa Perihal'}
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium font-mono block mt-0.5">
-                          ID: {mail.id.substring(5, 12)}... • {mail.metadata.pengirim || 'Instansi Lokal'}
+                          ID: {mail.id.substring(5, 12)}... • {mail.metadata.suratDari || mail.metadata.pengirim || mail.metadata.surat_dari || mail.metadata.dari || 'Instansi Lokal'}
                         </span>
                       </div>
                     </div>

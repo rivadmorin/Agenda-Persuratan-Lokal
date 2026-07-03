@@ -40,6 +40,52 @@ import Dashboard from './components/Dashboard';
 // Types
 import { User, AppConfig, MailRecord, ServerInfo } from './types';
 
+// Helper to dynamically retrieve metadata properties with robust alias mapping
+const getMetadataValueByAliases = (metadata: Record<string, any> | undefined, aliases: string[]): any => {
+  if (!metadata) return undefined;
+  // 1. Try exact matches
+  for (const alias of aliases) {
+    if (metadata[alias] !== undefined && metadata[alias] !== '') {
+      return metadata[alias];
+    }
+  }
+  // 2. Try case-insensitive matches
+  const keys = Object.keys(metadata);
+  for (const alias of aliases) {
+    const lowerAlias = alias.toLowerCase();
+    const foundKey = keys.find(k => k.toLowerCase() === lowerAlias);
+    if (foundKey && metadata[foundKey] !== undefined && metadata[foundKey] !== '') {
+      return metadata[foundKey];
+    }
+  }
+  // 3. Try fuzzy/contains matches for each key
+  for (const alias of aliases) {
+    const lowerAlias = alias.toLowerCase();
+    const foundKey = keys.find(k => {
+      const lowerK = k.toLowerCase();
+      return lowerK.includes(lowerAlias) || lowerAlias.includes(lowerK);
+    });
+    if (foundKey && metadata[foundKey] !== undefined && metadata[foundKey] !== '') {
+      return metadata[foundKey];
+    }
+  }
+  return undefined;
+};
+
+// Helper to determine if a dynamic column represents one of the primary UI display areas
+const isMainField = (key: string): boolean => {
+  const normKey = key.toLowerCase();
+  const mainKeys = [
+    'nomorsurat', 'nosurat', 'no_surat', 'noagenda', 'no_agenda', 'nourut', 'no_urut',
+    'suratdari', 'pengirim', 'surat_dari', 'asal', 'dari',
+    'penerima', 'kepada', 'tujuan',
+    'tanggalsurat', 'tanggal_surat', 'tglsurat', 'tgl_surat',
+    'tanggalterima', 'tanggal_terima', 'tglterima', 'tgl_terima',
+    'isisurat', 'perihal', 'isi_surat', 'isi', 'hal'
+  ];
+  return mainKeys.some(mk => normKey.includes(mk) || mk.includes(normKey));
+};
+
 // Helper to generate elegant Markdown summary of the selected mail
 const generateMailMarkdown = (mail: MailRecord | null, config: AppConfig | null) => {
   if (!mail) return '';
@@ -103,13 +149,15 @@ const generateMailMarkdown = (mail: MailRecord | null, config: AppConfig | null)
     } catch (e) {}
   }
   
+  const perihal = getMetadataValueByAliases(mail.metadata, ['isiSurat', 'perihal', 'isi_surat', 'isi', 'hal', 'ringkas', 'subjek']) || '*Tidak ada rincian perihal yang dicatat.*';
   md += `\n---\n\n`;
   md += `### 📝 Perihal / Ringkasan Isi\n`;
-  md += `${mail.metadata.perihal || '*Tidak ada rincian perihal yang dicatat.*'}\n\n`;
+  md += `${perihal}\n\n`;
   
-  if (mail.metadata.keterangan) {
+  const keterangan = getMetadataValueByAliases(mail.metadata, ['keterangan', 'disposisi', 'catatan', 'ket']);
+  if (keterangan) {
     md += `### ℹ️ Keterangan / Catatan\n`;
-    md += `${mail.metadata.keterangan}\n\n`;
+    md += `${keterangan}\n\n`;
   }
   
   return md;
@@ -747,7 +795,7 @@ export default function App() {
                       <div className="mt-3">
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">No. Agenda / No. Surat</span>
                         <h3 className="text-base font-black text-slate-900 dark:text-white mt-1 select-all break-words leading-snug">
-                          {selectedMail.metadata.no_surat || selectedMail.metadata.no_agenda || '-'}
+                          {getMetadataValueByAliases(selectedMail.metadata, ['nomorSurat', 'no_surat', 'noSurat', 'nomor_surat', 'no_agenda', 'noAgenda', 'nomor_agenda', 'no_urut', 'noUrut', 'no']) || '-'}
                         </h3>
                       </div>
                     </div>
@@ -755,27 +803,31 @@ export default function App() {
                     {/* Dynamic Metadata Cards */}
                     <div className="space-y-4">
                       {/* Sender and Receiver Card */}
-                      {(selectedMail.metadata.pengirim || selectedMail.metadata.penerima) && (
+                      {(getMetadataValueByAliases(selectedMail.metadata, ['suratDari', 'pengirim', 'surat_dari', 'asal', 'dari']) || getMetadataValueByAliases(selectedMail.metadata, ['penerima', 'kepada', 'penerima_surat', 'tujuan', 'untuk'])) && (
                         <div className="p-4 bg-slate-50/40 dark:bg-slate-800/10 rounded-2xl border border-slate-150 dark:border-slate-800/60 divide-y divide-slate-100 dark:divide-slate-800/50">
-                          {selectedMail.metadata.pengirim && (
+                          {getMetadataValueByAliases(selectedMail.metadata, ['suratDari', 'pengirim', 'surat_dari', 'asal', 'dari']) && (
                             <div className="pb-3">
                               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Pengirim</span>
                               <div className="flex items-center gap-2.5 mt-1.5">
                                 <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
                                   <User2 className="w-4 h-4" />
                                 </div>
-                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 break-words">{selectedMail.metadata.pengirim}</span>
+                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 break-words">
+                                  {getMetadataValueByAliases(selectedMail.metadata, ['suratDari', 'pengirim', 'surat_dari', 'asal', 'dari'])}
+                                </span>
                               </div>
                             </div>
                           )}
-                          {selectedMail.metadata.penerima && (
+                          {getMetadataValueByAliases(selectedMail.metadata, ['penerima', 'kepada', 'penerima_surat', 'tujuan', 'untuk']) && (
                             <div className="pt-3">
                               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Penerima</span>
                               <div className="flex items-center gap-2.5 mt-1.5">
                                 <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
                                   <User2 className="w-4 h-4" />
                                 </div>
-                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 break-words">{selectedMail.metadata.penerima}</span>
+                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200 break-words">
+                                  {getMetadataValueByAliases(selectedMail.metadata, ['penerima', 'kepada', 'penerima_surat', 'tujuan', 'untuk'])}
+                                </span>
                               </div>
                             </div>
                           )}
@@ -783,26 +835,40 @@ export default function App() {
                       )}
 
                       {/* Dates Card */}
-                      {(selectedMail.metadata.tanggal_surat || selectedMail.metadata.tanggal_terima) && (
+                      {(getMetadataValueByAliases(selectedMail.metadata, ['tanggalSurat', 'tanggal_surat', 'tglSurat', 'tgl_surat', 'tanggalsurat']) || getMetadataValueByAliases(selectedMail.metadata, ['tanggalTerima', 'tanggal_terima', 'tglTerima', 'tgl_terima', 'tanggalterima'])) && (
                         <div className="grid grid-cols-2 gap-3">
-                          {selectedMail.metadata.tanggal_surat && (
+                          {getMetadataValueByAliases(selectedMail.metadata, ['tanggalSurat', 'tanggal_surat', 'tglSurat', 'tgl_surat', 'tanggalsurat']) && (
                             <div className="p-3 bg-slate-50/20 dark:bg-slate-800/5 rounded-2xl border border-slate-150 dark:border-slate-800/40">
                               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Tanggal Surat</span>
                               <div className="flex items-center gap-1.5 mt-1">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                                  {new Date(selectedMail.metadata.tanggal_surat).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                  {(() => {
+                                    const dVal = getMetadataValueByAliases(selectedMail.metadata, ['tanggalSurat', 'tanggal_surat', 'tglSurat', 'tgl_surat', 'tanggalsurat']);
+                                    try {
+                                      return new Date(dVal).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+                                    } catch(e) {
+                                      return String(dVal);
+                                    }
+                                  })()}
                                 </span>
                               </div>
                             </div>
                           )}
-                          {selectedMail.metadata.tanggal_terima && (
+                          {getMetadataValueByAliases(selectedMail.metadata, ['tanggalTerima', 'tanggal_terima', 'tglTerima', 'tgl_terima', 'tanggalterima']) && (
                             <div className="p-3 bg-slate-50/20 dark:bg-slate-800/5 rounded-2xl border border-slate-150 dark:border-slate-800/40">
                               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Tanggal Terima</span>
                               <div className="flex items-center gap-1.5 mt-1">
                                 <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                                  {new Date(selectedMail.metadata.tanggal_terima).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                  {(() => {
+                                    const dVal = getMetadataValueByAliases(selectedMail.metadata, ['tanggalTerima', 'tanggal_terima', 'tglTerima', 'tgl_terima', 'tanggalterima']);
+                                    try {
+                                      return new Date(dVal).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+                                    } catch(e) {
+                                      return String(dVal);
+                                    }
+                                  })()}
                                 </span>
                               </div>
                             </div>
@@ -811,11 +877,11 @@ export default function App() {
                       )}
 
                       {/* Subject / Perihal Card */}
-                      {selectedMail.metadata.perihal && (
+                      {getMetadataValueByAliases(selectedMail.metadata, ['isiSurat', 'perihal', 'isi_surat', 'isi', 'hal', 'subjek']) && (
                         <div className="p-4 bg-slate-50/20 dark:bg-slate-800/5 rounded-2xl border border-slate-150 dark:border-slate-800/40">
                           <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Perihal / Hal</span>
                           <p className="text-sm text-slate-700 dark:text-slate-300 mt-1.5 font-semibold leading-relaxed whitespace-pre-wrap select-all">
-                            {selectedMail.metadata.perihal}
+                            {getMetadataValueByAliases(selectedMail.metadata, ['isiSurat', 'perihal', 'isi_surat', 'isi', 'hal', 'subjek'])}
                           </p>
                         </div>
                       )}
@@ -825,7 +891,7 @@ export default function App() {
                         <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Atribut Tambahan</span>
                         <div className="grid grid-cols-1 gap-y-3">
                           {config?.columns
-                            .filter(col => !['no_surat', 'no_agenda', 'pengirim', 'penerima', 'tanggal_surat', 'tanggal_terima', 'perihal'].includes(col.key))
+                            .filter(col => !isMainField(col.key))
                             .map((col) => {
                               const val = selectedMail.metadata[col.key];
                               return (

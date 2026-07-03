@@ -92,21 +92,62 @@ const defaultDb = {
 function readDb() {
   try {
     if (!fs.existsSync(dbPath)) {
+      const dir = path.dirname(dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
       fs.writeFileSync(dbPath, JSON.stringify(defaultDb, null, 2), 'utf-8');
       return JSON.parse(JSON.stringify(defaultDb));
     }
     const content = fs.readFileSync(dbPath, 'utf-8');
+    if (!content.trim()) {
+      throw new Error("Database file is empty");
+    }
     const db = JSON.parse(content);
     return db;
   } catch (err: any) {
     logMessage('ERROR', `Failed to read DB: ${err.message}`);
+    // Try to auto-recover from the latest backup!
+    try {
+      const backupDir = path.join(process.cwd(), 'data', 'backups');
+      if (fs.existsSync(backupDir)) {
+        const files = fs.readdirSync(backupDir)
+          .filter(f => f.startsWith('db_backup_') && f.endsWith('.json'))
+          .map(f => {
+            const p = path.join(backupDir, f);
+            return { name: f, path: p, mtime: fs.statSync(p).mtimeMs };
+          })
+          .sort((a, b) => b.mtime - a.mtime);
+        
+        if (files.length > 0) {
+          const latestBackup = files[0];
+          logMessage('WARN', `Attempting auto-recovery from latest backup: ${latestBackup.name}`);
+          const backupContent = fs.readFileSync(latestBackup.path, 'utf-8');
+          const db = JSON.parse(backupContent);
+          // Restore the corrupted file from backup safely using atomic write
+          const tempPath = dbPath + '.tmp';
+          fs.writeFileSync(tempPath, backupContent, 'utf-8');
+          fs.renameSync(tempPath, dbPath);
+          logMessage('INFO', `Database successfully recovered from backup: ${latestBackup.name}`);
+          return db;
+        }
+      }
+    } catch (recoveryErr: any) {
+      logMessage('ERROR', `Failed to recover database from backup: ${recoveryErr.message}`);
+    }
     return JSON.parse(JSON.stringify(defaultDb));
   }
 }
 
 function writeDb(data: any) {
   try {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+    const dir = path.dirname(dbPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const tempPath = dbPath + '.tmp';
+    fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tempPath, dbPath);
   } catch (err: any) {
     logMessage('ERROR', `Failed to write DB: ${err.message}`);
   }
@@ -805,7 +846,7 @@ app.get('/api/excel/export', (req, res) => {
         row[col.label] = mail.metadata?.[col.key] || '';
       });
       
-      row['Tanggal Upload'] = mail.createdAt.split('T')[0];
+      row['Tanggal Upload'] = (mail.createdAt && String(mail.createdAt).includes('T')) ? String(mail.createdAt).split('T')[0] : (mail.createdAt ? String(mail.createdAt) : '');
       return row;
     });
 
@@ -877,43 +918,74 @@ app.get('/api/excel/template', (req, res) => {
 // Import Excel with row validation
 app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', limit: '10mb' }), (req, res) => {
   try {
+    if (!req.body || req.body.length === 0) {
+      return res.status(400).json({ message: 'Berkas Excel kosong atau tidak terkirim.' });
+    }
+
     const db = readDb();
     const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
 
-    const workbook = XLSX.read(req.body, { type: 'buffer' });
+    let workbook;
+    try {
+      workbook = XLSX.read(req.body, { type: 'buffer' });
+    } catch (parseErr: any) {
+      logMessage('WARN', `Excel parsing failed: ${parseErr.message}`);
+      return res.status(400).json({ message: 'Format berkas tidak valid. Harap unggah berkas Excel (.xlsx) yang benar.' });
+    }
+
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-    if (rows.length < 2) {
-      return res.status(400).json({ message: 'Berkas Excel kosong atau tidak memiliki baris data.' });
+    if (!rows || rows.length < 2) {
+      return res.status(400).json({ message: 'Berkas Excel kosong atau tidak memiliki baris data agenda.' });
     }
 
     const headers: string[] = rows[0];
     const dataRows = rows.slice(1);
     
     const colAliases: Record<string, string[]> = {
-      nourut: ['no urut', 'nomor urut', 'no urut agenda', 'nomor urut agenda', 'no agenda', 'nomor agenda', 'agenda'],
-      nosurat: ['no surat', 'nomor surat', 'nomer surat'],
-      tanggalsurat: ['tgl surat', 'tanggal surat', 'tgl kirim', 'tanggal kirim'],
-      tanggalterima: ['tgl terima', 'tanggal terima', 'tgl masuk', 'tanggal masuk'],
-      pengirim: ['pengirim', 'dari', 'asal', 'asal surat'],
-      perihal: ['perihal', 'isi', 'isi ringkas', 'hal', 'perihal isi ringkas', 'perihal isi', 'subjek'],
-      keterangan: ['keterangan', 'ket', 'catatan']
+      nourut: ['no urut', 'nomor urut', 'no urut agenda', 'nomor urut agenda', 'no agenda', 'nomor agenda', 'agenda', 'nourut', 'no'],
+      nosurat: ['no surat', 'nomor surat', 'nomer surat', 'nosurat', 'nomorsurat'],
+      nomorsurat: ['no surat', 'nomor surat', 'nomer surat', 'nosurat', 'nomorsurat'],
+      tanggalsurat: ['tgl surat', 'tanggal surat', 'tgl kirim', 'tanggal kirim', 'tanggalsurat'],
+      tanggalterima: ['tgl terima', 'tanggal terima', 'tgl masuk', 'tanggal masuk', 'tanggalterima'],
+      pengirim: ['pengirim', 'dari', 'asal', 'asal surat', 'suratdari', 'surat dari'],
+      suratdari: ['pengirim', 'dari', 'asal', 'asal surat', 'suratdari', 'surat dari'],
+      perihal: ['perihal', 'isi', 'isi ringkas', 'hal', 'perihal isi ringkas', 'perihal isi', 'subjek', 'isisurat', 'isi surat'],
+      isisurat: ['perihal', 'isi', 'isi ringkas', 'hal', 'perihal isi ringkas', 'perihal isi', 'subjek', 'isisurat', 'isi surat'],
+      keterangan: ['keterangan', 'ket', 'catatan', 'disposisi'],
+      disposisi: ['keterangan', 'ket', 'catatan', 'disposisi'],
+      jenissurat: ['jenis surat', 'jenis', 'tipe', 'tipe surat', 'jenissurat'],
+      kodesurat: ['kode surat', 'kode', 'klasifikasi', 'kode klasifikasi', 'kodesurat']
     };
 
-    // Step 1: Strict Exact and Alias Matches
+    // Step 1: Strict Exact and Alias Matches with robust normalization
     const matchedIndices = new Set<number>();
     const colMappings = columns.map((col: any) => {
       const colKeyNorm = col.key.toLowerCase();
-      const normLabel = col.label.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-      const normKey = col.key.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      const normLabel = col.label.toLowerCase()
+        .replace(/\s*\(.*?\)\s*/g, '')
+        .replace(/[_\-]/g, ' ')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const normKey = col.key.toLowerCase()
+        .replace(/[_\-]/g, ' ')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
       const aliases = colAliases[colKeyNorm] || [];
 
       // Find exact or alias match first
       let idx = headers.findIndex((h, hIdx) => {
         if (h === undefined || h === null) return false;
-        const normH = String(h).toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const normH = String(h).toLowerCase()
+          .replace(/\s*\(.*?\)\s*/g, '')
+          .replace(/[_\-]/g, ' ')
+          .replace(/[^\w\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
         return normH === normLabel || normH === normKey || aliases.includes(normH);
       });
 
@@ -927,12 +999,26 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
     // Step 2: Loose Fallback Match for columns that still don't have a match
     colMappings.forEach((col: any) => {
       if (col.index === -1) {
-        const normLabel = col.label.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-        const normKey = col.key.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const normLabel = col.label.toLowerCase()
+          .replace(/\s*\(.*?\)\s*/g, '')
+          .replace(/[_\-]/g, ' ')
+          .replace(/[^\w\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const normKey = col.key.toLowerCase()
+          .replace(/[_\-]/g, ' ')
+          .replace(/[^\w\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
 
         const idx = headers.findIndex((h, hIdx) => {
           if (h === undefined || h === null || matchedIndices.has(hIdx)) return false;
-          const normH = String(h).toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+          const normH = String(h).toLowerCase()
+            .replace(/\s*\(.*?\)\s*/g, '')
+            .replace(/[_\-]/g, ' ')
+            .replace(/[^\w\s]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
           
           // Only allow substring matching if normH is longer than 3 characters (avoiding short "no" matching)
           if (normH.length > 3) {
@@ -950,12 +1036,17 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
       }
     });
 
-    // Step 3: Absolute Last Resort for "noUrut" if still not matched and there is a "no" or "nomor" column
-    const noUrutCol = colMappings.find((col: any) => col.key === 'noUrut');
+    // Step 3: Absolute Last Resort for "noUrut" or "nomorUrut" if still not matched and there is a "no" or "nomor" column
+    const noUrutCol = colMappings.find((col: any) => col.key === 'noUrut' || col.key === 'nomorUrut');
     if (noUrutCol && noUrutCol.index === -1) {
       const idx = headers.findIndex((h, hIdx) => {
         if (h === undefined || h === null || matchedIndices.has(hIdx)) return false;
-        const normH = String(h).toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const normH = String(h).toLowerCase()
+          .replace(/\s*\(.*?\)\s*/g, '')
+          .replace(/[_\-]/g, ' ')
+          .replace(/[^\w\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
         return normH === 'no' || normH === 'nomor';
       });
       if (idx !== -1) {
@@ -970,12 +1061,16 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
     const createdBy = req.headers['x-username'] ? String(req.headers['x-username']) : 'operator';
     const createdByName = req.headers['x-user-name'] ? String(req.headers['x-user-name']) : 'Operator';
 
-    // Robust Date parsing helper
+    // Robust, Timezone-Safe Date parsing helper
     const parseExcelDate = (val: any): string | null => {
       if (val === undefined || val === null) return null;
       if (val instanceof Date) {
         if (!isNaN(val.getTime())) {
-          return val.toISOString().split('T')[0];
+          // Format as local YYYY-MM-DD instead of UTC to avoid timezone shift
+          const year = val.getFullYear();
+          const month = String(val.getMonth() + 1).padStart(2, '0');
+          const day = String(val.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
         }
         return null;
       }
@@ -1017,16 +1112,22 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
 
       const serialNum = Number(dateStr);
       if (!isNaN(serialNum) && serialNum > 1000 && serialNum < 100000) {
-        const date = new Date((serialNum - 25569) * 86400 * 1000);
+        const date = new Date(Math.round((serialNum - 25569) * 86400 * 1000));
         if (!isNaN(date.getTime())) {
-          return date.toISOString().split('T')[0];
+          const year = date.getUTCFullYear();
+          const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(date.getUTCDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
         }
       }
 
       const parsedTime = Date.parse(dateStr);
       if (!isNaN(parsedTime)) {
         const date = new Date(parsedTime);
-        return date.toISOString().split('T')[0];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
       }
 
       return null;
@@ -1059,10 +1160,10 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
     const baseTime = Date.now();
     dataRows.forEach((row, rowIndex) => {
       const lineNum = rowIndex + 2; // header is row 1
-      if (!row) return;
+      if (!row || !Array.isArray(row)) return;
 
       // Filter out empty rows where all elements are undefined, null, or empty string when converted to string
-      const isRowEmpty = Array.isArray(row) && row.every((val: any) => val === undefined || val === null || String(val).trim() === '');
+      const isRowEmpty = row.every((val: any) => val === undefined || val === null || String(val).trim() === '');
       if (isRowEmpty) return;
 
       const metadata: Record<string, any> = {};
@@ -1077,8 +1178,8 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
           continue;
         }
 
-        let cellVal = row[col.index];
-        if (cellVal === undefined || cellVal === null) {
+        const rawCellVal = row[col.index];
+        if (rawCellVal === undefined || rawCellVal === null) {
           if (col.required) {
             errors.push(`Baris ${lineNum}: Kolom "${col.label}" wajib diisi.`);
             hasValidationError = true;
@@ -1087,33 +1188,33 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
           continue;
         }
 
-        cellVal = String(cellVal).trim();
-        if (col.required && cellVal === '') {
+        const cellStr = String(rawCellVal).trim();
+        if (col.required && cellStr === '') {
           errors.push(`Baris ${lineNum}: Kolom "${col.label}" tidak boleh kosong.`);
           hasValidationError = true;
           continue;
         }
 
         // Type validations
-        if (cellVal !== '') {
+        if (cellStr !== '') {
           if (col.type === 'number') {
-            const num = parseExcelNumber(cellVal);
+            const num = parseExcelNumber(rawCellVal);
             if (num === null) {
-              errors.push(`Baris ${lineNum}: Kolom "${col.label}" harus diisi angka. Menemukan: ${cellVal}`);
+              errors.push(`Baris ${lineNum}: Kolom "${col.label}" harus diisi angka. Menemukan: ${cellStr}`);
               hasValidationError = true;
             } else {
               metadata[col.key] = num;
             }
           } else if (col.type === 'date') {
-            const dateStr = parseExcelDate(cellVal);
+            const dateStr = parseExcelDate(rawCellVal);
             if (dateStr === null) {
-              errors.push(`Baris ${lineNum}: Format kolom "${col.label}" harus YYYY-MM-DD. Menemukan: ${cellVal}`);
+              errors.push(`Baris ${lineNum}: Format kolom "${col.label}" harus YYYY-MM-DD atau format tanggal valid lainnya. Menemukan: ${cellStr}`);
               hasValidationError = true;
             } else {
               metadata[col.key] = dateStr;
             }
           } else {
-            metadata[col.key] = cellVal;
+            metadata[col.key] = cellStr;
           }
         } else {
           metadata[col.key] = '';

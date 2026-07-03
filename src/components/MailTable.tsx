@@ -219,6 +219,65 @@ export default function MailTable({
     }
   };
 
+  const getHeaders = () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (currentUser) {
+      headers['x-username'] = currentUser.username;
+      headers['x-user-name'] = currentUser.name;
+      headers['x-user-role'] = currentUser.role;
+    }
+    return headers;
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      const response = await fetch('/api/excel/export', {
+        headers: getHeaders(),
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Agenda_Persuratan_Export.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert('Gagal mengekspor Excel.');
+      }
+    } catch (err) {
+      alert('Gagal menyambung ke server.');
+    }
+  };
+
+  const handleDownloadTemplate = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('/api/excel/template', {
+        headers: getHeaders(),
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Template_Agenda_Surat.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert('Gagal mengunduh templat Excel.');
+      }
+    } catch (err) {
+      alert('Gagal menyambung ke server.');
+    }
+  };
+
   const handleExcelImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importingFile) return;
@@ -301,13 +360,13 @@ export default function MailTable({
               </button>
             )}
 
-            <a
-              href="/api/excel/export"
-              className="flex items-center gap-2 px-3.5 py-2 border border-blue-100 dark:border-blue-950/40 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100/80 dark:hover:bg-blue-950/45 text-blue-700 dark:text-blue-400 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95"
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 px-3.5 py-2 border border-blue-100 dark:border-blue-950/40 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100/80 dark:hover:bg-blue-950/45 text-blue-700 dark:text-blue-400 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer"
             >
               <FileDown className="w-4 h-4" />
               <span>Ekspor Excel</span>
-            </a>
+            </button>
 
             <button
               onClick={onAddMail}
@@ -681,13 +740,14 @@ export default function MailTable({
                     <li>Kolom dinamis harus disesuaikan dengan skema kolom aktif saat ini.</li>
                   </ol>
                   <div className="pt-2">
-                    <a
-                      href="/api/excel/template"
-                      className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-450 font-bold hover:underline"
+                    <button
+                      type="button"
+                      onClick={handleDownloadTemplate}
+                      className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-450 font-bold hover:underline cursor-pointer"
                     >
                       <FileDown className="w-3.5 h-3.5" />
                       Unduh Templat Excel Aktif
-                    </a>
+                    </button>
                   </div>
                 </div>
 
