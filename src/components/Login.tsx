@@ -2,15 +2,25 @@ import React, { useState } from 'react';
 import { KeyRound, User as UserIcon, AlertCircle, Sparkles, Sun, Moon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { User } from '../types';
+import { LogoMap } from './Sidebar';
 
 interface LoginProps {
   appName: string;
+  logoType?: 'lucide' | 'emoji' | 'image';
+  logoUrl?: string;
   onLoginSuccess: (user: User) => void;
   darkMode?: boolean;
   setDarkMode?: (darkMode: boolean) => void;
 }
 
-export default function Login({ appName, onLoginSuccess, darkMode = false, setDarkMode }: LoginProps) {
+export default function Login({ 
+  appName, 
+  logoType = 'lucide',
+  logoUrl = 'Sparkles',
+  onLoginSuccess, 
+  darkMode = false, 
+  setDarkMode 
+}: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -46,6 +56,30 @@ export default function Login({ appName, onLoginSuccess, darkMode = false, setDa
     }
   };
 
+  const renderLogo = () => {
+    if (logoType === 'emoji') {
+      return (
+        <span className="text-3xl select-none leading-none">
+          {logoUrl || '📬'}
+        </span>
+      );
+    }
+    if (logoType === 'image') {
+      return (
+        <img 
+          src={logoUrl || ''} 
+          alt="Logo" 
+          className="w-10 h-10 object-contain rounded-xl" 
+          onError={(e) => {
+            (e.target as HTMLElement).style.display = 'none';
+          }}
+        />
+      );
+    }
+    const SelectedIcon = LogoMap[logoUrl] || Sparkles;
+    return <SelectedIcon className="w-6 h-6 animate-pulse" />;
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-4 select-none relative overflow-hidden transition-colors duration-200">
       {/* Floating Dark Mode Toggle */}
@@ -72,11 +106,21 @@ export default function Login({ appName, onLoginSuccess, darkMode = false, setDa
         className="w-full max-w-md"
       >
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 p-8 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden transition-colors duration-200">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-blue-600" />
+          <div 
+            style={{ backgroundColor: 'var(--theme-base, #2563eb)' }}
+            className="absolute top-0 left-0 right-0 h-1.5" 
+          />
           
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 mb-4 border border-blue-100 dark:border-blue-900/30">
-              <Sparkles className="w-6 h-6 animate-pulse" />
+            <div 
+              style={{ 
+                color: 'var(--theme-base, #2563eb)',
+                backgroundColor: 'var(--theme-light, rgba(37, 99, 235, 0.08))',
+                borderColor: 'var(--theme-light-border, rgba(37, 99, 235, 0.15))'
+              }}
+              className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4 border"
+            >
+              {renderLogo()}
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-display mb-1">
               {appName}
@@ -138,7 +182,8 @@ export default function Login({ appName, onLoginSuccess, darkMode = false, setDa
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-medium py-3 rounded-2xl shadow-lg shadow-blue-200/50 hover:shadow-xl hover:shadow-blue-300/50 transition-all text-sm flex items-center justify-center gap-2 mt-2 disabled:opacity-50 cursor-pointer"
+              style={{ backgroundColor: 'var(--theme-base, #2563eb)' }}
+              className="w-full text-white font-medium py-3 rounded-2xl shadow-lg shadow-blue-200/50 hover:shadow-xl hover:shadow-blue-300/50 hover:brightness-110 active:scale-[0.98] transition-all text-sm flex items-center justify-center gap-2 mt-2 disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -51,6 +51,15 @@ interface MailTableProps {
   }>;
   showNoColumn?: boolean;
   startNo?: number;
+  onTrackTask?: (
+    name: string,
+    type: 'upload' | 'download' | 'export' | 'zip' | 'receipt' | 'pdf-tool' | 'import',
+    fileName?: string
+  ) => {
+    complete: (customMsg?: string) => void;
+    error: (errorMsg?: string) => void;
+    updateProgress: (prog: number) => void;
+  };
 }
 
 export default function MailTable({
@@ -70,6 +79,7 @@ export default function MailTable({
   onImportExcel,
   showNoColumn = true,
   startNo = 1,
+  onTrackTask,
 }: MailTableProps) {
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -246,6 +256,8 @@ export default function MailTable({
   };
 
   const handleExportExcel = async () => {
+    const filename = 'Agenda_Persuratan_Export.xlsx';
+    const task = onTrackTask ? onTrackTask('Ekspor Data Agenda', 'export', filename) : null;
     try {
       const response = await fetch('/api/excel/export', {
         headers: getHeaders(),
@@ -255,21 +267,26 @@ export default function MailTable({
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'Agenda_Persuratan_Export.xlsx';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        task?.complete('Ekspor berhasil!');
       } else {
+        task?.error('Gagal mengekspor');
         alert('Gagal mengekspor Excel.');
       }
     } catch (err) {
+      task?.error('Koneksi gagal');
       alert('Gagal menyambung ke server.');
     }
   };
 
   const handleDownloadTemplate = async (e: React.MouseEvent) => {
     e.preventDefault();
+    const filename = 'Template_Agenda_Surat.xlsx';
+    const task = onTrackTask ? onTrackTask('Unduh Templat Excel', 'download', filename) : null;
     try {
       const response = await fetch('/api/excel/template', {
         headers: getHeaders(),
@@ -279,15 +296,18 @@ export default function MailTable({
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'Template_Agenda_Surat.xlsx';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        task?.complete('Templat diunduh!');
       } else {
+        task?.error('Gagal mengunduh templat');
         alert('Gagal mengunduh templat Excel.');
       }
     } catch (err) {
+      task?.error('Koneksi gagal');
       alert('Gagal menyambung ke server.');
     }
   };
@@ -611,13 +631,19 @@ export default function MailTable({
                             {mail.pdfPath ? (
                               <button
                                 onClick={() => {
+                                  const originalName = mail.pdfPath?.split('/').pop() || 'surat.pdf';
+                                  const task = onTrackTask ? onTrackTask('Unduh Lampiran PDF', 'download', originalName) : null;
+                                  
                                   const a = document.createElement('a');
                                   a.href = `/api/files/${mail.pdfPath}`;
-                                  const originalName = mail.pdfPath.split('/').pop() || 'surat.pdf';
                                   a.download = originalName;
                                   document.body.appendChild(a);
                                   a.click();
                                   document.body.removeChild(a);
+                                  
+                                  setTimeout(() => {
+                                    task?.complete('Unduh selesai!');
+                                  }, 800);
                                 }}
                                 className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-350 rounded-lg transition-all cursor-pointer"
                                 title="Unduh PDF Lampiran"

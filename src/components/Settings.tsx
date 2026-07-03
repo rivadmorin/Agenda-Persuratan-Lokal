@@ -17,8 +17,34 @@ import {
   GripVertical,
   Download,
   Upload,
-  Edit2
+  Edit2,
+  Mail,
+  Building,
+  Briefcase,
+  FileText,
+  Shield,
+  Landmark,
+  Award,
+  BookOpen,
+  GraduationCap,
+  Star,
+  Inbox
 } from 'lucide-react';
+
+const SettingsLogoMap: Record<string, React.ComponentType<any>> = {
+  Sparkles,
+  Inbox,
+  Mail,
+  Building,
+  Briefcase,
+  FileText,
+  Shield,
+  Landmark,
+  Award,
+  BookOpen,
+  GraduationCap,
+  Star
+};
 import { motion, AnimatePresence } from 'motion/react';
 import { AppConfig, ColumnDefinition, ColumnType, ColumnProfile } from '../types';
 
@@ -30,6 +56,8 @@ interface SettingsProps {
 export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   // General configs states
   const [appName, setAppName] = useState(config.appName);
+  const [logoType, setLogoType] = useState<'lucide' | 'emoji' | 'image'>(config.logoType || 'lucide');
+  const [logoUrl, setLogoUrl] = useState(config.logoUrl || 'Sparkles');
   const [themeColor, setThemeColor] = useState(config.themeColor);
   const [autoCompressPdf, setAutoCompressPdf] = useState(config.autoCompressPdf);
   const [pdfCompressionLevel, setPdfCompressionLevel] = useState(config.pdfCompressionLevel);
@@ -283,6 +311,8 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   // Load config on init or change
   useEffect(() => {
     setAppName(config.appName);
+    setLogoType(config.logoType || 'lucide');
+    setLogoUrl(config.logoUrl || 'Sparkles');
     setThemeColor(config.themeColor);
     setAutoCompressPdf(config.autoCompressPdf);
     setPdfCompressionLevel(config.pdfCompressionLevel);
@@ -347,6 +377,8 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
 
       await onUpdateConfig({
         appName,
+        logoType,
+        logoUrl,
         themeColor,
         autoCompressPdf,
         pdfCompressionLevel,
@@ -602,6 +634,136 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                 className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold text-slate-800 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
                 placeholder="Masukkan nama instansi"
               />
+            </div>
+
+            {/* Logo Customization */}
+            <div className="space-y-3">
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Logo / Icon Aplikasi
+              </label>
+              
+              {/* Type Selection Tabs */}
+              <div className="grid grid-cols-3 gap-2 p-1 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800">
+                {(['lucide', 'emoji', 'image'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setLogoType(type);
+                      if (type === 'lucide') setLogoUrl('Sparkles');
+                      else if (type === 'emoji') setLogoUrl('📬');
+                      else if (type === 'image') setLogoUrl('');
+                    }}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      logoType === type
+                        ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm border border-slate-200/50 dark:border-slate-800'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {type === 'lucide' ? 'Icon Lucide' : type === 'emoji' ? 'Emoji' : 'URL Gambar'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Type: Lucide Grid */}
+              {logoType === 'lucide' && (
+                <div className="space-y-2">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Pilih Icon Lucide:
+                  </span>
+                  <div className="grid grid-cols-6 gap-2 bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    {Object.keys(SettingsLogoMap).map((key) => {
+                      const IconComp = SettingsLogoMap[key];
+                      const isSelected = logoUrl === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setLogoUrl(key)}
+                          style={{
+                            color: isSelected ? 'var(--theme-base, #2563eb)' : '',
+                            backgroundColor: isSelected ? 'var(--theme-light, rgba(37, 99, 235, 0.08))' : '',
+                            borderColor: isSelected ? 'var(--theme-light-border, rgba(37, 99, 235, 0.15))' : 'transparent'
+                          }}
+                          className={`p-3 border rounded-xl flex items-center justify-center transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 ${
+                            isSelected 
+                              ? 'shadow-sm' 
+                              : 'bg-white dark:bg-slate-900 border-slate-200/50 dark:border-slate-850 text-slate-500'
+                          }`}
+                          title={key}
+                        >
+                          <IconComp className="w-5 h-5" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Type: Emoji & Quick select */}
+              {logoType === 'emoji' && (
+                <div className="space-y-2">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Tulis atau Pilih Emoji:
+                  </span>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value.substring(0, 4))}
+                      className="w-20 px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-center text-xl focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-semibold"
+                      placeholder="📬"
+                    />
+                    
+                    {/* Quick Select Emoji Buttons */}
+                    <div className="flex-1 flex flex-wrap items-center gap-1.5 p-1 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800">
+                      {['📬', '🏛️', '🏢', '📂', '📄', '✉️', '💼', '🎓', '🔥', '⭐️', '🎯', '🚀'].map((em) => (
+                        <button
+                          key={em}
+                          type="button"
+                          onClick={() => setLogoUrl(em)}
+                          className={`w-9 h-9 text-lg rounded-lg flex items-center justify-center hover:bg-white dark:hover:bg-slate-900 cursor-pointer transition-all ${
+                            logoUrl === em ? 'bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 scale-105' : ''
+                          }`}
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Type: Image URL */}
+              {logoType === 'image' && (
+                <div className="space-y-2">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Masukkan URL Gambar / Logo PNG / SVG:
+                  </span>
+                  <input
+                    type="text"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-mono text-slate-800 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                    placeholder="https://example.com/logo.png"
+                  />
+                  {logoUrl && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center overflow-hidden border border-slate-200">
+                        <img 
+                          src={logoUrl} 
+                          alt="Pratinjau" 
+                          className="w-8 h-8 object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-semibold">Pratinjau logo eksternal</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Theme colors choice */}

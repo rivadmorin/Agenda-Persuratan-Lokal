@@ -13,7 +13,19 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export default function PdfTools() {
+interface PdfToolsProps {
+  onTrackTask?: (
+    name: string,
+    type: 'upload' | 'download' | 'export' | 'zip' | 'receipt' | 'pdf-tool' | 'import',
+    fileName?: string
+  ) => {
+    complete: (customMsg?: string) => void;
+    error: (errorMsg?: string) => void;
+    updateProgress: (prog: number) => void;
+  };
+}
+
+export default function PdfTools({ onTrackTask }: PdfToolsProps = {}) {
   const [activeTool, setActiveTool] = useState<'merge' | 'split' | 'compress'>('merge');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,6 +85,8 @@ export default function PdfTools() {
     }
     setLoading(true);
     setError('');
+    const filename = 'PDF_Gabungan_Agenda.pdf';
+    const task = onTrackTask ? onTrackTask('Gabung File PDF', 'pdf-tool', filename) : null;
     try {
       const response = await fetch('/api/pdf/merge', {
         method: 'POST',
@@ -81,13 +95,16 @@ export default function PdfTools() {
       });
       if (response.ok) {
         const blob = await response.blob();
-        downloadBlob(blob, 'PDF_Gabungan_Agenda.pdf');
+        downloadBlob(blob, filename);
+        task?.complete('PDF Berhasil digabung!');
       } else {
         const errData = await response.json();
         setError(errData.message || 'Gagal menggabungkan PDF.');
+        task?.error(errData.message || 'Gagal menggabungkan PDF.');
       }
     } catch (err) {
       setError('Gagal menghubungkan ke server.');
+      task?.error('Koneksi gagal');
     } finally {
       setLoading(false);
     }
@@ -117,6 +134,8 @@ export default function PdfTools() {
     }
     setLoading(true);
     setError('');
+    const filename = `Potongan_${splitFile.name}`;
+    const task = onTrackTask ? onTrackTask('Potong Halaman PDF', 'pdf-tool', filename) : null;
     try {
       const response = await fetch('/api/pdf/split', {
         method: 'POST',
@@ -125,13 +144,16 @@ export default function PdfTools() {
       });
       if (response.ok) {
         const blob = await response.blob();
-        downloadBlob(blob, `Potongan_${splitFile.name}`);
+        downloadBlob(blob, filename);
+        task?.complete('PDF Berhasil dipotong!');
       } else {
         const errData = await response.json();
         setError(errData.message || 'Gagal memotong PDF.');
+        task?.error(errData.message || 'Gagal memotong PDF.');
       }
     } catch (err) {
       setError('Gagal menghubungkan ke server.');
+      task?.error('Koneksi gagal');
     } finally {
       setLoading(false);
     }
@@ -157,6 +179,8 @@ export default function PdfTools() {
     }
     setLoading(true);
     setError('');
+    const filename = `Terkompresi_${compressFile.name}`;
+    const task = onTrackTask ? onTrackTask('Kompres Ukuran PDF', 'pdf-tool', filename) : null;
     try {
       const response = await fetch('/api/pdf/compress', {
         method: 'POST',
@@ -165,13 +189,16 @@ export default function PdfTools() {
       });
       if (response.ok) {
         const blob = await response.blob();
-        downloadBlob(blob, `Terkompresi_${compressFile.name}`);
+        downloadBlob(blob, filename);
+        task?.complete('PDF Berhasil dikompres!');
       } else {
         const errData = await response.json();
         setError(errData.message || 'Gagal mengompres PDF.');
+        task?.error(errData.message || 'Gagal mengompres PDF.');
       }
     } catch (err) {
       setError('Gagal menghubungkan ke server.');
+      task?.error('Koneksi gagal');
     } finally {
       setLoading(false);
     }

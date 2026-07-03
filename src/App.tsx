@@ -5,7 +5,7 @@ import {
   X, 
   Edit2, 
   Loader, 
-  ChevronRight,
+  ChevronRight, 
   ChevronLeft,
   Sparkles,
   Inbox,
@@ -24,7 +24,12 @@ import {
   Tag,
   Info,
   Maximize2,
-  Minimize2
+  Minimize2,
+  FileDown,
+  FolderArchive,
+  Database,
+  ArrowUpRight,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -41,7 +46,7 @@ import Dashboard from './components/Dashboard';
 import ReceiptModal from './components/ReceiptModal';
 
 // Types
-import { User, AppConfig, MailRecord, ServerInfo } from './types';
+import { User, AppConfig, MailRecord, ServerInfo, SystemTask } from './types';
 
 // Helper to dynamically retrieve metadata properties with robust alias mapping
 const getMetadataValueByAliases = (metadata: Record<string, any> | undefined, aliases: string[]): any => {
@@ -268,6 +273,77 @@ export default function App() {
 
   // Custom Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+
+  // System Tasks (Upload/Download progress tracking)
+  const [systemTasks, setSystemTasks] = useState<SystemTask[]>([]);
+  const [isTasksPanelExpanded, setIsTasksPanelExpanded] = useState(false);
+
+  const trackTask = (
+    name: string,
+    type: SystemTask['type'],
+    fileName?: string
+  ) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    const newTask: SystemTask = {
+      id,
+      name,
+      type,
+      progress: 0,
+      status: 'running',
+      fileName
+    };
+    
+    setSystemTasks(prev => [newTask, ...prev].slice(0, 5));
+
+    // Simulated gradual progress
+    let currentProgress = 0;
+    const interval = setInterval(() => {
+      currentProgress += Math.floor(Math.random() * 12) + 6;
+      if (currentProgress >= 92) {
+        currentProgress = 92;
+        clearInterval(interval);
+      }
+      setSystemTasks(prev =>
+        prev.map(t => (t.id === id ? { ...t, progress: currentProgress } : t))
+      );
+    }, 180);
+
+    return {
+      id,
+      complete: (customMsg?: string) => {
+        clearInterval(interval);
+        setSystemTasks(prev =>
+          prev.map(t =>
+            t.id === id
+              ? { ...t, progress: 100, status: 'completed', message: customMsg }
+              : t
+          )
+        );
+        // Automatically dismiss in 4 seconds
+        setTimeout(() => {
+          setSystemTasks(prev => prev.filter(t => t.id !== id));
+        }, 4000);
+      },
+      error: (errorMsg?: string) => {
+        clearInterval(interval);
+        setSystemTasks(prev =>
+          prev.map(t =>
+            t.id === id
+              ? { ...t, status: 'error', message: errorMsg || 'Kesalahan sistem' }
+              : t
+          )
+        );
+        setTimeout(() => {
+          setSystemTasks(prev => prev.filter(t => t.id !== id));
+        }, 6000);
+      },
+      updateProgress: (prog: number) => {
+        setSystemTasks(prev =>
+          prev.map(t => (t.id === id ? { ...t, progress: prog } : t))
+        );
+      }
+    };
+  };
 
   // Custom Receipt signature state
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -525,21 +601,53 @@ export default function App() {
     const url = isEdit ? `/api/mails/${mailData.id}` : '/api/mails';
     const method = isEdit ? 'PUT' : 'POST';
 
-    const response = await fetch(url, {
-      method,
-      headers: getHeaders(),
-      body: JSON.stringify(mailData),
-    });
+    let deletePdfTask = null;
+    let uploadPdfTask = null;
 
-    if (response.ok) {
-      await fetchMails();
-    } else {
-      const errorData = await response.json();
-      if (response.status === 409 && errorData.collision) {
-        throw new Error(errorData.message);
+    if (mailData.deletePdf) {
+      deletePdfTask = trackTask('Hapus Lampiran PDF', 'upload', mailData.pdfName || 'surat.pdf');
+    } else if (mailData.pdfData) {
+      uploadPdfTask = trackTask('Unggah Lampiran PDF', 'upload', mailData.pdfName || 'surat.pdf');
+    }
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: getHeaders(),
+        body: JSON.stringify(mailData),
+      });
+
+      if (response.ok) {
+        await fetchMails();
+        if (deletePdfTask) {
+          deletePdfTask.complete('Lampiran PDF berhasil dihapus!');
+          showToast('Berhasil menghapus lampiran PDF.', 'success');
+        }
+        if (uploadPdfTask) {
+          uploadPdfTask.complete('Lampiran PDF berhasil diunggah!');
+          showToast('Berhasil mengunggah lampiran PDF.', 'success');
+        }
       } else {
-        throw new Error(errorData.message || 'Gagal menyimpan surat.');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.message || 'Gagal menyimpan surat.';
+        
+        if (deletePdfTask) {
+          deletePdfTask.error(errorMsg);
+        }
+        if (uploadPdfTask) {
+          uploadPdfTask.error(errorMsg);
+        }
+
+        if (response.status === 409 && errorData.collision) {
+          throw new Error(errorData.message);
+        } else {
+          throw new Error(errorMsg);
+        }
       }
+    } catch (err: any) {
+      if (deletePdfTask) deletePdfTask.error('Koneksi gagal');
+      if (uploadPdfTask) uploadPdfTask.error('Koneksi gagal');
+      throw err;
     }
   };
 
@@ -569,8 +677,8 @@ export default function App() {
     const targetMail = mails.find((m) => m.id === mailId);
     if (!targetMail) return;
 
+    const task = trackTask('Unggah Lampiran PDF', 'upload', fileName);
     try {
-      showToast('Sedang mengunggah PDF...', 'warning');
       const response = await fetch(`/api/mails/${mailId}`, {
         method: 'PUT',
         headers: getHeaders(),
@@ -585,18 +693,22 @@ export default function App() {
 
       if (response.ok) {
         await fetchMails();
+        task.complete('Unggah berhasil!');
         showToast('Berhasil mengunggah PDF!', 'success');
       } else {
         const data = await response.json().catch(() => ({}));
+        task.error(data.message || 'Gagal mengunggah PDF');
         showToast(data.message || 'Gagal mengunggah PDF.', 'error');
       }
     } catch (err) {
+      task.error('Koneksi gagal');
       showToast('Gagal mengunggah PDF.', 'error');
     }
   };
 
   // EXCEL IMPORT ACTION
   const handleImportExcel = async (file: File, mode: string = 'check') => {
+    const task = trackTask('Impor Excel Agenda', 'import', file.name);
     try {
       const response = await fetch(`/api/excel/import?mode=${mode}`, {
         method: 'POST',
@@ -611,6 +723,7 @@ export default function App() {
       if (response.ok) {
         if (data.success) {
           await fetchMails();
+          task.complete(`Berhasil mengimpor ${data.count} surat`);
           return { 
             success: true, 
             count: data.count, 
@@ -619,6 +732,7 @@ export default function App() {
             message: data.message
           };
         } else if (data.duplicatesFound) {
+          task.complete('Menunggu resolusi duplikasi');
           return {
             success: false,
             duplicatesFound: true,
@@ -627,8 +741,10 @@ export default function App() {
           };
         }
       }
+      task.error(data.message || 'Gagal mengimpor Excel');
       return { success: false, errors: data.errors || [data.message || 'Gagal mengimpor Excel.'] };
     } catch (err) {
+      task.error('Koneksi gagal');
       return { success: false, errors: ['Gagal menyambung ke server.'] };
     }
   };
@@ -646,8 +762,9 @@ export default function App() {
   };
 
   const handleConfirmReceipt = async (signerLeft: string, signerRight: string) => {
+    const filename = `Tanda_Terima_Agenda_${Date.now()}.pdf`;
+    const task = trackTask('Cetak Tanda Terima', 'receipt', filename);
     try {
-      showToast('Sedang membuat berkas PDF...', 'warning');
       const response = await fetch('/api/pdf/receipt', {
         method: 'POST',
         headers: getHeaders(),
@@ -659,24 +776,28 @@ export default function App() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Tanda_Terima_Agenda_${Date.now()}.pdf`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        task.complete('Tanda terima diunduh!');
         showToast('Berhasil mencetak tanda terima PDF!', 'success');
       } else {
         const errData = await response.json().catch(() => ({}));
+        task.error(errData.message || 'Gagal mencetak tanda terima');
         showToast(errData.message || 'Gagal mencetak tanda terima PDF.', 'error');
       }
     } catch (err) {
+      task.error('Koneksi gagal');
       showToast('Gagal menghubungkan ke server.', 'error');
     }
   };
 
   const handleBatchZip = async (mailIds: string[]) => {
+    const filename = `Arsip_Agenda_Batch_${Date.now()}.zip`;
+    const task = trackTask('Unduh ZIP Massal', 'zip', filename);
     try {
-      showToast('Sedang menyiapkan arsip ZIP lampiran...', 'warning');
       const response = await fetch('/api/pdf/batch-download', {
         method: 'POST',
         headers: getHeaders(),
@@ -688,17 +809,20 @@ export default function App() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Arsip_Agenda_Batch_${Date.now()}.zip`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        task.complete('Arsip ZIP diunduh!');
         showToast('Berhasil mengunduh arsip ZIP!', 'success');
       } else {
         const errData = await response.json().catch(() => ({}));
+        task.error(errData.message || 'Gagal membuat arsip ZIP');
         showToast(errData.message || 'Gagal membuat arsip zip massal.', 'error');
       }
     } catch (err) {
+      task.error('Koneksi gagal');
       showToast('Gagal menyambung ke server.', 'error');
     }
   };
@@ -712,6 +836,8 @@ export default function App() {
     return (
       <Login 
         appName={config?.appName || 'Agenda Persuratan'} 
+        logoType={config?.logoType}
+        logoUrl={config?.logoUrl}
         onLoginSuccess={handleLoginSuccess} 
         darkMode={darkMode}
         setDarkMode={setDarkMode}
@@ -727,6 +853,8 @@ export default function App() {
       <Sidebar
         currentUser={currentUser}
         appName={appName}
+        logoType={config?.logoType}
+        logoUrl={config?.logoUrl}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onlineCount={onlineCount}
@@ -760,11 +888,12 @@ export default function App() {
               onImportExcel={handleImportExcel}
               showNoColumn={config.showNoColumn !== false}
               startNo={config.startNo || 1}
+              onTrackTask={trackTask}
             />
           </div>
         )}
 
-        {activeTab === 'pdf-tools' && <PdfTools />}
+        {activeTab === 'pdf-tools' && <PdfTools onTrackTask={trackTask} />}
         {activeTab === 'dashboard' && (
           <Dashboard 
             mails={mails} 
@@ -1284,6 +1413,151 @@ export default function App() {
               </svg>
             )}
             <span>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* System Tasks & Progress Notification Center */}
+      <AnimatePresence>
+        {systemTasks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-[999] w-80 md:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                  <Activity className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                  Aktivitas Sistem
+                </span>
+                <span className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] px-1.5 py-0.5 rounded-md font-bold">
+                  {systemTasks.filter(t => t.status === 'running').length} Aktif
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setIsTasksPanelExpanded(!isTasksPanelExpanded)}
+                  className="p-1 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-lg text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                  title={isTasksPanelExpanded ? "Sembunyikan detail" : "Lihat detail"}
+                >
+                  {isTasksPanelExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={() => setSystemTasks([])}
+                  className="p-1 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-lg text-slate-400 hover:text-rose-500 transition-all cursor-pointer"
+                  title="Bersihkan Semua"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Task list */}
+            {isTasksPanelExpanded ? (
+              <div className="max-h-72 overflow-y-auto p-3 space-y-2.5 divide-y divide-slate-100 dark:divide-slate-800/40">
+                {systemTasks.map((task, i) => (
+                  <div key={task.id} className="pt-2.5 first:pt-0 flex flex-col gap-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`p-1.5 rounded-lg shrink-0 ${
+                          task.status === 'completed' 
+                            ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500' 
+                            : task.status === 'error' 
+                            ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-500' 
+                            : 'bg-blue-50 dark:bg-blue-950/20 text-blue-500'
+                        }`}>
+                          {task.type === 'upload' && <Upload className="w-3.5 h-3.5" />}
+                          {task.type === 'download' && <FileDown className="w-3.5 h-3.5" />}
+                          {task.type === 'import' && <Database className="w-3.5 h-3.5" />}
+                          {task.type === 'export' && <ArrowUpRight className="w-3.5 h-3.5" />}
+                          {task.type === 'zip' && <FolderArchive className="w-3.5 h-3.5" />}
+                          {task.type === 'receipt' && <Printer className="w-3.5 h-3.5" />}
+                          {task.type === 'pdf-tool' && <Activity className="w-3.5 h-3.5" />}
+                        </div>
+                        <div className="flex flex-col text-left">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px] md:max-w-[200px]">
+                            {task.name}
+                          </span>
+                          {task.fileName && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[160px] md:max-w-[200px] font-mono mt-0.5">
+                              {task.fileName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-right">
+                        {task.status === 'completed' ? (
+                          <span className="inline-flex items-center text-[10px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 px-1.5 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-950">
+                            Sukses
+                          </span>
+                        ) : task.status === 'error' ? (
+                          <span className="inline-flex items-center text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full border border-rose-100 dark:border-rose-950">
+                            Gagal
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 font-mono">
+                            {task.progress}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress Bar Container */}
+                    <div className="w-full">
+                      {task.status === 'running' ? (
+                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
+                          <motion.div 
+                            className="h-full bg-blue-500 rounded-full bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:12px_12px] animate-[progress-bar-stripes_1s_linear_infinite]"
+                            style={{ width: `${task.progress}%` }}
+                            layout
+                          />
+                        </div>
+                      ) : task.status === 'completed' ? (
+                        <div className="w-full h-1 bg-emerald-500 rounded-full" />
+                      ) : (
+                        <div className="w-full h-1 bg-rose-500 rounded-full" />
+                      )}
+                      
+                      {task.message && (
+                        <span className={`text-[10px] block mt-1 text-left ${task.status === 'completed' ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                          {task.message}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // Collapsed micro status view
+              <div className="p-3">
+                {systemTasks.slice(0, 1).map(task => (
+                  <div key={task.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 truncate">
+                      <div className="animate-spin text-blue-500 shrink-0">
+                        <Loader className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate text-left">
+                        {task.status === 'running' ? `Sedang memproses: ${task.name}` : `${task.name}: Selesai`}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setIsTasksPanelExpanded(true)}
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 uppercase tracking-wider shrink-0 cursor-pointer"
+                    >
+                      Buka ({systemTasks.length})
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

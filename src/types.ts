@@ -18,6 +18,7 @@ export interface ColumnProfile {
 
 export interface AppConfig {
   appName: string;
+  logoType?: 'lucide' | 'emoji' | 'image';
   logoUrl?: string;
   backgroundUrl?: string;
   themeColor: string; // hex or tailwind base color
@@ -67,3 +68,14 @@ export interface OnlineUser {
   role: string;
   lastActive: string;
 }
+
+export interface SystemTask {
+  id: string;
+  name: string;
+  type: 'upload' | 'download' | 'export' | 'zip' | 'receipt' | 'pdf-tool' | 'import';
+  progress: number;
+  status: 'running' | 'completed' | 'error';
+  fileName?: string;
+  message?: string;
+}
+

@@ -217,19 +217,70 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
   // Top Senders Breakdown
   const topSenders = useMemo(() => {
     const counts: Record<string, number> = {};
+
+    // Find sender column from config or metadata keys
+    const getSenderValue = (m: MailRecord) => {
+      // 1. If config has columns, find the column that looks like a sender
+      if (config?.columns) {
+        const senderAliases = ['suratdari', 'pengirim', 'surat_dari', 'asal', 'dari', 'instansi'];
+        // Try to find by column key
+        let col = config.columns.find(c => {
+          const k = c.key.toLowerCase();
+          return senderAliases.some(alias => k.includes(alias) || alias.includes(k));
+        });
+        // Try to find by column label
+        if (!col) {
+          col = config.columns.find(c => {
+            const l = c.label.toLowerCase();
+            return senderAliases.some(alias => l.includes(alias) || alias.includes(l));
+          });
+        }
+        if (col && m.metadata[col.key] !== undefined && m.metadata[col.key] !== '') {
+          return String(m.metadata[col.key]).trim();
+        }
+      }
+
+      // 2. Direct metadata key check with aliases
+      const directKeys = ['suratDari', 'pengirim', 'surat_dari', 'asal', 'dari', 'asalSurat', 'asal_surat', 'instansi', 'instansi_pengirim'];
+      for (const key of directKeys) {
+        if (m.metadata[key] !== undefined && m.metadata[key] !== '') {
+          return String(m.metadata[key]).trim();
+        }
+      }
+
+      // 3. Case-insensitive lookup in metadata keys
+      const metaKeys = Object.keys(m.metadata);
+      for (const alias of directKeys) {
+        const lowerAlias = alias.toLowerCase();
+        const foundKey = metaKeys.find(k => k.toLowerCase() === lowerAlias);
+        if (foundKey && m.metadata[foundKey] !== undefined && m.metadata[foundKey] !== '') {
+          return String(m.metadata[foundKey]).trim();
+        }
+      }
+
+      // 4. Fuzzy lookup in metadata keys (key contains common sender words)
+      const keywords = ['pengirim', 'dari', 'asal', 'instansi'];
+      for (const kw of keywords) {
+        const foundKey = metaKeys.find(k => k.toLowerCase().includes(kw));
+        if (foundKey && m.metadata[foundKey] !== undefined && m.metadata[foundKey] !== '') {
+          return String(m.metadata[foundKey]).trim();
+        }
+      }
+
+      return undefined;
+    };
+
     mails.forEach(m => {
-      const senderVal = m.metadata.suratDari || m.metadata.pengirim || m.metadata.surat_dari || m.metadata.dari;
+      const senderVal = getSenderValue(m);
       if (senderVal) {
-        const sender = String(senderVal).trim();
-        counts[sender] = (counts[sender] || 0) + 1;
+        counts[senderVal] = (counts[senderVal] || 0) + 1;
       }
     });
 
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [mails]);
+      .sort((a, b) => b.count - a.count);
+  }, [mails, config]);
 
   // Latest Agendas Feed
   const latestMails = useMemo(() => {
@@ -653,7 +704,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
             <Building2 className="w-5 h-5 text-slate-400 dark:text-slate-500" />
           </div>
 
-          <div className="flex-1 space-y-4">
+          <div className="flex-1 space-y-4 max-h-[340px] overflow-y-auto pr-1.5 scrollbar-thin">
             {topSenders.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-12 gap-2">
                 <Building2 className="w-8 h-8 stroke-1" />
@@ -665,9 +716,13 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
                 const percentage = Math.round((sender.count / maxCount) * 100);
                 return (
                   <div key={sender.name} className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-slate-800 dark:text-slate-200 truncate max-w-[240px]">{idx + 1}. {sender.name}</span>
-                      <span className="font-mono font-bold text-slate-500 dark:text-slate-400">{sender.count} berkas</span>
+                    <div className="flex justify-between text-xs font-semibold gap-2">
+                      <span className="text-slate-800 dark:text-slate-200 truncate flex-1" title={sender.name}>
+                        {idx + 1}. {sender.name}
+                      </span>
+                      <span className="font-mono font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                        {sender.count} berkas
+                      </span>
                     </div>
                     <div className="w-full bg-slate-100 dark:bg-slate-950 h-2 rounded-lg overflow-hidden">
                       <div 
