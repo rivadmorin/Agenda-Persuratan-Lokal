@@ -94,6 +94,91 @@ const defaultDb = {
   }
 };
 
+class SimpleMutex {
+  private queue: Promise<any> = Promise.resolve();
+
+  async acquire(): Promise<() => void> {
+    let release: () => void;
+    const next = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const current = this.queue;
+    this.queue = next;
+    await current;
+    return release!;
+  }
+}
+const dbMutex = new SimpleMutex();
+
+function saveSidecarMeta(mail: any) {
+  if (!mail || !mail.pdfPath) return;
+  try {
+    const fullPath = path.join(process.cwd(), mail.pdfPath);
+    const metaPath = fullPath + '.json';
+    const metaDir = path.dirname(metaPath);
+    if (!fs.existsSync(metaDir)) {
+      fs.mkdirSync(metaDir, { recursive: true });
+    }
+    fs.writeFileSync(metaPath, JSON.stringify(mail, null, 2), 'utf-8');
+    logMessage('INFO', `Saved sidecar metadata for mail ${mail.id} at ${mail.pdfPath}.json`);
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to save sidecar metadata for mail ${mail?.id}: ${err.message}`);
+  }
+}
+
+function deleteSidecarMeta(pdfPath: string) {
+  if (!pdfPath) return;
+  try {
+    const metaPath = path.join(process.cwd(), pdfPath) + '.json';
+    if (fs.existsSync(metaPath)) {
+      fs.unlinkSync(metaPath);
+      logMessage('INFO', `Deleted sidecar metadata: ${pdfPath}.json`);
+    }
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to delete sidecar metadata for ${pdfPath}: ${err.message}`);
+  }
+}
+
+function renameSidecarMeta(oldPdfPath: string, newPdfPath: string) {
+  if (!oldPdfPath || !newPdfPath || oldPdfPath === newPdfPath) return;
+  try {
+    const oldMetaPath = path.join(process.cwd(), oldPdfPath) + '.json';
+    const newMetaPath = path.join(process.cwd(), newPdfPath) + '.json';
+    if (fs.existsSync(oldMetaPath)) {
+      const newMetaDir = path.dirname(newMetaPath);
+      if (!fs.existsSync(newMetaDir)) {
+        fs.mkdirSync(newMetaDir, { recursive: true });
+      }
+      fs.renameSync(oldMetaPath, newMetaPath);
+      logMessage('INFO', `Renamed sidecar metadata from ${oldPdfPath}.json to ${newPdfPath}.json`);
+    }
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to rename sidecar metadata from ${oldPdfPath} to ${newPdfPath}: ${err.message}`);
+  }
+}
+
+function generateMissingSidecars(db: any) {
+  try {
+    let count = 0;
+    if (!db || !Array.isArray(db.mails)) return;
+    db.mails.forEach((mail: any) => {
+      if (mail.pdfPath) {
+        const fullPath = path.join(process.cwd(), mail.pdfPath);
+        const metaPath = fullPath + '.json';
+        if (fs.existsSync(fullPath) && !fs.existsSync(metaPath)) {
+          saveSidecarMeta(mail);
+          count++;
+        }
+      }
+    });
+    if (count > 0) {
+      logMessage('INFO', `Generated ${count} missing sidecar metadata files for existing mails.`);
+    }
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to generate missing sidecars: ${err.message}`);
+  }
+}
+
 function readDb() {
   try {
     if (!fs.existsSync(dbPath)) {
@@ -257,6 +342,7 @@ function renameMailPdfFile(db: any, mail: any) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
       fs.renameSync(oldFullPath, newFullPath);
+      renameSidecarMeta(oldRelativePath, newRelativePath);
       logMessage('INFO', `Physically renamed PDF from ${oldRelativePath} to ${newRelativePath}`);
       return newRelativePath;
     }
@@ -535,7 +621,8 @@ app.post('/api/config/columns/reorder', (req, res) => {
 });
 
 // 4.5. Backup, Restore, and Clear Management
-app.get('/api/backup/export', (req, res) => {
+app.get('/api/backup/export', async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const db = readDb();
     const dateStr = new Date().toISOString().split('T')[0];
@@ -546,10 +633,13 @@ app.get('/api/backup/export', (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Backup export failed: ${err.message}`);
     res.status(500).json({ message: 'Gagal mengekspor pencadangan data.' });
+  } finally {
+    release();
   }
 });
 
 app.get('/api/backup/export-zip', async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const zip = new JSZip();
     
@@ -572,10 +662,13 @@ app.get('/api/backup/export-zip', async (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Full backup export failed: ${err.message}`);
     res.status(500).json({ message: 'Gagal mengekspor pencadangan lengkap (ZIP + PDF).' });
+  } finally {
+    release();
   }
 });
 
-app.post('/api/backup/import', (req, res) => {
+app.post('/api/backup/import', async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const { backupData } = req.body;
     if (!backupData) {
@@ -600,10 +693,13 @@ app.post('/api/backup/import', (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Backup import failed: ${err.message}`);
     res.status(500).json({ message: 'Gagal memulihkan data pencadangan: Format tidak sesuai.' });
+  } finally {
+    release();
   }
 });
 
-app.post('/api/backup/clear', (req, res) => {
+app.post('/api/backup/clear', async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const db = readDb();
     
@@ -637,6 +733,8 @@ app.post('/api/backup/clear', (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Failed to clear database: ${err.message}`);
     res.status(500).json({ message: 'Gagal mengosongkan data.' });
+  } finally {
+    release();
   }
 });
 
@@ -683,6 +781,7 @@ app.get('/api/backup/list', (req, res) => {
 
 // POST /api/backup/create
 app.post('/api/backup/create', async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const { includePdf } = req.body;
     const backupDir = path.join(process.cwd(), 'data', 'backups');
@@ -724,11 +823,14 @@ app.post('/api/backup/create', async (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Failed to create manual backup: ${err.message}`);
     res.status(500).json({ message: `Gagal membuat pencadangan: ${err.message}` });
+  } finally {
+    release();
   }
 });
 
 // POST /api/backup/restore-local
 app.post('/api/backup/restore-local', async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const { filename } = req.body;
     if (!filename) {
@@ -801,11 +903,14 @@ app.post('/api/backup/restore-local', async (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Failed to restore local backup: ${err.message}`);
     res.status(500).json({ message: `Gagal memulihkan data: ${err.message}` });
+  } finally {
+    release();
   }
 });
 
 // POST /api/backup/import-zip
 app.post('/api/backup/import-zip', express.raw({ type: 'application/zip', limit: '100mb' }), async (req, res) => {
+  const release = await dbMutex.acquire();
   try {
     const zipBuffer = req.body;
     if (!zipBuffer || zipBuffer.length === 0) {
@@ -859,6 +964,8 @@ app.post('/api/backup/import-zip', express.raw({ type: 'application/zip', limit:
   } catch (err: any) {
     logMessage('ERROR', `Failed to import ZIP backup: ${err.message}`);
     res.status(500).json({ message: `Gagal mengimpor arsip cadangan ZIP: ${err.message}` });
+  } finally {
+    release();
   }
 });
 
@@ -906,6 +1013,292 @@ app.get('/api/backup/download/:filename', (req, res) => {
   } catch (err: any) {
     logMessage('ERROR', `Failed to download backup file: ${err.message}`);
     res.status(500).json({ message: 'Gagal mengunduh berkas cadangan.' });
+  }
+});
+
+// GET /api/backup/integrity - Verify DB-to-file consistency
+app.get('/api/backup/integrity', async (req, res) => {
+  const release = await dbMutex.acquire();
+  try {
+    const db = readDb();
+    
+    // 1. Get all referenced PDF paths from database
+    const referencedPaths = new Set(
+      db.mails
+        .map((mail: any) => mail.pdfPath)
+        .filter((p: any) => typeof p === 'string' && p.trim() !== '')
+        .map((p: string) => p.replace(/\\/g, '/').toLowerCase())
+    );
+
+    // Helper to determine if a file is an orphan
+    const isOrphan = (filePath: string): boolean => {
+      const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+      const normalizedPath = relativePath.toLowerCase();
+
+      if (normalizedPath.endsWith('.pdf')) {
+        return !referencedPaths.has(normalizedPath);
+      }
+      if (normalizedPath.endsWith('.pdf.json')) {
+        const pdfNormalizedPath = normalizedPath.slice(0, -5); // strip '.json'
+        return !referencedPaths.has(pdfNormalizedPath);
+      }
+      return true;
+    };
+
+    // Helper for recursive file scan
+    const getAllFilesRecursive = (dirPath: string): string[] => {
+      let results: string[] = [];
+      if (!fs.existsSync(dirPath)) return results;
+      const list = fs.readdirSync(dirPath);
+      list.forEach((file) => {
+        const filePath = path.join(dirPath, file);
+        const stat = fs.statSync(filePath);
+        if (stat && stat.isDirectory()) {
+          results = results.concat(getAllFilesRecursive(filePath));
+        } else {
+          results.push(filePath);
+        }
+      });
+      return results;
+    };
+
+    // 2. Scan all physical files in uploads directory
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    const allPhysicalFiles = getAllFilesRecursive(uploadsDir);
+
+    const orphans: any[] = [];
+    allPhysicalFiles.forEach((filePath) => {
+      if (isOrphan(filePath)) {
+        const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        const stats = fs.statSync(filePath);
+        orphans.push({
+          path: relativePath,
+          sizeBytes: stats.size,
+          createdAt: stats.mtime.toISOString()
+        });
+      }
+    });
+
+    // 3. Scan for missing physical files referenced in the DB
+    const missing: any[] = [];
+    db.mails.forEach((mail: any) => {
+      if (mail.pdfPath && mail.pdfPath.trim() !== '') {
+        const fullPath = path.join(process.cwd(), mail.pdfPath);
+        if (!fs.existsSync(fullPath)) {
+          missing.push({
+            mailId: mail.id,
+            noSurat: mail.metadata?.noSurat || 'N/A',
+            perihal: mail.metadata?.perihal || 'N/A',
+            tanggalSurat: mail.metadata?.tanggalSurat || 'N/A',
+            pdfPath: mail.pdfPath
+          });
+        }
+      }
+    });
+
+    const totalMails = db.mails.length;
+    const totalMailsWithPdf = db.mails.filter((m: any) => m.pdfPath && m.pdfPath.trim() !== '').length;
+    const totalPdfsOnDisk = allPhysicalFiles.length;
+    const totalSizeOrphans = orphans.reduce((sum, item) => sum + item.sizeBytes, 0);
+
+    logMessage('INFO', `Integrity check completed: Found ${orphans.length} orphans, ${missing.length} missing files.`);
+    res.json({
+      success: true,
+      stats: {
+        totalMails,
+        totalMailsWithPdf,
+        totalPdfsOnDisk,
+        orphanCount: orphans.length,
+        missingCount: missing.length,
+        totalSizeOrphans
+      },
+      orphans: orphans.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      missing
+    });
+  } catch (err: any) {
+    logMessage('ERROR', `Integrity check failed: ${err.message}`);
+    res.status(500).json({ message: `Gagal memeriksa integritas sistem: ${err.message}` });
+  } finally {
+    release();
+  }
+});
+
+// POST /api/backup/integrity/cleanup - Clean orphan PDFs and empty subdirectories
+app.post('/api/backup/integrity/cleanup', async (req, res) => {
+  const release = await dbMutex.acquire();
+  try {
+    const db = readDb();
+    
+    const referencedPaths = new Set(
+      db.mails
+        .map((mail: any) => mail.pdfPath)
+        .filter((p: any) => typeof p === 'string' && p.trim() !== '')
+        .map((p: string) => p.replace(/\\/g, '/').toLowerCase())
+    );
+
+    // Helper to determine if a file is an orphan
+    const isOrphan = (filePath: string): boolean => {
+      const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+      const normalizedPath = relativePath.toLowerCase();
+
+      if (normalizedPath.endsWith('.pdf')) {
+        return !referencedPaths.has(normalizedPath);
+      }
+      if (normalizedPath.endsWith('.pdf.json')) {
+        const pdfNormalizedPath = normalizedPath.slice(0, -5); // strip '.json'
+        return !referencedPaths.has(pdfNormalizedPath);
+      }
+      return true;
+    };
+
+    const getAllFilesRecursive = (dirPath: string): string[] => {
+      let results: string[] = [];
+      if (!fs.existsSync(dirPath)) return results;
+      const list = fs.readdirSync(dirPath);
+      list.forEach((file) => {
+        const filePath = path.join(dirPath, file);
+        const stat = fs.statSync(filePath);
+        if (stat && stat.isDirectory()) {
+          results = results.concat(getAllFilesRecursive(filePath));
+        } else {
+          results.push(filePath);
+        }
+      });
+      return results;
+    };
+
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    const allPhysicalFiles = getAllFilesRecursive(uploadsDir);
+
+    let deletedCount = 0;
+    let reclaimedBytes = 0;
+
+    allPhysicalFiles.forEach((filePath) => {
+      if (isOrphan(filePath)) {
+        const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        try {
+          const stats = fs.statSync(filePath);
+          reclaimedBytes += stats.size;
+          fs.unlinkSync(filePath);
+          deletedCount++;
+          logMessage('INFO', `Deleted orphan file: ${relativePath}`);
+        } catch (unlinkErr: any) {
+          const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+          logMessage('WARN', `Failed to delete orphan file ${relativePath}: ${unlinkErr.message}`);
+        }
+      }
+    });
+
+    // Clean empty subdirectories in data/uploads
+    const cleanEmptyDirsRecursive = (dirPath: string) => {
+      if (!fs.existsSync(dirPath)) return;
+      const stat = fs.statSync(dirPath);
+      if (!stat.isDirectory()) return;
+
+      let files = fs.readdirSync(dirPath);
+      if (files.length > 0) {
+        files.forEach((file) => {
+          cleanEmptyDirsRecursive(path.join(dirPath, file));
+        });
+        files = fs.readdirSync(dirPath);
+      }
+
+      const rootUploads = path.join(process.cwd(), 'data', 'uploads');
+      if (files.length === 0 && dirPath !== rootUploads) {
+        try {
+          fs.rmdirSync(dirPath);
+          logMessage('INFO', `Removed empty subdirectory: ${path.relative(process.cwd(), dirPath)}`);
+        } catch (rmdirErr: any) {
+          logMessage('WARN', `Failed to remove directory ${dirPath}: ${rmdirErr.message}`);
+        }
+      }
+    };
+
+    cleanEmptyDirsRecursive(uploadsDir);
+
+    logMessage('INFO', `Integrity cleanup completed: Deleted ${deletedCount} orphan files, reclaimed ${reclaimedBytes} bytes.`);
+    res.json({
+      success: true,
+      deletedCount,
+      reclaimedBytes
+    });
+  } catch (err: any) {
+    logMessage('ERROR', `Integrity cleanup failed: ${err.message}`);
+    res.status(500).json({ message: `Gagal membersihkan lampiran sampah: ${err.message}` });
+  } finally {
+    release();
+  }
+});
+
+// POST /api/backup/integrity/reconstruct - Reconstruct missing DB records from sidecar JSON files
+app.post('/api/backup/integrity/reconstruct', async (req, res) => {
+  const release = await dbMutex.acquire();
+  try {
+    const db = readDb();
+    
+    const getAllMetaFilesRecursive = (dirPath: string): string[] => {
+      let results: string[] = [];
+      if (!fs.existsSync(dirPath)) return results;
+      const list = fs.readdirSync(dirPath);
+      list.forEach((file) => {
+        const filePath = path.join(dirPath, file);
+        const stat = fs.statSync(filePath);
+        if (stat && stat.isDirectory()) {
+          results = results.concat(getAllMetaFilesRecursive(filePath));
+        } else if (file.toLowerCase().endsWith('.pdf.json')) {
+          results.push(filePath);
+        }
+      });
+      return results;
+    };
+
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    const allMetaFiles = getAllMetaFilesRecursive(uploadsDir);
+
+    let restoredCount = 0;
+    let skippedCount = 0;
+
+    allMetaFiles.forEach((metaFilePath) => {
+      try {
+        const fileContent = fs.readFileSync(metaFilePath, 'utf-8');
+        const mailRecord = JSON.parse(fileContent);
+
+        if (mailRecord && mailRecord.id && mailRecord.metadata) {
+          const exists = db.mails.some((m: any) => m.id === mailRecord.id);
+          if (!exists) {
+            const pdfFullPath = path.join(process.cwd(), mailRecord.pdfPath);
+            if (fs.existsSync(pdfFullPath)) {
+              db.mails.push(mailRecord);
+              restoredCount++;
+            } else {
+              skippedCount++;
+            }
+          } else {
+            skippedCount++;
+          }
+        }
+      } catch (parseErr: any) {
+        logMessage('WARN', `Failed parsing meta file ${metaFilePath}: ${parseErr.message}`);
+      }
+    });
+
+    if (restoredCount > 0) {
+      db.mails.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      writeDb(db);
+      logMessage('INFO', `Database reconstructed: Restored ${restoredCount} mails from sidecar metadata files.`);
+    }
+
+    res.json({
+      success: true,
+      restoredCount,
+      skippedCount,
+      message: `Berhasil merekonstruksi ${restoredCount} surat dari file deskriptor fisik PDF. ${skippedCount} file dilewati (sudah ada di database atau PDF tidak ada).`
+    });
+  } catch (err: any) {
+    logMessage('ERROR', `Reconstruct DB failed: ${err.message}`);
+    res.status(500).json({ message: `Gagal merekonstruksi database dari metadata: ${err.message}` });
+  } finally {
+    release();
   }
 });
 
@@ -1131,6 +1524,7 @@ app.post('/api/mails', (req, res) => {
 
   db.mails.push(newMail);
   writeDb(db);
+  saveSidecarMeta(newMail);
   logMessage('INFO', `Mail record created: ${newMail.id}`);
   res.json({ success: true, mail: newMail });
 });
@@ -1165,6 +1559,7 @@ app.put('/api/mails/:id', (req, res) => {
           fs.unlinkSync(fullPath);
           logMessage('INFO', `Deleted physical PDF file: ${pdfPath}`);
         }
+        deleteSidecarMeta(pdfPath);
       } catch (err: any) {
         logMessage('ERROR', `Failed deleting physical PDF file: ${err.message}`);
       }
@@ -1188,7 +1583,20 @@ app.put('/api/mails/:id', (req, res) => {
       const finalPdfPath = path.join(uploadDir, formattedName);
       fs.writeFileSync(finalPdfPath, buffer);
       
-      pdfPath = path.join(relativeUploadDir, formattedName).replace(/\\/g, '/');
+      const newRelativePath = path.join(relativeUploadDir, formattedName).replace(/\\/g, '/');
+      if (existingMail.pdfPath && existingMail.pdfPath !== newRelativePath) {
+        try {
+          const oldFullPath = path.join(process.cwd(), existingMail.pdfPath);
+          if (fs.existsSync(oldFullPath)) {
+            fs.unlinkSync(oldFullPath);
+          }
+          deleteSidecarMeta(existingMail.pdfPath);
+        } catch (delErr: any) {
+          logMessage('WARN', `Failed to clean old file during replacement: ${delErr.message}`);
+        }
+      }
+
+      pdfPath = newRelativePath;
       logMessage('INFO', `Updated PDF for mail: ${id}`);
     } catch (err: any) {
       logMessage('ERROR', `Failed replacing PDF file: ${err.message}`);
@@ -1215,6 +1623,7 @@ app.put('/api/mails/:id', (req, res) => {
   }
 
   writeDb(db);
+  saveSidecarMeta(existingMail);
   logMessage('INFO', `Mail record updated: ${id}, new version: ${existingMail.versionId}`);
   res.json({ success: true, mail: existingMail });
 });
@@ -1236,6 +1645,7 @@ app.delete('/api/mails/:id', (req, res) => {
         fs.unlinkSync(fullPath);
         logMessage('INFO', `Deleted physical PDF file: ${mail.pdfPath}`);
       }
+      deleteSidecarMeta(mail.pdfPath);
     } catch (err: any) {
       logMessage('ERROR', `Failed deleting physical file: ${err.message}`);
     }
@@ -2193,6 +2603,13 @@ app.post('/api/pdf/batch-download', async (req, res) => {
 // ==========================================
 
 async function startServer() {
+  try {
+    const db = readDb();
+    generateMissingSidecars(db);
+  } catch (err: any) {
+    logMessage('WARN', `Failed to run initial sidecar check on startup: ${err.message}`);
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

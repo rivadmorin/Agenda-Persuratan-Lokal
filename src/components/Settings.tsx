@@ -241,6 +241,10 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [includePdfInLocalBackup, setIncludePdfInLocalBackup] = useState(true);
   const [isRestoringLocal, setIsRestoringLocal] = useState<string | null>(null);
   const [isDeletingLocal, setIsDeletingLocal] = useState<string | null>(null);
+  const [backupConfirmAction, setBackupConfirmAction] = useState<{
+    type: 'restore' | 'delete';
+    filename: string;
+  } | null>(null);
 
   const fetchLocalBackups = async () => {
     setIsLoadingBackups(true);
@@ -254,6 +258,118 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
       console.error('Error fetching backups list:', err);
     } finally {
       setIsLoadingBackups(false);
+    }
+  };
+
+  // Integrity check and cleanup states
+  interface IntegrityStats {
+    totalMails: number;
+    totalMailsWithPdf: number;
+    totalPdfsOnDisk: number;
+    orphanCount: number;
+    missingCount: number;
+    totalSizeOrphans: number;
+  }
+  interface OrphanFile {
+    path: string;
+    sizeBytes: number;
+    createdAt: string;
+  }
+  interface MissingFile {
+    mailId: string;
+    noSurat: string;
+    perihal: string;
+    tanggalSurat: string;
+    pdfPath: string;
+  }
+  interface IntegrityReport {
+    stats: IntegrityStats;
+    orphans: OrphanFile[];
+    missing: MissingFile[];
+  }
+
+  const [integrityReport, setIntegrityReport] = useState<IntegrityReport | null>(null);
+  const [isCheckingIntegrity, setIsCheckingIntegrity] = useState(false);
+  const [isCleaningIntegrity, setIsCleaningIntegrity] = useState(false);
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleCheckIntegrity = async () => {
+    setIsCheckingIntegrity(true);
+    try {
+      const res = await fetch('/api/backup/integrity');
+      if (res.ok) {
+        const data = await res.json();
+        setIntegrityReport(data);
+        showNotification('Pemeriksaan integritas basis data & file lampiran selesai.');
+      } else {
+        showNotification('Gagal memeriksa integritas sistem.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Error checking integrity:', err);
+      showNotification('Gagal memeriksa integritas sistem.', 'error');
+    } finally {
+      setIsCheckingIntegrity(false);
+    }
+  };
+
+  const handleCleanupIntegrity = async () => {
+    setIsCleaningIntegrity(true);
+    try {
+      const res = await fetch('/api/backup/integrity/cleanup', {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showNotification(`Pembersihan selesai! Berhasil menghapus ${data.deletedCount} file lampiran sampah dan membebaskan ${formatSize(data.reclaimedBytes)}.`);
+        // Re-run check to refresh stats
+        const checkRes = await fetch('/api/backup/integrity');
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          setIntegrityReport(checkData);
+        }
+      } else {
+        showNotification('Gagal melakukan pembersihan file lampiran sampah.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Error cleaning integrity:', err);
+      showNotification('Gagal melakukan pembersihan file lampiran sampah.', 'error');
+    } finally {
+      setIsCleaningIntegrity(false);
+    }
+  };
+
+  const [isReconstructing, setIsReconstructing] = useState(false);
+
+  const handleReconstructDatabase = async () => {
+    setIsReconstructing(true);
+    try {
+      const res = await fetch('/api/backup/integrity/reconstruct', {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showNotification(data.message);
+        // Re-run integrity check to see updated stats
+        const checkRes = await fetch('/api/backup/integrity');
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          setIntegrityReport(checkData);
+        }
+      } else {
+        showNotification('Gagal merekonstruksi database.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Error reconstructing database:', err);
+      showNotification('Gagal merekonstruksi database.', 'error');
+    } finally {
+      setIsReconstructing(false);
     }
   };
 
@@ -284,15 +400,11 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     }
   };
 
-  const handleRestoreLocalBackup = async (filename: string) => {
-    const isZipFile = filename.endsWith('.zip');
-    const warningMsg = isZipFile
-      ? `Apakah Anda yakin ingin memulihkan database dan seluruh file PDF menggunakan berkas cadangan "${filename}"? Tindakan ini akan menimpa seluruh data dan lampiran surat saat ini.`
-      : `Apakah Anda yakin ingin memulihkan database menggunakan berkas cadangan "${filename}"? Tindakan ini akan menimpa seluruh data saat ini.`;
-      
-    if (!window.confirm(warningMsg)) {
-      return;
-    }
+  const handleRestoreLocalBackup = (filename: string) => {
+    setBackupConfirmAction({ type: 'restore', filename });
+  };
+
+  const executeRestoreLocalBackup = async (filename: string) => {
     setIsRestoringLocal(filename);
     try {
       const res = await fetch('/api/backup/restore-local', {
@@ -317,10 +429,11 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     }
   };
 
-  const handleDeleteLocalBackup = async (filename: string) => {
-    if (!window.confirm(`Hapus berkas cadangan "${filename}" secara permanen dari server?`)) {
-      return;
-    }
+  const handleDeleteLocalBackup = (filename: string) => {
+    setBackupConfirmAction({ type: 'delete', filename });
+  };
+
+  const executeDeleteLocalBackup = async (filename: string) => {
     setIsDeletingLocal(filename);
     try {
       const res = await fetch(`/api/backup/delete/${encodeURIComponent(filename)}`, {
@@ -1307,6 +1420,183 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
               </div>
             </div>
 
+            {/* System Integrity & Cleanup */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-850 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-bold text-slate-700 dark:text-slate-355 uppercase tracking-wider">
+                    Verifikasi Integritas & Pembersihan Lampiran
+                  </span>
+                  <span className="block text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-relaxed mt-0.5">
+                    Periksa keselarasan database dengan file PDF fisik, bersihkan file sampah yang tidak terpakai, dan deteksi file yang hilang.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCheckIntegrity}
+                  disabled={isCheckingIntegrity}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-xl cursor-pointer transition-colors shrink-0"
+                >
+                  {isCheckingIntegrity ? (
+                    <Loader className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  Periksa Integritas
+                </button>
+              </div>
+
+              {integrityReport && (
+                <div className="mt-3 space-y-3 animate-fadeIn">
+                  {/* Status Indicator */}
+                  {integrityReport.stats.orphanCount === 0 && integrityReport.stats.missingCount === 0 ? (
+                    <div className="p-4 bg-emerald-50 dark:bg-emerald-950/15 border border-emerald-100 dark:border-emerald-900/30 rounded-2xl flex items-start gap-3">
+                      <div className="p-1 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-450 shrink-0">
+                        <Check className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-400">Sistem 100% Selaras (Sehat)</h4>
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-500 font-medium leading-relaxed mt-0.5">
+                          Semua file lampiran terverifikasi aman. Tidak ditemukan berkas sampah atau dokumen yang hilang dari server.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950/15 border border-amber-100 dark:border-amber-900/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="p-1 bg-amber-100 dark:bg-amber-900/30 rounded-full text-amber-650 dark:text-amber-450 shrink-0">
+                          <AlertCircle className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-xs font-bold text-amber-850 dark:text-amber-400 font-semibold">Tindakan Diperlukan</h4>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-500 font-medium leading-relaxed mt-0.5">
+                            Ditemukan {integrityReport.stats.orphanCount} berkas sampah tidak terpakai dan {integrityReport.stats.missingCount} file lampiran surat yang terputus/hilang.
+                          </p>
+                        </div>
+                      </div>
+                      {integrityReport.stats.orphanCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleCleanupIntegrity}
+                          disabled={isCleaningIntegrity}
+                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:bg-rose-450 rounded-xl cursor-pointer transition-colors shadow-sm self-end sm:self-auto shrink-0"
+                        >
+                          {isCleaningIntegrity ? (
+                            <Loader className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          Bersihkan {integrityReport.stats.orphanCount} File Sampah
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Stats Bento Grid */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-850 rounded-2xl">
+                      <span className="block text-[9px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Total Surat</span>
+                      <span className="block text-sm font-extrabold text-slate-750 dark:text-slate-200 mt-1">
+                        {integrityReport.stats.totalMails}
+                      </span>
+                      <span className="block text-[8px] font-bold text-slate-400 dark:text-slate-550 mt-0.5 uppercase tracking-wider">
+                        {integrityReport.stats.totalMailsWithPdf} Lampiran
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-850 rounded-2xl">
+                      <span className="block text-[9px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">File Sampah (Orphan)</span>
+                      <span className={`block text-sm font-extrabold mt-1 ${integrityReport.stats.orphanCount > 0 ? 'text-amber-600 dark:text-amber-450' : 'text-slate-750 dark:text-slate-200'}`}>
+                        {integrityReport.stats.orphanCount} File
+                      </span>
+                      <span className="block text-[8px] font-bold text-slate-400 dark:text-slate-550 mt-0.5 uppercase tracking-wider">
+                        {formatSize(integrityReport.stats.totalSizeOrphans)} Sampah
+                      </span>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-850 rounded-2xl">
+                      <span className="block text-[9px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">File Hilang (Missing)</span>
+                      <span className={`block text-sm font-extrabold mt-1 ${integrityReport.stats.missingCount > 0 ? 'text-rose-650 dark:text-rose-450' : 'text-slate-750 dark:text-slate-200'}`}>
+                        {integrityReport.stats.missingCount} File
+                      </span>
+                      <span className="block text-[8px] font-bold text-slate-400 dark:text-slate-550 mt-0.5 uppercase tracking-wider">
+                        Perlu Perhatian
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Database Reconstruction Card */}
+                  <div className="p-3.5 bg-blue-50/25 dark:bg-blue-950/10 border border-blue-100/50 dark:border-blue-900/20 rounded-2xl space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <span className="block text-[10px] font-bold text-blue-750 dark:text-blue-400 uppercase tracking-wider">
+                          Rekonstruksi Basis Data dari PDF
+                        </span>
+                        <span className="block text-[9px] text-slate-450 dark:text-slate-500 font-medium leading-relaxed">
+                          Jika file database (JSON) terhapus atau rusak, fitur ini akan membaca file metadata sidecar fisik (.pdf.json) yang tersisa di folder penyimpanan server dan memulihkan daftar surat ke database secara aman.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleReconstructDatabase}
+                        disabled={isReconstructing}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-450 rounded-xl cursor-pointer transition-colors shadow-sm self-end sm:self-auto shrink-0"
+                      >
+                        {isReconstructing ? (
+                          <Loader className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Database className="w-3.5 h-3.5" />
+                        )}
+                        Pulihkan Data
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Missing Files Detail */}
+                  {integrityReport.missing.length > 0 && (
+                    <div className="p-3 bg-rose-50/20 dark:bg-rose-950/5 border border-rose-100/50 dark:border-rose-950/20 rounded-2xl space-y-2">
+                      <span className="block text-[10px] font-bold text-rose-700 dark:text-rose-450 uppercase tracking-wider">
+                        Daftar Surat Dengan Lampiran Hilang / Terputus ({integrityReport.missing.length})
+                      </span>
+                      <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1.5 divide-y divide-rose-100/30 dark:divide-rose-950/15">
+                        {integrityReport.missing.map((item, idx) => (
+                          <div key={idx} className="pt-1.5 first:pt-0 text-[10px] font-medium text-slate-650 dark:text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <div className="truncate">
+                              <span className="font-bold text-slate-800 dark:text-slate-300">[{item.noSurat}]</span> {item.perihal}
+                            </div>
+                            <div className="text-[9px] text-rose-500 dark:text-rose-450 font-semibold font-mono truncate max-w-[200px]" title={item.pdfPath}>
+                              {item.pdfPath.split('/').pop()} (Tidak ada di disk)
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Orphan Files Detail */}
+                  {integrityReport.orphans.length > 0 && (
+                    <div className="p-3 bg-amber-50/20 dark:bg-amber-950/5 border border-amber-100/50 dark:border-amber-950/20 rounded-2xl space-y-2">
+                      <span className="block text-[10px] font-bold text-amber-700 dark:text-amber-450 uppercase tracking-wider">
+                        Daftar Berkas PDF Sampah di Server ({integrityReport.orphans.length})
+                      </span>
+                      <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1.5 divide-y divide-amber-100/30 dark:divide-amber-950/15">
+                        {integrityReport.orphans.map((item, idx) => (
+                          <div key={idx} className="pt-1.5 first:pt-0 text-[10px] font-medium text-slate-650 dark:text-slate-400 flex items-center justify-between gap-2">
+                            <span className="truncate font-mono text-slate-500 dark:text-slate-550" title={item.path}>
+                              {item.path.split('/').slice(2).join('/')}
+                            </span>
+                            <span className="text-[9px] text-slate-450 dark:text-slate-500 font-bold shrink-0">
+                              {formatSize(item.sizeBytes)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* List of Backup Files stored on server */}
             <div className="pt-4 border-t border-slate-100 dark:border-slate-850 space-y-3">
               <div className="flex items-center justify-between">
@@ -1891,6 +2181,92 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                   )}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Backup Action confirmation modal */}
+      <AnimatePresence>
+        {backupConfirmAction && (
+          <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 p-6 shadow-2xl w-full max-w-md relative overflow-hidden transition-colors duration-200 text-center text-slate-800 dark:text-slate-200"
+            >
+              {backupConfirmAction.type === 'delete' ? (
+                <>
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-rose-600" />
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-450 mx-auto mb-4">
+                    <Trash2 className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white font-display mb-2">
+                    Hapus Berkas Cadangan?
+                  </h3>
+                  <p className="text-xs text-slate-550 dark:text-slate-400 leading-relaxed mb-6">
+                    Apakah Anda yakin ingin menghapus berkas cadangan <strong className="font-bold font-mono text-rose-600 dark:text-rose-450">"{backupConfirmAction.filename}"</strong> secara permanen dari server? Berkas ini tidak dapat dikembalikan setelah dihapus.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBackupConfirmAction(null)}
+                      className="flex-1 py-2.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const filename = backupConfirmAction.filename;
+                        setBackupConfirmAction(null);
+                        executeDeleteLocalBackup(filename);
+                      }}
+                      className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs uppercase tracking-wider rounded-xl shadow-md shadow-rose-200 dark:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Ya, Hapus</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-blue-600" />
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-450 mx-auto mb-4">
+                    <Database className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white font-display mb-2">
+                    Pulihkan Basis Data?
+                  </h3>
+                  <p className="text-xs text-slate-550 dark:text-slate-400 leading-relaxed mb-6">
+                    {backupConfirmAction.filename.endsWith('.zip') ? (
+                      <span>Apakah Anda yakin ingin memulihkan database dan seluruh file PDF menggunakan berkas cadangan <strong className="font-bold font-mono text-blue-600 dark:text-blue-400">"{backupConfirmAction.filename}"</strong>? Tindakan ini akan <strong className="text-rose-650 dark:text-rose-450 font-bold">menimpa seluruh data dan lampiran surat</strong> saat ini.</span>
+                    ) : (
+                      <span>Apakah Anda yakin ingin memulihkan database menggunakan berkas cadangan <strong className="font-bold font-mono text-blue-600 dark:text-blue-400">"{backupConfirmAction.filename}"</strong>? Tindakan ini akan <strong className="text-rose-650 dark:text-rose-450 font-bold">menimpa seluruh data</strong> saat ini.</span>
+                    )}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBackupConfirmAction(null)}
+                      className="flex-1 py-2.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const filename = backupConfirmAction.filename;
+                        setBackupConfirmAction(null);
+                        executeRestoreLocalBackup(filename);
+                      }}
+                      className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-200 dark:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Ya, Pulihkan</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}
