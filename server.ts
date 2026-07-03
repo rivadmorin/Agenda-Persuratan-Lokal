@@ -544,12 +544,11 @@ app.get('/api/mails', (req, res) => {
       let valA = sortKey === 'type' ? a.type : (a.metadata?.[sortKey] ?? '');
       let valB = sortKey === 'type' ? b.type : (b.metadata?.[sortKey] ?? '');
       
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      const strA = String(valA);
+      const strB = String(valB);
+      
+      const comparison = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+      return sortOrder === 'asc' ? comparison : -comparison;
     });
   } else {
     mails.sort((a: any, b: any) => {
@@ -564,7 +563,23 @@ app.get('/api/mails', (req, res) => {
       // Default sorting by standard receipt date or created date
       const dateA = a.metadata?.tanggalTerima || a.createdAt;
       const dateB = b.metadata?.tanggalTerima || b.createdAt;
-      return dateA < dateB ? 1 : -1;
+      
+      if (dateA < dateB) return 1;
+      if (dateA > dateB) return -1;
+
+      // If dates are equal, sort by noUrut (natural sorting) descending (newest/highest first)
+      const valA = String(a.metadata?.noUrut || a.metadata?.nourut || '');
+      const valB = String(b.metadata?.noUrut || b.metadata?.nourut || '');
+      if (valA || valB) {
+        const comp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+        if (comp !== 0) return -comp; // descending: newest/highest first
+      }
+
+      // If noUrut is same, compare createdAt descending
+      if (a.createdAt < b.createdAt) return 1;
+      if (a.createdAt > b.createdAt) return -1;
+
+      return 0;
     });
   }
 
@@ -780,9 +795,10 @@ app.get('/api/excel/export', (req, res) => {
     const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
     
     // Create rows array with formatted keys
+    const startNo = db.config.startNo || 1;
     const dataRows = db.mails.map((mail: any, index: number) => {
       const row: any = {
-        'No': index + 1,
+        'No': index + startNo,
       };
       
       columns.forEach((col: any) => {
@@ -877,41 +893,76 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
     const dataRows = rows.slice(1);
     
     const colAliases: Record<string, string[]> = {
-      nourut: ['no urut', 'no. urut', 'nomor urut', 'no_urut', 'no.urut', 'nourut', 'no', 'nomor'],
-      nosurat: ['no surat', 'no. surat', 'nomor surat', 'no_surat', 'no.surat', 'nosurat'],
-      tanggalsurat: ['tgl surat', 'tgl. surat', 'tanggal surat', 'tgl_surat', 'tgl.surat', 'tglsurat', 'tgl', 'tanggal'],
-      tanggalterima: ['tgl terima', 'tgl. terima', 'tanggal terima', 'tgl_terima', 'tgl.terima', 'tglterima'],
-      pengirim: ['pengirim', 'dari', 'sender'],
-      perihal: ['perihal', 'isi', 'isi ringkas', 'hal', 'perihal/isi ringkas', 'perihal/isi', 'subject'],
-      keterangan: ['keterangan', 'ket', 'ket.', 'catatan', 'note', 'notes']
+      nourut: ['no urut', 'nomor urut', 'no urut agenda', 'nomor urut agenda', 'no agenda', 'nomor agenda', 'agenda'],
+      nosurat: ['no surat', 'nomor surat', 'nomer surat'],
+      tanggalsurat: ['tgl surat', 'tanggal surat', 'tgl kirim', 'tanggal kirim'],
+      tanggalterima: ['tgl terima', 'tanggal terima', 'tgl masuk', 'tanggal masuk'],
+      pengirim: ['pengirim', 'dari', 'asal', 'asal surat'],
+      perihal: ['perihal', 'isi', 'isi ringkas', 'hal', 'perihal isi ringkas', 'perihal isi', 'subjek'],
+      keterangan: ['keterangan', 'ket', 'catatan']
     };
 
+    // Step 1: Strict Exact and Alias Matches
+    const matchedIndices = new Set<number>();
     const colMappings = columns.map((col: any) => {
-      const idx = headers.findIndex((h) => {
+      const colKeyNorm = col.key.toLowerCase();
+      const normLabel = col.label.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      const normKey = col.key.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      const aliases = colAliases[colKeyNorm] || [];
+
+      // Find exact or alias match first
+      let idx = headers.findIndex((h, hIdx) => {
         if (h === undefined || h === null) return false;
-        const hStr = String(h).trim().toLowerCase();
-        const labelLower = col.label.toLowerCase();
-        const keyLower = col.key.toLowerCase();
-
-        // Direct key match
-        if (hStr === keyLower) return true;
-
-        // Strip helper phrases like "(Teks)", "(YYYY-MM-DD)", "*" and perform comparative matches
-        const cleanHStr = hStr.replace(/\s*\(.*?\)\s*/g, '').replace(/[\*]/g, '').trim();
-        const cleanLabel = labelLower.replace(/\s*\(.*?\)\s*/g, '').replace(/[\*]/g, '').trim();
-
-        if (cleanHStr === cleanLabel) return true;
-        if (cleanHStr.startsWith(cleanLabel) || cleanLabel.startsWith(cleanHStr)) return true;
-        if (cleanHStr.includes(cleanLabel) || cleanLabel.includes(cleanHStr)) return true;
-
-        // Synonym matches
-        const aliases = colAliases[col.key.toLowerCase()] || [];
-        if (aliases.includes(cleanHStr)) return true;
-
-        return false;
+        const normH = String(h).toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        return normH === normLabel || normH === normKey || aliases.includes(normH);
       });
+
+      // If found, mark it as matched
+      if (idx !== -1) {
+        matchedIndices.add(idx);
+      }
       return { ...col, index: idx };
     });
+
+    // Step 2: Loose Fallback Match for columns that still don't have a match
+    colMappings.forEach((col: any) => {
+      if (col.index === -1) {
+        const normLabel = col.label.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const normKey = col.key.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+
+        const idx = headers.findIndex((h, hIdx) => {
+          if (h === undefined || h === null || matchedIndices.has(hIdx)) return false;
+          const normH = String(h).toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+          
+          // Only allow substring matching if normH is longer than 3 characters (avoiding short "no" matching)
+          if (normH.length > 3) {
+            if (normLabel.includes(normH) || normH.includes(normLabel) || normKey.includes(normH) || normH.includes(normKey)) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (idx !== -1) {
+          col.index = idx;
+          matchedIndices.add(idx);
+        }
+      }
+    });
+
+    // Step 3: Absolute Last Resort for "noUrut" if still not matched and there is a "no" or "nomor" column
+    const noUrutCol = colMappings.find((col: any) => col.key === 'noUrut');
+    if (noUrutCol && noUrutCol.index === -1) {
+      const idx = headers.findIndex((h, hIdx) => {
+        if (h === undefined || h === null || matchedIndices.has(hIdx)) return false;
+        const normH = String(h).toLowerCase().replace(/\s*\(.*?\)\s*/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        return normH === 'no' || normH === 'nomor';
+      });
+      if (idx !== -1) {
+        noUrutCol.index = idx;
+        matchedIndices.add(idx);
+      }
+    }
 
     const errors: string[] = [];
     const validMails: any[] = [];
@@ -1005,6 +1056,7 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
       return null;
     };
 
+    const baseTime = Date.now();
     dataRows.forEach((row, rowIndex) => {
       const lineNum = rowIndex + 2; // header is row 1
       if (!row) return;
@@ -1069,12 +1121,13 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
       }
 
       if (!hasValidationError) {
+        const rowTime = new Date(baseTime + rowIndex).toISOString();
         validMails.push({
-          id: `mail_${Date.now()}_import_${Math.random().toString(36).substr(2, 5)}`,
+          id: `mail_${baseTime + rowIndex}_import_${Math.random().toString(36).substr(2, 5)}`,
           type: 'Masuk',
           pdfPath: '', // no uploaded file via excel import
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: rowTime,
+          updatedAt: rowTime,
           versionId: 1,
           metadata,
           createdBy,
@@ -1247,12 +1300,18 @@ app.post('/api/pdf/compress', async (req, res) => {
 // Generate PDF Receipt (Tanda Terima)
 app.post('/api/pdf/receipt', (req, res) => {
   try {
-    const { mailIds, signerLeft, signerRight } = req.body;
+    let { mailIds, signerLeft, signerRight } = req.body;
     const db = readDb();
     const selectedMails = db.mails.filter((m: any) => mailIds.includes(m.id));
 
     if (selectedMails.length === 0) {
       return res.status(400).json({ message: 'Tidak ada surat terpilih.' });
+    }
+
+    // Automatically determine sender from the creator (inputter) of the mails if not explicitly set
+    if (!signerLeft || signerLeft.trim() === '') {
+      const inputters = Array.from(new Set(selectedMails.map((m: any) => m.createdByName || 'Operator'))).filter(Boolean);
+      signerLeft = inputters.join(', ') || 'Operator';
     }
 
     const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
@@ -1273,12 +1332,15 @@ app.post('/api/pdf/receipt', (req, res) => {
 
     // Receipt Meta
     const receiptNo = `RCV-${Date.now().toString().slice(-6)}`;
-    const dateStr = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const fullPrintDate = `${dateStr} pukul ${timeStr}`;
     
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.text(`Nomor Tanda Terima: ${receiptNo}`, 15, 33);
-    doc.text(`Tanggal Cetak: ${dateStr}`, 195, 33, { align: 'right' });
+    doc.text(`Tanggal Cetak: ${fullPrintDate}`, 195, 33, { align: 'right' });
 
     // Table Header
     doc.setFillColor(240, 240, 240);
@@ -1319,21 +1381,21 @@ app.post('/api/pdf/receipt', (req, res) => {
       currentY += 8;
     });
 
-    currentY += 10;
-    if (currentY > 230) {
+    currentY += 4;
+    if (currentY > 250) {
       doc.addPage();
-      currentY = 30;
+      currentY = 25;
     }
 
     // Beautifully boxed double-column signature structure
     const boxWidth = 180;
-    const boxHeight = 42;
+    const boxHeight = 28;
     const boxX = 15;
     const boxY = currentY;
 
     // Outer rectangle and divider line background
     doc.setFillColor(248, 250, 252);
-    doc.rect(boxX, boxY, boxWidth, 8, 'F'); // Shaded header bg
+    doc.rect(boxX, boxY, boxWidth, 7, 'F'); // Shaded header bg
 
     doc.setDrawColor(180, 187, 200);
     doc.setLineWidth(0.35);
@@ -1343,28 +1405,28 @@ app.post('/api/pdf/receipt', (req, res) => {
     doc.line(boxX + boxWidth / 2, boxY, boxX + boxWidth / 2, boxY + boxHeight);
     
     // Horizontal divider between header and signature space
-    doc.line(boxX, boxY + 8, boxX + boxWidth, boxY + 8);
+    doc.line(boxX, boxY + 7, boxX + boxWidth, boxY + 7);
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     // Left Header
-    doc.text('YANG MENYERAHKAN (PENGIRIM)', boxX + (boxWidth / 4), boxY + 5.5, { align: 'center' });
+    doc.text('YANG MENYERAHKAN (PENGIRIM / PENGINPUT)', boxX + (boxWidth / 4), boxY + 4.5, { align: 'center' });
     // Right Header
-    doc.text('YANG MENERIMA (PENERIMA)', boxX + (boxWidth * 3 / 4), boxY + 5.5, { align: 'center' });
+    doc.text('YANG MENERIMA (PENERIMA)', boxX + (boxWidth * 3 / 4), boxY + 4.5, { align: 'center' });
 
     // Inner instruction/guide labels
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(100, 110, 120);
-    doc.text('Tanda Tangan & Cap Resmi:', boxX + (boxWidth / 4), boxY + 14, { align: 'center' });
-    doc.text('Tanda Tangan & Cap Resmi:', boxX + (boxWidth * 3 / 4), boxY + 14, { align: 'center' });
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(110, 120, 130);
+    doc.text('Tanda Tangan & Nama Terang:', boxX + (boxWidth / 4), boxY + 11.5, { align: 'center' });
+    doc.text(`Tanda Tangan (Tanggal: ${dateStr})`, boxX + (boxWidth * 3 / 4), boxY + 11.5, { align: 'center' });
 
     // Reset text color for signers names
     doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.text(`( ${signerLeft || '____________________'} )`, boxX + (boxWidth / 4), boxY + 35, { align: 'center' });
-    doc.text(`( ${signerRight || '____________________'} )`, boxX + (boxWidth * 3 / 4), boxY + 35, { align: 'center' });
+    doc.setFontSize(9);
+    doc.text(`( ${signerLeft || '____________________'} )`, boxX + (boxWidth / 4), boxY + 23, { align: 'center' });
+    doc.text(`( ${signerRight || '____________________'} )`, boxX + (boxWidth * 3 / 4), boxY + 23, { align: 'center' });
 
     const pdfBuffer = doc.output('arraybuffer');
     res.setHeader('Content-Type', 'application/pdf');

@@ -105,6 +105,8 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
     const withPdf = mails.filter(m => m.pdfPath).length;
     const pdfCoverage = total > 0 ? Math.round((withPdf / total) * 100) : 0;
 
+    const totalMasuk = mails.filter(m => m.type === 'Masuk').length;
+
     // Calculate percentage differences vs last month for trend indicator
     // Filter mails of this month vs last month
     const now = new Date();
@@ -116,6 +118,8 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
 
     let thisMonthCount = 0;
     let lastMonthCount = 0;
+    let thisMonthMasuk = 0;
+    let lastMonthMasuk = 0;
 
     mails.forEach(m => {
       let dateStr = m.metadata.tanggalSurat || m.metadata.tanggalTerima || m.createdAt;
@@ -124,8 +128,10 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
 
       if (d.getFullYear() === thisMonthY && d.getMonth() === thisMonthM) {
         thisMonthCount++;
+        if (m.type === 'Masuk') thisMonthMasuk++;
       } else if (d.getFullYear() === lastMonthY && d.getMonth() === lastMonthM) {
         lastMonthCount++;
+        if (m.type === 'Masuk') lastMonthMasuk++;
       }
     });
 
@@ -140,13 +146,26 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
       trendDirection = 'up';
     }
 
+    let masukTrendPercent = 0;
+    let masukTrendDirection: 'up' | 'down' | 'neutral' = 'neutral';
+    if (lastMonthMasuk > 0) {
+      masukTrendPercent = Math.round(((thisMonthMasuk - lastMonthMasuk) / lastMonthMasuk) * 100);
+      masukTrendDirection = masukTrendPercent > 0 ? 'up' : masukTrendPercent < 0 ? 'down' : 'neutral';
+    } else if (thisMonthMasuk > 0) {
+      masukTrendPercent = 100;
+      masukTrendDirection = 'up';
+    }
+
     return {
       total,
+      totalMasuk,
       withPdf,
       pdfCoverage,
       thisMonthCount,
       trendPercent: Math.abs(trendPercent),
-      trendDirection
+      trendDirection,
+      masukTrendPercent: Math.abs(masukTrendPercent),
+      masukTrendDirection
     };
   }, [mails]);
 
@@ -239,7 +258,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
       </div>
 
       {/* KPI Cards Bento Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-5">
         
         {/* Card 1: Total Agenda */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
@@ -270,21 +289,50 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
           </div>
         </div>
 
-        {/* Card 2: Berkas Dengan PDF */}
+        {/* Card 2: Total Surat Masuk */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
           <div className="space-y-1.5">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Berkas Dengan PDF</span>
-            <h3 className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 font-mono">{stats.withPdf}</h3>
-            <span className="text-[10px] text-slate-400 block font-medium">
-              {stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% dari seluruh berkas
-            </span>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Surat Masuk</span>
+            <h3 className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 font-mono">{stats.totalMasuk}</h3>
+            <div className="flex items-center gap-1">
+              {stats.masukTrendDirection === 'up' && (
+                <span className="inline-flex items-center text-[10px] font-bold text-emerald-600 dark:text-emerald-400 gap-0.5">
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  +{stats.masukTrendPercent}%
+                </span>
+              )}
+              {stats.masukTrendDirection === 'down' && (
+                <span className="inline-flex items-center text-[10px] font-bold text-rose-600 dark:text-rose-450 gap-0.5">
+                  <ArrowDownRight className="w-3.5 h-3.5" />
+                  -{stats.masukTrendPercent}%
+                </span>
+              )}
+              {stats.masukTrendDirection === 'neutral' && (
+                <span className="inline-flex items-center text-[10px] font-semibold text-slate-400">Stagnan</span>
+              )}
+              <span className="text-[10px] text-slate-400">vs bulan lalu</span>
+            </div>
           </div>
           <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
             <Inbox className="w-6 h-6" />
           </div>
         </div>
 
-        {/* Card 3: Total Surat Bulanan */}
+        {/* Card 3: Berkas Dengan PDF */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Berkas Dengan PDF</span>
+            <h3 className="text-3xl font-extrabold text-teal-600 dark:text-teal-400 font-mono">{stats.withPdf}</h3>
+            <span className="text-[10px] text-slate-400 block font-medium">
+              {stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% dari seluruh berkas
+            </span>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-teal-50 dark:bg-teal-950/30 flex items-center justify-center text-teal-600 dark:text-teal-400">
+            <FileText className="w-6 h-6" />
+          </div>
+        </div>
+
+        {/* Card 4: Total Surat Bulanan */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Surat Bulanan</span>
@@ -298,7 +346,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
           </div>
         </div>
 
-        {/* Card 4: PDF Attachment Coverage */}
+        {/* Card 5: PDF Attachment Coverage */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-sm dark:shadow-none flex items-center justify-between transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700">
           <div className="space-y-1.5">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Kelengkapan PDF</span>

@@ -479,8 +479,14 @@ export default function App() {
 
   // BATCH ACTIONS
   const handleBatchReceipt = async (mailIds: string[]) => {
-    const leftSigner = prompt('Nama Penyerah (Sisi Kiri):', currentUser?.name || 'Operator');
+    const selectedMails = mails.filter((m) => mailIds.includes(m.id));
+    const inputters = Array.from(new Set(selectedMails.map((m) => m.createdByName || 'Operator'))).filter(Boolean);
+    const defaultLeftSigner = inputters.join(', ') || currentUser?.name || 'Operator';
+
+    const leftSigner = prompt('Nama Penyerah / Pengirim (Sisi Kiri):', defaultLeftSigner);
+    if (leftSigner === null) return;
     const rightSigner = prompt('Nama Penerima (Sisi Kanan):', 'Administrator');
+    if (rightSigner === null) return;
 
     try {
       const response = await fetch('/api/pdf/receipt', {
@@ -589,6 +595,7 @@ export default function App() {
             onBatchZip={handleBatchZip}
             onImportExcel={handleImportExcel}
             showNoColumn={config.showNoColumn !== false}
+            startNo={config.startNo || 1}
           />
         )}
 

@@ -38,6 +38,7 @@ interface MailTableProps {
   onBatchZip: (mailIds: string[]) => void;
   onImportExcel: (file: File) => Promise<{ success: boolean; count?: number; errors?: string[] }>;
   showNoColumn?: boolean;
+  startNo?: number;
 }
 
 export default function MailTable({
@@ -56,6 +57,7 @@ export default function MailTable({
   onBatchZip,
   onImportExcel,
   showNoColumn = true,
+  startNo = 1,
 }: MailTableProps) {
   // Selection
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -429,7 +431,7 @@ export default function MailTable({
                         </td>
                         {showNoColumn && (
                           <td className="px-2 text-center text-xs font-semibold text-slate-400 dark:text-slate-500 font-mono">
-                            {startIndex + idx + 1}
+                            {startIndex + idx + startNo}
                           </td>
                         )}
 

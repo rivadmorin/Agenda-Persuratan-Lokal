@@ -20,7 +20,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AppConfig, ColumnDefinition, ColumnType } from '../types';
+import { AppConfig, ColumnDefinition, ColumnType, ColumnProfile } from '../types';
 
 interface SettingsProps {
   config: AppConfig;
@@ -36,11 +36,18 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [maxUploadSizeMb, setMaxUploadSizeMb] = useState(config.maxUploadSizeMb);
   const [backupRetentionDays, setBackupRetentionDays] = useState(config.backupRetentionDays);
   const [showNoColumn, setShowNoColumn] = useState(config.showNoColumn !== false);
+  const [startNo, setStartNo] = useState(config.startNo || 1);
   
   // Columns schema state
   const [columns, setColumns] = useState<ColumnDefinition[]>([]);
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragAllowedKey, setDragAllowedKey] = useState<string | null>(null);
+
+  // Column profiles states
+  const [columnProfiles, setColumnProfiles] = useState<ColumnProfile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string>('default');
+  const [showSaveProfileModal, setShowSaveProfileModal] = useState(false);
+  const [newProfileName, setNewProfileName] = useState('');
 
   const handleDrop = (targetIdx: number) => {
     if (draggedIdx === null || draggedIdx === targetIdx) return;
@@ -209,7 +216,20 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setMaxUploadSizeMb(config.maxUploadSizeMb);
     setBackupRetentionDays(config.backupRetentionDays);
     setShowNoColumn(config.showNoColumn !== false);
+    setStartNo(config.startNo || 1);
     setColumns([...config.columns].sort((a, b) => a.order - b.order));
+
+    const initialDefault: ColumnProfile = {
+      id: 'default',
+      name: 'Profil Default',
+      columns: [...config.columns],
+      isDefault: true,
+    };
+    const profiles = config.columnProfiles && config.columnProfiles.length > 0
+      ? config.columnProfiles
+      : [initialDefault];
+    setColumnProfiles(profiles);
+    setActiveProfileId(config.activeProfileId || 'default');
   }, [config]);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -235,6 +255,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
         maxUploadSizeMb,
         backupRetentionDays,
         showNoColumn,
+        startNo,
       });
       showNotification('Konfigurasi umum berhasil disimpan!');
     } catch (err) {
@@ -330,13 +351,120 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const handleSaveColumnsSchema = async () => {
     setSavingColumns(true);
     try {
-      await onUpdateConfig({ columns }); // sync parent state and save to DB
+      // Update the active profile's columns in our profiles list
+      const updatedProfiles = columnProfiles.map((p) => {
+        if (p.id === activeProfileId) {
+          return { ...p, columns };
+        }
+        return p;
+      });
+
+      setColumnProfiles(updatedProfiles);
+
+      await onUpdateConfig({ 
+        columns, 
+        columnProfiles: updatedProfiles,
+        activeProfileId
+      });
       showNotification('Skema dan urutan kolom berhasil disimpan dan diterapkan!');
     } catch (err) {
       showNotification('Gagal menyimpan skema kolom.', 'error');
     } finally {
       setSavingColumns(false);
     }
+  };
+
+  const handleSelectProfile = (profileId: string) => {
+    const prof = columnProfiles.find((p) => p.id === profileId);
+    if (prof) {
+      setActiveProfileId(profileId);
+      setColumns([...prof.columns].sort((a, b) => a.order - b.order));
+      showNotification(`Profil "${prof.name}" dimuat. Klik "Simpan Urutan & Skema" untuk mengaktifkan.`);
+    }
+  };
+
+  const handleSaveAsNewProfile = (name: string) => {
+    if (!name.trim()) {
+      showNotification('Nama profil tidak boleh kosong.', 'error');
+      return;
+    }
+
+    const newId = `profile_${Date.now()}`;
+    const newProfile: ColumnProfile = {
+      id: newId,
+      name: name.trim(),
+      columns: [...columns],
+      isDefault: false,
+    };
+
+    const updatedProfiles = [...columnProfiles, newProfile];
+    setColumnProfiles(updatedProfiles);
+    setActiveProfileId(newId);
+    setShowSaveProfileModal(false);
+    setNewProfileName('');
+
+    onUpdateConfig({
+      columns: columns,
+      columnProfiles: updatedProfiles,
+      activeProfileId: newId,
+    })
+      .then(() => {
+        showNotification(`Profil "${newProfile.name}" berhasil disimpan dan diterapkan!`);
+      })
+      .catch(() => {
+        showNotification('Gagal menyimpan profil baru.', 'error');
+      });
+  };
+
+  const handleDeleteProfile = (profileId: string) => {
+    const prof = columnProfiles.find((p) => p.id === profileId);
+    if (!prof) return;
+
+    if (prof.isDefault) {
+      showNotification('Profil Default tidak dapat dihapus.', 'error');
+      return;
+    }
+
+    const updatedProfiles = columnProfiles.filter((p) => p.id !== profileId);
+    // Find default profile
+    const defaultProf = updatedProfiles.find((p) => p.isDefault) || updatedProfiles[0];
+    const nextActiveId = defaultProf ? defaultProf.id : 'default';
+    const nextColumns = defaultProf ? defaultProf.columns : columns;
+
+    setColumnProfiles(updatedProfiles);
+    setActiveProfileId(nextActiveId);
+    setColumns([...nextColumns].sort((a, b) => a.order - b.order));
+
+    onUpdateConfig({
+      columns: nextColumns,
+      columnProfiles: updatedProfiles,
+      activeProfileId: nextActiveId,
+    })
+      .then(() => {
+        showNotification(`Profil "${prof.name}" berhasil dihapus.`);
+      })
+      .catch(() => {
+        showNotification('Gagal menghapus profil.', 'error');
+      });
+  };
+
+  const handleSetAsDefaultProfile = () => {
+    const updatedProfiles = columnProfiles.map((p) => ({
+      ...p,
+      isDefault: p.id === activeProfileId,
+    }));
+
+    setColumnProfiles(updatedProfiles);
+
+    onUpdateConfig({
+      columnProfiles: updatedProfiles,
+    })
+      .then(() => {
+        showNotification('Profil saat ini diatur sebagai Profil Default.');
+      })
+      .catch(() => {
+        showNotification('Gagal mengatur profil default.', 'error');
+      });
   };
 
   return (
@@ -504,6 +632,25 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                   {showNoColumn ? 'Aktif (Tampilkan Kolom "No" di tabel)' : 'Sembunyikan Kolom "No"'}
                 </span>
               </div>
+
+              {showNoColumn && (
+                <div className="mt-3 bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Nomor Urut Mulai Dari (Awal Baris)
+                  </label>
+                  <input
+                    type="number"
+                    value={startNo}
+                    onChange={(e) => setStartNo(Math.max(1, Number(e.target.value)))}
+                    className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none focus:border-blue-500 transition-all"
+                    min={1}
+                    placeholder="Contoh: 1, 100, 500"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Menentukan nomor urut awal untuk baris pertama pada tabel agenda dan ekspor Excel.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Save Button for general settings */}
@@ -630,6 +777,58 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
               <Plus className="w-3.5 h-3.5" />
               Tambah Kolom
             </button>
+          </div>
+
+          {/* Profiles Section */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl mb-4 space-y-2 text-xs transition-colors duration-200">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-blue-500" />
+                Profil Skema Kolom
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowSaveProfileModal(true)}
+                className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white font-bold text-[10px] uppercase tracking-wider rounded-md transition-all shrink-0 cursor-pointer"
+                title="Simpan profil baru"
+              >
+                Simpan Baru
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={activeProfileId}
+                onChange={(e) => handleSelectProfile(e.target.value)}
+                className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-lg text-slate-800 dark:text-slate-200 font-semibold focus:outline-none focus:border-blue-500 text-xs cursor-pointer transition-colors duration-200"
+              >
+                {columnProfiles.map((prof) => (
+                  <option key={prof.id} value={prof.id}>
+                    {prof.name} {prof.isDefault ? '(Default)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => handleSetAsDefaultProfile()}
+                disabled={columnProfiles.find(p => p.id === activeProfileId)?.isDefault}
+                className="px-2.5 py-1.5 bg-slate-250 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-750 dark:text-slate-300 font-bold text-[10px] rounded-lg transition-all shrink-0 cursor-pointer"
+                title="Atur profil ini sebagai Default"
+              >
+                Set Default
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteProfile(activeProfileId)}
+                disabled={activeProfileId === 'default' || columnProfiles.find(p => p.id === activeProfileId)?.isDefault}
+                className="p-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-900/35 border border-rose-200 dark:border-rose-900/30 text-rose-600 dark:text-rose-450 disabled:opacity-30 rounded-lg transition-all shrink-0 cursor-pointer"
+                title="Hapus profil saat ini"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Visually Reorderable Columns List */}
@@ -1016,6 +1215,68 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                     className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-200 dark:shadow-none transition-all cursor-pointer"
                   >
                     Simpan Perubahan
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ==========================================
+          SAVE AS NEW PROFILE DIALOG
+          ========================================== */}
+      <AnimatePresence>
+        {showSaveProfileModal && (
+          <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 p-6 shadow-2xl w-full max-w-sm relative overflow-hidden transition-colors duration-200 text-left"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1.5 bg-blue-600" />
+              
+              <h3 className="text-base font-bold text-slate-900 dark:text-white font-display mb-4 flex items-center gap-1.5">
+                <Save className="w-5 h-5 text-blue-600" />
+                Simpan Profil Skema Baru
+              </h3>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveAsNewProfile(newProfileName);
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                    Nama Profil <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newProfileName}
+                    onChange={(e) => setNewProfileName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold text-slate-850 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+                    placeholder="Contoh: Profil Unit HRD"
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSaveProfileModal(false);
+                      setNewProfileName('');
+                    }}
+                    className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs uppercase tracking-wider rounded-xl shadow-md shadow-blue-200 dark:shadow-none transition-all cursor-pointer"
+                  >
+                    Simpan Profil
                   </button>
                 </div>
               </form>

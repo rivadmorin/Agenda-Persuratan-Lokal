@@ -8,6 +8,13 @@ export interface ColumnDefinition {
   order: number;
 }
 
+export interface ColumnProfile {
+  id: string;
+  name: string;
+  columns: ColumnDefinition[];
+  isDefault?: boolean;
+}
+
 export interface AppConfig {
   appName: string;
   logoUrl?: string;
@@ -20,6 +27,9 @@ export interface AppConfig {
   backupRetentionWeeks: number;
   columns: ColumnDefinition[];
   showNoColumn?: boolean;
+  startNo?: number;
+  columnProfiles?: ColumnProfile[];
+  activeProfileId?: string;
 }
 
 export interface User {
