@@ -460,6 +460,7 @@ export default function App() {
     pdfData?: string;
     pdfName?: string;
     versionId?: number;
+    deletePdf?: boolean;
   }) => {
     const isEdit = !!mailData.id;
     const url = isEdit ? `/api/mails/${mailData.id}` : '/api/mails';

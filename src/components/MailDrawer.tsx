@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, FileText, AlertCircle } from 'lucide-react';
+import { X, Upload, FileText, AlertCircle, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MailRecord, ColumnDefinition } from '../types';
 
@@ -15,6 +15,7 @@ interface MailDrawerProps {
     pdfData?: string; // base64
     pdfName?: string;
     versionId?: number;
+    deletePdf?: boolean;
   }) => Promise<void>;
 }
 
@@ -32,6 +33,7 @@ export default function MailDrawer({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState('');
+  const [deleteExistingPdf, setDeleteExistingPdf] = useState(false);
 
   // Set default metadata structure from columns
   useEffect(() => {
@@ -40,6 +42,7 @@ export default function MailDrawer({
       setMetadata(mailToEdit.metadata || {});
       setPdfFile(null);
       setPdfBase64('');
+      setDeleteExistingPdf(false);
     } else {
       setType('Masuk');
       const defaults: Record<string, any> = {};
@@ -130,6 +133,7 @@ export default function MailDrawer({
         pdfData: pdfBase64 || undefined,
         pdfName: pdfFile?.name || undefined,
         versionId: mailToEdit?.versionId,
+        deletePdf: deleteExistingPdf,
       });
       onClose();
     } catch (err: any) {
@@ -223,23 +227,37 @@ export default function MailDrawer({
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2.5">
                   Lampiran Berkas PDF
                 </label>
-                {mailToEdit?.pdfPath && !pdfFile ? (
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2.5 text-slate-600 dark:text-slate-350 font-semibold">
-                      <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      <span className="truncate max-w-[220px]">
+                {mailToEdit?.pdfPath && !pdfFile && !deleteExistingPdf ? (
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs gap-3">
+                    <div className="flex items-center gap-2.5 text-slate-600 dark:text-slate-350 font-semibold min-w-0 flex-1">
+                      <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                      <span className="truncate">
                         {mailToEdit.pdfPath.split('/').pop()}
                       </span>
                     </div>
-                    <label className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold rounded-lg cursor-pointer transition-all">
-                      Ganti PDF
-                      <input
-                        type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        onChange={handleFileChange}
-                      />
-                    </label>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <label className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold rounded-lg cursor-pointer transition-all">
+                        Ganti PDF
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteExistingPdf(true);
+                          setPdfFile(null);
+                          setPdfBase64('');
+                        }}
+                        className="p-1.5 border border-rose-200 dark:border-rose-900/30 bg-rose-50/50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100/60 dark:hover:bg-rose-950/40 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                        title="Hapus PDF"
+                      >
+                        <Trash2 className="w-4.5 h-4.5" />
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div

@@ -822,7 +822,7 @@ app.post('/api/mails', (req, res) => {
 
 app.put('/api/mails/:id', (req, res) => {
   const { id } = req.params;
-  const { type, metadata, pdfData, pdfName, versionId } = req.body;
+  const { type, metadata, pdfData, pdfName, versionId, deletePdf } = req.body;
   const db = readDb();
 
   const index = db.mails.findIndex((m: any) => m.id === id);
@@ -842,7 +842,20 @@ app.put('/api/mails/:id', (req, res) => {
   }
 
   let pdfPath = existingMail.pdfPath;
-  if (pdfData && pdfName) {
+  if (deletePdf) {
+    if (pdfPath) {
+      try {
+        const fullPath = path.join(process.cwd(), pdfPath);
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+          logMessage('INFO', `Deleted physical PDF file: ${pdfPath}`);
+        }
+      } catch (err: any) {
+        logMessage('ERROR', `Failed deleting physical PDF file: ${err.message}`);
+      }
+    }
+    pdfPath = '';
+  } else if (pdfData && pdfName) {
     try {
       const buffer = Buffer.from(pdfData, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
@@ -872,7 +885,7 @@ app.put('/api/mails/:id', (req, res) => {
 
   existingMail.type = type;
   existingMail.metadata = metadata;
-  if (!pdfData && pdfPath) {
+  if (!deletePdf && !pdfData && pdfPath) {
     pdfPath = renameMailPdfFile(db, existingMail);
   }
   existingMail.pdfPath = pdfPath;
