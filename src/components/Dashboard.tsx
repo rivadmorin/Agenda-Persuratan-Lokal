@@ -42,6 +42,8 @@ interface DashboardProps {
 export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail }: DashboardProps) {
   const [chartType, setChartType] = useState<'bar' | 'area'>('bar');
   const [timeRange, setTimeRange] = useState<'6' | '12' | 'all'>('6');
+  const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly');
+  const [dailyRange, setDailyRange] = useState<'7' | '14' | '30'>('7');
 
   // Colors for theme
   const COLORS = {
@@ -98,6 +100,58 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
 
     return list;
   }, [mails, timeRange]);
+
+  // Process data for Daily trend chart
+  const dailyChartData = useMemo(() => {
+    const now = new Date();
+    const rangeLength = dailyRange === '30' ? 30 : dailyRange === '14' ? 14 : 7;
+    
+    // Generate empty list of days in order (last N days)
+    const list: any[] = [];
+    for (let i = rangeLength - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayStr = d.getDate();
+      const monthsShort = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+        'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'
+      ];
+      const monthStr = monthsShort[d.getMonth()];
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      
+      list.push({
+        dateKey,
+        day: d.getDate(),
+        month: d.getMonth(),
+        year: d.getFullYear(),
+        label: `${dayStr} ${monthStr}`,
+        Volume: 0,
+        Total: 0
+      });
+    }
+
+    // Populate actual mail records count
+    mails.forEach(mail => {
+      let dateStr = mail.metadata.tanggalSurat || mail.metadata.tanggalTerima || mail.metadata.tanggal_surat || mail.metadata.tanggal_terima || mail.createdAt;
+      if (!dateStr) dateStr = mail.createdAt;
+
+      const mailDate = new Date(dateStr);
+      if (isNaN(mailDate.getTime())) return;
+
+      const mY = mailDate.getFullYear();
+      const mM = mailDate.getMonth();
+      const mD = mailDate.getDate();
+      const key = `${mY}-${String(mM + 1).padStart(2, '0')}-${String(mD).padStart(2, '0')}`;
+
+      // Find if this day exists in our chart list
+      const targetDay = list.find(item => item.dateKey === key);
+      if (targetDay) {
+        targetDay.Volume += 1;
+        targetDay.Total += 1;
+      }
+    });
+
+    return list;
+  }, [mails, dailyRange]);
 
   // Overall Statistics
   const stats = useMemo(() => {
@@ -205,36 +259,73 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
         {/* Filters/Actions row */}
         <div className="flex items-center gap-3">
           <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shrink-0">
-            <button
-              onClick={() => setTimeRange('6')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                timeRange === '6'
-                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              6 Bulan
-            </button>
-            <button
-              onClick={() => setTimeRange('12')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                timeRange === '12'
-                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              12 Bulan
-            </button>
-            <button
-              onClick={() => setTimeRange('all')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                timeRange === 'all'
-                  ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              2 Tahun
-            </button>
+            {viewMode === 'monthly' ? (
+              <>
+                <button
+                  onClick={() => setTimeRange('6')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    timeRange === '6'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  6 Bulan
+                </button>
+                <button
+                  onClick={() => setTimeRange('12')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    timeRange === '12'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  12 Bulan
+                </button>
+                <button
+                  onClick={() => setTimeRange('all')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    timeRange === 'all'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  2 Tahun
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setDailyRange('7')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    dailyRange === '7'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  7 Hari
+                </button>
+                <button
+                  onClick={() => setDailyRange('14')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    dailyRange === '14'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  14 Hari
+                </button>
+                <button
+                  onClick={() => setDailyRange('30')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    dailyRange === '30'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  30 Hari
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -321,16 +412,46 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
       {/* Primary Graphs Row: MoM volume and ratio pie */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left main monthly trend chart (66% width) */}
+        {/* Left main monthly/daily trend chart (66% width) */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 md:p-6 shadow-sm dark:shadow-none flex flex-col transition-colors duration-200">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div>
-              <h4 className="font-bold text-slate-900 dark:text-white text-base font-display">Trafik Persuratan Bulanan</h4>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Volume akumulasi agenda surat per bulan</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:items-center gap-3">
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-base font-display">
+                  {viewMode === 'monthly' ? 'Trafik Persuratan Bulanan' : 'Trafik Persuratan Harian'}
+                </h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  {viewMode === 'monthly' ? 'Volume akumulasi agenda surat per bulan' : 'Volume akumulasi agenda surat per hari'}
+                </p>
+              </div>
+
+              {/* View Mode Toggle Button Group */}
+              <div className="flex bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-0.5 rounded-lg shrink-0 mt-1 sm:mt-0">
+                <button
+                  onClick={() => setViewMode('monthly')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                    viewMode === 'monthly'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  Bulanan
+                </button>
+                <button
+                  onClick={() => setViewMode('daily')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                    viewMode === 'daily'
+                      ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  Harian
+                </button>
+              </div>
             </div>
 
             {/* Toggle bar/area */}
-            <div className="flex bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-0.5 rounded-lg shrink-0">
+            <div className="flex bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-0.5 rounded-lg shrink-0 self-start sm:self-auto">
               <button
                 onClick={() => setChartType('bar')}
                 className={`p-1.5 rounded-md transition-all cursor-pointer ${
@@ -365,7 +486,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 {chartType === 'bar' ? (
-                  <BarChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <BarChart data={viewMode === 'monthly' ? monthlyChartData : dailyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" className="dark:stroke-slate-800" />
                     <XAxis 
                       dataKey="label" 
@@ -399,7 +520,7 @@ export default function Dashboard({ mails, config, onNavigateToTab, onSelectMail
                     <Bar dataKey="Volume" name="Volume Surat" fill={COLORS.primary} radius={[4, 4, 0, 0]} maxBarSize={36} />
                   </BarChart>
                 ) : (
-                  <AreaChart data={monthlyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={viewMode === 'monthly' ? monthlyChartData : dailyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.25}/>

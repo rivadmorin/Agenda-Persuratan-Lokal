@@ -56,6 +56,63 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragAllowedKey, setDragAllowedKey] = useState<string | null>(null);
 
+  // Live preview effect for theme color choices
+  useEffect(() => {
+    if (!themeColor) return;
+    const themeColorMap: Record<string, { base: string; hover: string; light: string; border: string; darkBg: string }> = {
+      '#2563eb': {
+        base: '#2563eb',
+        hover: '#1d4ed8',
+        light: 'rgba(37, 99, 235, 0.08)',
+        border: 'rgba(37, 99, 235, 0.15)',
+        darkBg: 'rgba(37, 99, 235, 0.2)'
+      },
+      '#0d9488': {
+        base: '#0d9488',
+        hover: '#0f766e',
+        light: 'rgba(13, 148, 136, 0.08)',
+        border: 'rgba(13, 148, 136, 0.15)',
+        darkBg: 'rgba(13, 148, 136, 0.2)'
+      },
+      '#7c3aed': {
+        base: '#7c3aed',
+        hover: '#6d28d9',
+        light: 'rgba(124, 58, 237, 0.08)',
+        border: 'rgba(124, 58, 237, 0.15)',
+        darkBg: 'rgba(124, 58, 237, 0.2)'
+      },
+      '#db2777': {
+        base: '#db2777',
+        hover: '#be185d',
+        light: 'rgba(219, 39, 119, 0.08)',
+        border: 'rgba(219, 39, 119, 0.15)',
+        darkBg: 'rgba(219, 39, 119, 0.2)'
+      },
+      '#475569': {
+        base: '#475569',
+        hover: '#334155',
+        light: 'rgba(71, 85, 105, 0.08)',
+        border: 'rgba(71, 85, 105, 0.15)',
+        darkBg: 'rgba(71, 85, 105, 0.2)'
+      }
+    };
+
+    const colors = themeColorMap[themeColor] || {
+      base: themeColor,
+      hover: themeColor,
+      light: `${themeColor}14`,
+      border: `${themeColor}26`,
+      darkBg: `${themeColor}33`
+    };
+
+    const root = document.documentElement;
+    root.style.setProperty('--theme-base', colors.base);
+    root.style.setProperty('--theme-hover', colors.hover);
+    root.style.setProperty('--theme-light', colors.light);
+    root.style.setProperty('--theme-light-border', colors.border);
+    root.style.setProperty('--theme-dark-bg', colors.darkBg);
+  }, [themeColor]);
+
   // Column profiles states
   const [columnProfiles, setColumnProfiles] = useState<ColumnProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>('default');

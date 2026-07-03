@@ -182,7 +182,66 @@ export default function App() {
     }
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
+
   const [config, setConfig] = useState<AppConfig | null>(null);
+
+  // Dynamic Theme accent colors injection
+  useEffect(() => {
+    const selectedHex = config?.themeColor || '#2563eb';
+    
+    const themeColorMap: Record<string, { base: string; hover: string; light: string; border: string; darkBg: string }> = {
+      '#2563eb': {
+        base: '#2563eb',
+        hover: '#1d4ed8',
+        light: 'rgba(37, 99, 235, 0.08)',
+        border: 'rgba(37, 99, 235, 0.15)',
+        darkBg: 'rgba(37, 99, 235, 0.2)'
+      },
+      '#0d9488': {
+        base: '#0d9488',
+        hover: '#0f766e',
+        light: 'rgba(13, 148, 136, 0.08)',
+        border: 'rgba(13, 148, 136, 0.15)',
+        darkBg: 'rgba(13, 148, 136, 0.2)'
+      },
+      '#7c3aed': {
+        base: '#7c3aed',
+        hover: '#6d28d9',
+        light: 'rgba(124, 58, 237, 0.08)',
+        border: 'rgba(124, 58, 237, 0.15)',
+        darkBg: 'rgba(124, 58, 237, 0.2)'
+      },
+      '#db2777': {
+        base: '#db2777',
+        hover: '#be185d',
+        light: 'rgba(219, 39, 119, 0.08)',
+        border: 'rgba(219, 39, 119, 0.15)',
+        darkBg: 'rgba(219, 39, 119, 0.2)'
+      },
+      '#475569': {
+        base: '#475569',
+        hover: '#334155',
+        light: 'rgba(71, 85, 105, 0.08)',
+        border: 'rgba(71, 85, 105, 0.15)',
+        darkBg: 'rgba(71, 85, 105, 0.2)'
+      }
+    };
+
+    const colors = themeColorMap[selectedHex] || {
+      base: selectedHex,
+      hover: selectedHex,
+      light: `${selectedHex}14`,
+      border: `${selectedHex}26`,
+      darkBg: `${selectedHex}33`
+    };
+
+    const root = document.documentElement;
+    root.style.setProperty('--theme-base', colors.base);
+    root.style.setProperty('--theme-hover', colors.hover);
+    root.style.setProperty('--theme-light', colors.light);
+    root.style.setProperty('--theme-light-border', colors.border);
+    root.style.setProperty('--theme-dark-bg', colors.darkBg);
+  }, [config?.themeColor]);
   const [mails, setMails] = useState<MailRecord[]>([]);
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [loadingMails, setLoadingMails] = useState(false);
