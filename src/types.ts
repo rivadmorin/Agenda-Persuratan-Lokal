@@ -31,6 +31,8 @@ export interface AppConfig {
   startNo?: number;
   columnProfiles?: ColumnProfile[];
   activeProfileId?: string;
+  autoRenamePdf?: boolean;
+  pdfRenameCols?: string[];
 }
 
 export interface User {

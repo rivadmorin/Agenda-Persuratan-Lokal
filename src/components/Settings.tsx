@@ -37,9 +37,22 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [backupRetentionDays, setBackupRetentionDays] = useState(config.backupRetentionDays);
   const [showNoColumn, setShowNoColumn] = useState(config.showNoColumn !== false);
   const [startNo, setStartNo] = useState(config.startNo || 1);
+  const [autoRenamePdf, setAutoRenamePdf] = useState(config.autoRenamePdf !== false);
   
   // Columns schema state
-  const [columns, setColumns] = useState<ColumnDefinition[]>([]);
+  const [columns, setColumns] = useState<ColumnDefinition[]>(() => {
+    return [...config.columns].sort((a, b) => a.order - b.order);
+  });
+  const [pdfRenameCols, setPdfRenameCols] = useState<string[]>(() => {
+    const sortedCols = [...config.columns].sort((a, b) => a.order - b.order);
+    let colsToUse = config.pdfRenameCols;
+    if (!colsToUse) {
+      return sortedCols.slice(0, 3).map(c => c.key);
+    }
+    colsToUse = colsToUse.filter(k => sortedCols.some(c => c.key === k));
+    return colsToUse.length > 0 ? colsToUse : sortedCols.slice(0, 3).map(c => c.key);
+  });
+  
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragAllowedKey, setDragAllowedKey] = useState<string | null>(null);
 
@@ -110,11 +123,10 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
 
     setColumns(updatedCols);
     setEditingColumn(null);
-    showNotification('Kolom berhasil diperbarui. Klik "Simpan Urutan & Skema" di bawah untuk menerapkan.');
+    showNotification('Kolom berhasil diperbarui. Klik "Simpan Pengaturan" di bawah untuk menerapkan.');
   };
 
-  const [savingGeneral, setSavingGeneral] = useState(false);
-  const [savingColumns, setSavingColumns] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error'>('success');
 
@@ -221,7 +233,22 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setBackupRetentionDays(config.backupRetentionDays);
     setShowNoColumn(config.showNoColumn !== false);
     setStartNo(config.startNo || 1);
-    setColumns([...config.columns].sort((a, b) => a.order - b.order));
+    setAutoRenamePdf(config.autoRenamePdf !== false);
+
+    const sortedCols = [...config.columns].sort((a, b) => a.order - b.order);
+    setColumns(sortedCols);
+
+    // Filter loaded columns to only keep valid ones, or default to the first 3
+    let colsToUse = config.pdfRenameCols;
+    if (!colsToUse) {
+      colsToUse = sortedCols.slice(0, 3).map(c => c.key);
+    } else {
+      colsToUse = colsToUse.filter(k => sortedCols.some(c => c.key === k));
+      if (colsToUse.length === 0) {
+        colsToUse = sortedCols.slice(0, 3).map(c => c.key);
+      }
+    }
+    setPdfRenameCols(colsToUse);
 
     const initialDefault: ColumnProfile = {
       id: 'default',
@@ -242,15 +269,25 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  const handleSaveGeneral = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveAllSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!appName.trim()) {
       showNotification('Nama aplikasi tidak boleh kosong.', 'error');
       return;
     }
 
-    setSavingGeneral(true);
+    setSaving(true);
     try {
+      // Update columns state inside the active profile as well
+      const updatedProfiles = columnProfiles.map((p) => {
+        if (p.id === activeProfileId) {
+          return { ...p, columns };
+        }
+        return p;
+      });
+
+      setColumnProfiles(updatedProfiles);
+
       await onUpdateConfig({
         appName,
         themeColor,
@@ -260,12 +297,17 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
         backupRetentionDays,
         showNoColumn,
         startNo,
+        autoRenamePdf,
+        pdfRenameCols,
+        columns,
+        columnProfiles: updatedProfiles,
+        activeProfileId,
       });
-      showNotification('Konfigurasi umum berhasil disimpan!');
+      showNotification('Semua pengaturan sistem berhasil disimpan!');
     } catch (err) {
-      showNotification('Gagal menyimpan konfigurasi.', 'error');
+      showNotification('Gagal menyimpan pengaturan.', 'error');
     } finally {
-      setSavingGeneral(false);
+      setSaving(false);
     }
   };
 
@@ -322,7 +364,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setNewColIncludeInReceipt(true);
     setShowAddCol(false);
     
-    showNotification('Kolom baru ditambahkan. Klik "Simpan Urutan & Skema" untuk menerapkan.');
+    showNotification('Kolom baru ditambahkan. Klik "Simpan Pengaturan" untuk menerapkan.');
   };
 
   const handleDeleteColumn = (key: string) => {
@@ -334,7 +376,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     // Recalculate orders
     const recalculated = filtered.map((col, idx) => ({ ...col, order: idx + 1 }));
     setColumns(recalculated);
-    showNotification('Kolom dihapus. Klik "Simpan Urutan & Skema" di bawah untuk menerapkan.');
+    showNotification('Kolom dihapus. Klik "Simpan Pengaturan" di bawah untuk menerapkan.');
   };
 
   const handleMoveColumn = (idx: number, direction: 'up' | 'down') => {
@@ -354,38 +396,12 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setColumns(updated);
   };
 
-  const handleSaveColumnsSchema = async () => {
-    setSavingColumns(true);
-    try {
-      // Update the active profile's columns in our profiles list
-      const updatedProfiles = columnProfiles.map((p) => {
-        if (p.id === activeProfileId) {
-          return { ...p, columns };
-        }
-        return p;
-      });
-
-      setColumnProfiles(updatedProfiles);
-
-      await onUpdateConfig({ 
-        columns, 
-        columnProfiles: updatedProfiles,
-        activeProfileId
-      });
-      showNotification('Skema dan urutan kolom berhasil disimpan dan diterapkan!');
-    } catch (err) {
-      showNotification('Gagal menyimpan skema kolom.', 'error');
-    } finally {
-      setSavingColumns(false);
-    }
-  };
-
   const handleSelectProfile = (profileId: string) => {
     const prof = columnProfiles.find((p) => p.id === profileId);
     if (prof) {
       setActiveProfileId(profileId);
       setColumns([...prof.columns].sort((a, b) => a.order - b.order));
-      showNotification(`Profil "${prof.name}" dimuat. Klik "Simpan Urutan & Skema" untuk mengaktifkan.`);
+      showNotification(`Profil "${prof.name}" dimuat. Klik "Simpan Pengaturan" di bawah untuk mengaktifkan.`);
     }
   };
 
@@ -511,7 +527,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
 
         {/* Column Left: General and Backup Configuration */}
         <div className="flex-1 overflow-y-auto space-y-6">
-          <form onSubmit={handleSaveGeneral} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none space-y-5 transition-colors duration-200">
+          <form onSubmit={handleSaveAllSettings} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none space-y-5 transition-colors duration-200">
             <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wider flex items-center gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
               <Sliders className="w-4.5 h-4.5 text-blue-600" />
               Pengaturan Instansi & Berkas
@@ -621,6 +637,83 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
               </div>
             )}
 
+            {/* PDF Auto Rename Section */}
+            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Penamaan Berkas PDF Otomatis</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Secara otomatis mengganti nama berkas PDF yang diunggah berdasarkan nilai kolom sistem.</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoRenamePdf}
+                    onChange={(e) => setAutoRenamePdf(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 dark:bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-slate-700 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+
+              {autoRenamePdf && (
+                <div className="space-y-3 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                  <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Pilih Kolom Untuk Membentuk Nama File (Dihubungkan dengan tanda hubung "-"):
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {columns.map((col) => {
+                      const isChecked = pdfRenameCols.includes(col.key);
+                      return (
+                        <label
+                          key={col.key}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer select-none transition-all ${
+                            isChecked
+                              ? 'bg-blue-50/60 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900/30'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              if (isChecked) {
+                                setPdfRenameCols(pdfRenameCols.filter((k) => k !== col.key));
+                              } else {
+                                setPdfRenameCols([...pdfRenameCols, col.key]);
+                              }
+                            }}
+                            className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
+                          />
+                          <span>{col.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {pdfRenameCols.length > 0 ? (
+                    <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <span className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                        Format Penamaan Terpilih:
+                      </span>
+                      <p className="font-mono text-xs text-blue-600 dark:text-blue-400 font-bold overflow-x-auto whitespace-nowrap">
+                        {pdfRenameCols.map(k => {
+                          const matchedCol = columns.find(c => c.key === k);
+                          return matchedCol ? `[${matchedCol.label}]` : `[${k}]`;
+                        }).join('-')}.pdf
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200/60 dark:border-amber-900/30">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold">
+                        Peringatan: Tidak ada kolom yang dipilih. Nama file asli dari file yang diunggah akan digunakan sebagai gantinya.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Row Number (No) sequence column toggle */}
             <div className="pt-2">
               <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
@@ -665,10 +758,10 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={savingGeneral}
+                disabled={saving}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider py-3 rounded-xl shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                {savingGeneral ? (
+                {saving ? (
                   <Loader className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
@@ -833,7 +926,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
             </div>
             
             <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed italic">
-              * Setelah mengatur checklist di atas, pastikan untuk mengklik <strong className="font-bold text-blue-600 dark:text-blue-400">"Simpan Urutan & Skema"</strong> di bagian kanan bawah untuk menyimpan konfigurasi ke sistem secara permanen.
+              * Setelah mengatur checklist di atas, pastikan untuk mengklik tombol <strong className="font-bold text-blue-600 dark:text-blue-400">"Simpan Pengaturan"</strong> di sebelah kiri untuk menyimpan seluruh konfigurasi ke sistem secara permanen.
             </p>
           </div>
         </div>
@@ -997,22 +1090,6 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
               </div>
             ))}
           </div>
-
-          {/* Submit/Apply columns order change */}
-          <button
-            onClick={handleSaveColumnsSchema}
-            disabled={savingColumns}
-            className="w-full py-3 bg-slate-900 hover:bg-slate-850 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg dark:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            {savingColumns ? (
-              <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>Simpan Urutan & Skema</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 

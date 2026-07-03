@@ -77,6 +77,8 @@ const defaultDb = {
     maxUploadSizeMb: 50,
     backupRetentionDays: 7,
     backupRetentionWeeks: 4,
+    autoRenamePdf: true,
+    pdfRenameCols: ['tanggalTerima', 'noSurat', 'pengirim'],
     columns: [
       { key: 'noUrut', label: 'Nomor Urut Surat', type: 'text', required: true, order: 1 },
       { key: 'noSurat', label: 'Nomor Surat', type: 'text', required: true, order: 2 },
@@ -151,6 +153,115 @@ function writeDb(data: any) {
   } catch (err: any) {
     logMessage('ERROR', `Failed to write DB: ${err.message}`);
   }
+}
+
+function getFormattedPdfName(db: any, metadata: any, originalName: string) {
+  const config = db.config || {};
+  const autoRename = config.autoRenamePdf !== false;
+  
+  // Dynamic fallback for rename columns: first 3 columns from actual system config if empty or invalid
+  let pdfRenameCols = config.pdfRenameCols;
+  if (!pdfRenameCols || pdfRenameCols.length === 0) {
+    const cols = config.columns || [];
+    pdfRenameCols = cols.slice(0, 3).map((c: any) => c.key);
+  }
+
+  if (autoRename && pdfRenameCols.length > 0) {
+    const nameParts: string[] = [];
+    pdfRenameCols.forEach((colKey: string) => {
+      let val = metadata[colKey];
+      
+      // Case-insensitive key matching for imported or legacy keys
+      if (val === undefined || val === null || String(val).trim() === '') {
+        const lowerKey = colKey.toLowerCase();
+        const foundKey = Object.keys(metadata).find(k => k.toLowerCase() === lowerKey);
+        if (foundKey) {
+          val = metadata[foundKey];
+        }
+      }
+
+      // Label-based fallback matching if key names still differ
+      if (val === undefined || val === null || String(val).trim() === '') {
+        const colDef = (config.columns || []).find((c: any) => c.key === colKey);
+        if (colDef) {
+          const labelLower = colDef.label.toLowerCase();
+          const foundKey = Object.keys(metadata).find(k => {
+            const kl = k.toLowerCase();
+            return kl.includes(labelLower) || labelLower.includes(kl);
+          });
+          if (foundKey) {
+            val = metadata[foundKey];
+          }
+        }
+      }
+
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        const cleanVal = String(val).replace(/[^a-zA-Z0-9-_]/g, '_');
+        nameParts.push(cleanVal);
+      }
+    });
+
+    if (nameParts.length > 0) {
+      return nameParts.join('-') + '.pdf';
+    }
+  }
+
+  // Fallback to sanitizing original pdfName or default name
+  if (originalName) {
+    const baseName = path.basename(originalName, path.extname(originalName));
+    const cleanBase = baseName.replace(/[^a-zA-Z0-9-_]/g, '_') || 'dokumen';
+    return `${cleanBase}.pdf`;
+  }
+
+  // Last resort fallback
+  const keys = Object.keys(metadata);
+  const values = keys.slice(0, 3).map(k => String(metadata[k] || '').replace(/[^a-zA-Z0-9-_]/g, '_')).filter(v => v);
+  if (values.length > 0) {
+    return values.join('-') + '.pdf';
+  }
+  return `dokumen_${Date.now()}.pdf`;
+}
+
+function renameMailPdfFile(db: any, mail: any) {
+  if (!mail.pdfPath) return mail.pdfPath;
+
+  try {
+    const config = db.config || {};
+    const autoRename = config.autoRenamePdf !== false;
+    if (!autoRename) return mail.pdfPath;
+
+    const oldRelativePath = mail.pdfPath;
+    const oldFullPath = path.join(process.cwd(), oldRelativePath);
+
+    if (!fs.existsSync(oldFullPath)) {
+      return mail.pdfPath;
+    }
+
+    const metadata = mail.metadata || {};
+    const originalName = path.basename(oldRelativePath);
+    const formattedName = getFormattedPdfName(db, metadata, originalName);
+
+    const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
+    const [year, month, day] = tTerima.split('-');
+    const relativeUploadDir = path.join('data', 'uploads', year || 'unknown', month || 'unknown', day || 'unknown');
+    const uploadDir = path.join(process.cwd(), relativeUploadDir);
+
+    const newRelativePath = path.join(relativeUploadDir, formattedName).replace(/\\/g, '/');
+    const newFullPath = path.join(uploadDir, formattedName);
+
+    if (oldFullPath !== newFullPath) {
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      fs.renameSync(oldFullPath, newFullPath);
+      logMessage('INFO', `Physically renamed PDF from ${oldRelativePath} to ${newRelativePath}`);
+      return newRelativePath;
+    }
+  } catch (err: any) {
+    logMessage('ERROR', `Failed renaming PDF file on disk: ${err.message}`);
+  }
+
+  return mail.pdfPath;
 }
 
 // Perform Auto Backup & Cleanup
@@ -379,8 +490,18 @@ app.get('/api/config', (req, res) => {
 app.post('/api/config', (req, res) => {
   const db = readDb();
   db.config = { ...db.config, ...req.body };
+  
+  // Physically rename all existing PDFs on disk to match new column renaming settings!
+  if (db.config.autoRenamePdf !== false && db.mails && db.mails.length > 0) {
+    db.mails.forEach((mail: any) => {
+      if (mail.pdfPath) {
+        mail.pdfPath = renameMailPdfFile(db, mail);
+      }
+    });
+  }
+
   writeDb(db);
-  logMessage('INFO', 'Application configuration updated');
+  logMessage('INFO', 'Application configuration updated and existing PDFs renamed');
   res.json({ success: true, config: db.config });
 });
 
@@ -663,10 +784,7 @@ app.post('/api/mails', (req, res) => {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
-      // Rename format: [Tanggal_Terima]-[Nomor_Surat]-[Pengirim].pdf (clean up non-alphanumeric)
-      const cleanNoSurat = String(metadata.noSurat || 'tanpa-nomor').replace(/[^a-zA-Z0-9-_]/g, '_');
-      const cleanPengirim = String(metadata.pengirim || 'tanpa-pengirim').replace(/[^a-zA-Z0-9-_]/g, '_');
-      const formattedName = `${tTerima}-${cleanNoSurat}-${cleanPengirim}.pdf`;
+      const formattedName = getFormattedPdfName(db, metadata, pdfName);
       
       const finalPdfPath = path.join(uploadDir, formattedName);
       fs.writeFileSync(finalPdfPath, buffer);
@@ -737,9 +855,7 @@ app.put('/api/mails/:id', (req, res) => {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
-      const cleanNoSurat = String(metadata.noSurat || 'tanpa-nomor').replace(/[^a-zA-Z0-9-_]/g, '_');
-      const cleanPengirim = String(metadata.pengirim || 'tanpa-pengirim').replace(/[^a-zA-Z0-9-_]/g, '_');
-      const formattedName = `${tTerima}-${cleanNoSurat}-${cleanPengirim}.pdf`;
+      const formattedName = getFormattedPdfName(db, metadata, pdfName);
       
       const finalPdfPath = path.join(uploadDir, formattedName);
       fs.writeFileSync(finalPdfPath, buffer);
@@ -756,6 +872,9 @@ app.put('/api/mails/:id', (req, res) => {
 
   existingMail.type = type;
   existingMail.metadata = metadata;
+  if (!pdfData && pdfPath) {
+    pdfPath = renameMailPdfFile(db, existingMail);
+  }
   existingMail.pdfPath = pdfPath;
   existingMail.updatedAt = new Date().toISOString();
   existingMail.versionId = (existingMail.versionId || 1) + 1;
@@ -1590,8 +1709,7 @@ app.post('/api/pdf/receipt', (req, res) => {
     // Calculate dynamic column widths matching database columns
     const tableWidth = 180;
     const noWidth = 10;
-    const jenisWidth = 18;
-    const remainingWidth = tableWidth - noWidth - jenisWidth; // 152
+    const remainingWidth = tableWidth - noWidth; // 170
     
     const rawWidths = columns.map((col: any) => {
       const key = col.key.toLowerCase();
@@ -1618,9 +1736,8 @@ app.post('/api/pdf/receipt', (req, res) => {
     doc.rect(15, 37, 180, 8, 'F');
     doc.setFont('helvetica', 'bold');
     doc.text('No', 17, 42);
-    doc.text('Jenis', 27, 42);
 
-    let currentX = 15 + noWidth + jenisWidth; // 43
+    let currentX = 15 + noWidth; // 25
     const colXPositions: number[] = [];
     columns.forEach((col: any, idx: number) => {
       colXPositions.push(currentX);
@@ -1644,7 +1761,6 @@ app.post('/api/pdf/receipt', (req, res) => {
       }
 
       doc.text(String(index + 1), 17, currentY);
-      doc.text(mail.type, 27, currentY);
 
       columns.forEach((col: any, idx: number) => {
         const val = mail.metadata?.[col.key] || '-';

@@ -22,7 +22,9 @@ import {
   User2,
   Calendar,
   Tag,
-  Info
+  Info,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -95,7 +97,6 @@ const generateMailMarkdown = (mail: MailRecord | null, config: AppConfig | null)
   md += `| Atribut | Detail Informasi |\n`;
   md += `| :--- | :--- |\n`;
   md += `| **ID Surat** | \`${mail.id}\` |\n`;
-  md += `| **Jenis Surat** | **${mail.type}** |\n`;
   
   if (config && config.columns) {
     [...config.columns].forEach((col) => {
@@ -195,7 +196,14 @@ export default function App() {
   // Selected row for PDF preview pane
   const [selectedMail, setSelectedMail] = useState<MailRecord | null>(null);
   const [showPreviewPane, setShowPreviewPane] = useState(false);
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [previewMode, setPreviewMode] = useState<'details' | 'pdf' | 'markdown'>('details');
+
+  useEffect(() => {
+    if (!showPreviewPane || !selectedMail) {
+      setIsPreviewFullscreen(false);
+    }
+  }, [showPreviewPane, selectedMail]);
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -674,24 +682,26 @@ export default function App() {
         
         {/* Render Tab Workspace */}
         {activeTab === 'agenda' && config && (
-          <MailTable
-            currentUser={currentUser}
-            columns={config.columns}
-            mails={mails}
-            loading={loadingMails}
-            onRefresh={fetchMails}
-            onAddMail={handleOpenAddMail}
-            onEditMail={handleOpenEditMail}
-            onDeleteMail={handleDeleteMail}
-            onSelectForPreview={handleSelectForPreview}
-            selectedMailForPreview={selectedMail}
-            onUploadPdfForMail={handleUploadPdfForMail}
-            onBatchReceipt={handleBatchReceipt}
-            onBatchZip={handleBatchZip}
-            onImportExcel={handleImportExcel}
-            showNoColumn={config.showNoColumn !== false}
-            startNo={config.startNo || 1}
-          />
+          <div className={`flex-1 flex overflow-hidden ${isPreviewFullscreen && showPreviewPane && selectedMail ? 'hidden' : ''}`}>
+            <MailTable
+              currentUser={currentUser}
+              columns={config.columns}
+              mails={mails}
+              loading={loadingMails}
+              onRefresh={fetchMails}
+              onAddMail={handleOpenAddMail}
+              onEditMail={handleOpenEditMail}
+              onDeleteMail={handleDeleteMail}
+              onSelectForPreview={handleSelectForPreview}
+              selectedMailForPreview={selectedMail}
+              onUploadPdfForMail={handleUploadPdfForMail}
+              onBatchReceipt={handleBatchReceipt}
+              onBatchZip={handleBatchZip}
+              onImportExcel={handleImportExcel}
+              showNoColumn={config.showNoColumn !== false}
+              startNo={config.startNo || 1}
+            />
+          </div>
         )}
 
         {activeTab === 'pdf-tools' && <PdfTools />}
@@ -718,7 +728,7 @@ export default function App() {
           {activeTab === 'agenda' && showPreviewPane && selectedMail && (
             <motion.div
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 440, opacity: 1 }}
+              animate={{ width: isPreviewFullscreen ? '100%' : 440, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ type: 'spring', damping: 24, stiffness: 200 }}
               className="border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 h-screen shrink-0 flex flex-col overflow-hidden relative z-10"
@@ -769,6 +779,18 @@ export default function App() {
                     title="Ubah Rincian"
                   >
                     <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    id="btn-toggle-fullscreen-preview"
+                    onClick={() => setIsPreviewFullscreen(!isPreviewFullscreen)}
+                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg transition-all"
+                    title={isPreviewFullscreen ? "Perkecil Pratinjau" : "Maksimalkan Pratinjau"}
+                  >
+                    {isPreviewFullscreen ? (
+                      <Minimize2 className="w-4 h-4" />
+                    ) : (
+                      <Maximize2 className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     id="btn-close-preview-pane"
@@ -827,13 +849,9 @@ export default function App() {
                     {/* Header Card */}
                     <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl border border-slate-150 dark:border-slate-800">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold ${
-                          selectedMail.type === 'Masuk' 
-                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' 
-                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${selectedMail.type === 'Masuk' ? 'bg-blue-600' : 'bg-emerald-600'}`} />
-                          {selectedMail.type}
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                          Agenda Surat
                         </span>
                         <span className="text-[10px] font-mono font-bold text-slate-400">ID: {selectedMail.id}</span>
                       </div>
