@@ -36,7 +36,19 @@ interface MailTableProps {
   onUploadPdfForMail: (mailId: string, base64Data: string, fileName: string) => Promise<void>;
   onBatchReceipt: (mailIds: string[]) => void;
   onBatchZip: (mailIds: string[]) => void;
-  onImportExcel: (file: File) => Promise<{ success: boolean; count?: number; errors?: string[] }>;
+  onImportExcel: (
+    file: File,
+    mode?: string
+  ) => Promise<{
+    success: boolean;
+    count?: number;
+    skippedCount?: number;
+    overwrittenCount?: number;
+    errors?: string[];
+    duplicatesFound?: boolean;
+    duplicates?: any[];
+    message?: string;
+  }>;
   showNoColumn?: boolean;
   startNo?: number;
 }
@@ -74,6 +86,8 @@ export default function MailTable({
   const [importLoading, setImportLoading] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importSuccessCount, setImportSuccessCount] = useState<number | null>(null);
+  const [duplicateMails, setDuplicateMails] = useState<any[]>([]);
+  const [duplicateMessage, setDuplicateMessage] = useState<string>('');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -285,8 +299,10 @@ export default function MailTable({
     setImportLoading(true);
     setImportErrors([]);
     setImportSuccessCount(null);
+    setDuplicateMails([]);
+    setDuplicateMessage('');
 
-    const result = await onImportExcel(importingFile);
+    const result = await onImportExcel(importingFile, 'check');
     setImportLoading(false);
 
     if (result.success) {
@@ -296,9 +312,42 @@ export default function MailTable({
         setShowImportDialog(false);
         setImportSuccessCount(null);
       }, 2000);
+    } else if (result.duplicatesFound) {
+      setDuplicateMails(result.duplicates || []);
+      setDuplicateMessage(result.message || 'Ditemukan data duplikat.');
     } else if (result.errors) {
       setImportErrors(result.errors);
     }
+  };
+
+  const handleResolveDuplicates = async (mode: 'skip' | 'overwrite') => {
+    if (!importingFile) return;
+
+    setImportLoading(true);
+    setImportErrors([]);
+    
+    const result = await onImportExcel(importingFile, mode);
+    setImportLoading(false);
+
+    if (result.success) {
+      setImportSuccessCount(result.count || 0);
+      setDuplicateMails([]);
+      setDuplicateMessage('');
+      setImportingFile(null);
+      setTimeout(() => {
+        setShowImportDialog(false);
+        setImportSuccessCount(null);
+      }, 2000);
+    } else if (result.errors) {
+      setImportErrors(result.errors);
+    }
+  };
+
+  const handleCancelDuplicates = () => {
+    setDuplicateMails([]);
+    setDuplicateMessage('');
+    setImportingFile(null);
+    setImportErrors([]);
   };
 
   // Format date view Indonesian
@@ -725,6 +774,8 @@ export default function MailTable({
                     setShowImportDialog(false);
                     setImportErrors([]);
                     setImportSuccessCount(null);
+                    setDuplicateMails([]);
+                    setDuplicateMessage('');
                   }}
                   className="p-1.5 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition-all cursor-pointer"
                 >
@@ -751,7 +802,66 @@ export default function MailTable({
                   </div>
                 </div>
 
-                {importSuccessCount !== null ? (
+                {duplicateMails.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/30 text-amber-700 dark:text-amber-400 rounded-2xl text-xs space-y-1">
+                      <p className="font-bold text-sm">⚠️ {duplicateMessage}</p>
+                      <p>Beberapa baris data yang ingin Anda impor memiliki nomor atau identitas yang sama dengan data yang sudah ada di database. Silakan pilih salah satu tindakan di bawah ini:</p>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto border border-slate-100 dark:border-slate-800 rounded-2xl divide-y divide-slate-100 dark:divide-slate-800 bg-slate-50/50 dark:bg-slate-950/30">
+                      {duplicateMails.map((dup, idx) => (
+                        <div key={idx} className="p-3 text-xs">
+                          <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <span>Baris {dup.line} Excel</span>
+                            <span className="text-amber-600 dark:text-amber-400 font-mono">{dup.uniqueLabel}: {dup.uniqueValue}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-1.5 text-[10px] text-slate-500">
+                            <div className="p-2 bg-rose-50/40 dark:bg-rose-950/10 rounded-xl border border-rose-100/30">
+                              <span className="font-bold text-rose-700 dark:text-rose-400 block mb-0.5">Data Saat Ini (Database):</span>
+                              <span className="block truncate font-medium text-slate-700 dark:text-slate-300">Perihal: {dup.existingData.perihal || dup.existingData.isiSurat || '-'}</span>
+                              <span className="block truncate">Dari: {dup.existingData.pengirim || dup.existingData.suratDari || '-'}</span>
+                            </div>
+                            <div className="p-2 bg-emerald-50/40 dark:bg-emerald-950/10 rounded-xl border border-emerald-100/30">
+                              <span className="font-bold text-emerald-700 dark:text-emerald-400 block mb-0.5">Data Baru (Excel):</span>
+                              <span className="block truncate font-medium text-slate-700 dark:text-slate-300">Perihal: {dup.newData.perihal || dup.newData.isiSurat || '-'}</span>
+                              <span className="block truncate">Dari: {dup.newData.pengirim || dup.newData.suratDari || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleResolveDuplicates('skip')}
+                        disabled={importLoading}
+                        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {importLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Sembunyikan / Lewati Data Duplikat (Melewati)'}
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleResolveDuplicates('overwrite')}
+                        disabled={importLoading}
+                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {importLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Perbarui / Timpa Data di Database (Menimpa)'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleCancelDuplicates}
+                        disabled={importLoading}
+                        className="w-full py-2.5 px-4 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        Batalkan Impor
+                      </button>
+                    </div>
+                  </div>
+                ) : importSuccessCount !== null ? (
                   <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-sm font-semibold text-center py-6">
                     Berhasil mengimpor {importSuccessCount} baris data agenda surat!
                   </div>

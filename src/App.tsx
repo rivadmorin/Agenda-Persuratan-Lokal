@@ -36,6 +36,7 @@ import PdfTools from './components/PdfTools';
 import Settings from './components/Settings';
 import UserManagement from './components/UserManagement';
 import Dashboard from './components/Dashboard';
+import ReceiptModal from './components/ReceiptModal';
 
 // Types
 import { User, AppConfig, MailRecord, ServerInfo } from './types';
@@ -197,6 +198,28 @@ export default function App() {
   const [previewMode, setPreviewMode] = useState<'details' | 'pdf' | 'markdown'>('details');
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Custom Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
+
+  // Custom Receipt signature state
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptMailIds, setReceiptMailIds] = useState<string[]>([]);
+  const [receiptDefaultLeft, setReceiptDefaultLeft] = useState('');
+  const [receiptDefaultRight, setReceiptDefaultRight] = useState('Administrator');
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const handlePrintPdf = () => {
     if (selectedMail && selectedMail.pdfPath) {
@@ -464,11 +487,12 @@ export default function App() {
           setSelectedMail(null);
           setShowPreviewPane(false);
         }
+        showToast('Berhasil menghapus surat.', 'success');
       } else {
-        alert('Gagal menghapus surat.');
+        showToast('Gagal menghapus surat.', 'error');
       }
     } catch (err) {
-      alert('Koneksi terputus dengan server.');
+      showToast('Koneksi terputus dengan server.', 'error');
     }
   };
 
@@ -478,6 +502,7 @@ export default function App() {
     if (!targetMail) return;
 
     try {
+      showToast('Sedang mengunggah PDF...', 'warning');
       const response = await fetch(`/api/mails/${mailId}`, {
         method: 'PUT',
         headers: getHeaders(),
@@ -492,19 +517,20 @@ export default function App() {
 
       if (response.ok) {
         await fetchMails();
+        showToast('Berhasil mengunggah PDF!', 'success');
       } else {
-        const data = await response.json();
-        alert(data.message || 'Gagal mengunggah PDF.');
+        const data = await response.json().catch(() => ({}));
+        showToast(data.message || 'Gagal mengunggah PDF.', 'error');
       }
     } catch (err) {
-      alert('Gagal mengunggah PDF.');
+      showToast('Gagal mengunggah PDF.', 'error');
     }
   };
 
   // EXCEL IMPORT ACTION
-  const handleImportExcel = async (file: File) => {
+  const handleImportExcel = async (file: File, mode: string = 'check') => {
     try {
-      const response = await fetch('/api/excel/import', {
+      const response = await fetch(`/api/excel/import?mode=${mode}`, {
         method: 'POST',
         headers: {
           ...getHeaders(),
@@ -514,33 +540,50 @@ export default function App() {
       });
 
       const data = await response.json();
-      if (response.ok && data.success) {
-        await fetchMails();
-        return { success: true, count: data.count };
-      } else {
-        return { success: false, errors: data.errors || [data.message || 'Gagal mengimpor Excel.'] };
+      if (response.ok) {
+        if (data.success) {
+          await fetchMails();
+          return { 
+            success: true, 
+            count: data.count, 
+            skippedCount: data.skippedCount, 
+            overwrittenCount: data.overwrittenCount,
+            message: data.message
+          };
+        } else if (data.duplicatesFound) {
+          return {
+            success: false,
+            duplicatesFound: true,
+            duplicates: data.duplicates,
+            message: data.message
+          };
+        }
       }
+      return { success: false, errors: data.errors || [data.message || 'Gagal mengimpor Excel.'] };
     } catch (err) {
       return { success: false, errors: ['Gagal menyambung ke server.'] };
     }
   };
 
   // BATCH ACTIONS
-  const handleBatchReceipt = async (mailIds: string[]) => {
+  const handleBatchReceipt = (mailIds: string[]) => {
     const selectedMails = mails.filter((m) => mailIds.includes(m.id));
     const inputters = Array.from(new Set(selectedMails.map((m) => m.createdByName || 'Operator'))).filter(Boolean);
     const defaultLeftSigner = inputters.join(', ') || currentUser?.name || 'Operator';
 
-    const leftSigner = prompt('Nama Penyerah / Pengirim (Sisi Kiri):', defaultLeftSigner);
-    if (leftSigner === null) return;
-    const rightSigner = prompt('Nama Penerima (Sisi Kanan):', 'Administrator');
-    if (rightSigner === null) return;
+    setReceiptMailIds(mailIds);
+    setReceiptDefaultLeft(defaultLeftSigner);
+    setReceiptDefaultRight('Administrator');
+    setShowReceiptModal(true);
+  };
 
+  const handleConfirmReceipt = async (signerLeft: string, signerRight: string) => {
     try {
+      showToast('Sedang membuat berkas PDF...', 'warning');
       const response = await fetch('/api/pdf/receipt', {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ mailIds, signerLeft: leftSigner, signerRight: rightSigner }),
+        body: JSON.stringify({ mailIds: receiptMailIds, signerLeft, signerRight }),
       });
 
       if (response.ok) {
@@ -553,16 +596,19 @@ export default function App() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        showToast('Berhasil mencetak tanda terima PDF!', 'success');
       } else {
-        alert('Gagal mencetak tanda terima PDF.');
+        const errData = await response.json().catch(() => ({}));
+        showToast(errData.message || 'Gagal mencetak tanda terima PDF.', 'error');
       }
     } catch (err) {
-      alert('Gagal menghubungkan ke server.');
+      showToast('Gagal menghubungkan ke server.', 'error');
     }
   };
 
   const handleBatchZip = async (mailIds: string[]) => {
     try {
+      showToast('Sedang menyiapkan arsip ZIP lampiran...', 'warning');
       const response = await fetch('/api/pdf/batch-download', {
         method: 'POST',
         headers: getHeaders(),
@@ -579,12 +625,13 @@ export default function App() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        showToast('Berhasil mengunduh arsip ZIP!', 'success');
       } else {
-        const errData = await response.json();
-        alert(errData.message || 'Gagal membuat arsip zip massal.');
+        const errData = await response.json().catch(() => ({}));
+        showToast(errData.message || 'Gagal membuat arsip zip massal.', 'error');
       }
     } catch (err) {
-      alert('Gagal menyambung ke server.');
+      showToast('Gagal menyambung ke server.', 'error');
     }
   };
 
@@ -1132,6 +1179,45 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating global Toast notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -30, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -30, x: '-50%' }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-5 py-3 rounded-2xl text-white shadow-2xl flex items-center gap-2 font-bold text-xs uppercase tracking-wider"
+            style={{
+              backgroundColor: toast.type === 'success' ? '#10b981' : toast.type === 'error' ? '#f43f5e' : '#f59e0b'
+            }}
+          >
+            {toast.type === 'success' ? (
+              <svg className="w-4.5 h-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            ) : toast.type === 'error' ? (
+              <svg className="w-4.5 h-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+            ) : (
+              <svg className="w-4.5 h-4.5 shrink-0 animate-spin" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            )}
+            <span>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Signature dialogue modal for Receipt compilation */}
+      <ReceiptModal
+        isOpen={showReceiptModal}
+        onClose={() => setShowReceiptModal(false)}
+        onConfirm={handleConfirmReceipt}
+        defaultSignerLeft={receiptDefaultLeft}
+        defaultSignerRight={receiptDefaultRight}
+      />
     </div>
   );
 }

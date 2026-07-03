@@ -6,6 +6,7 @@ export interface ColumnDefinition {
   type: ColumnType;
   required: boolean;
   order: number;
+  includeInReceipt?: boolean;
 }
 
 export interface ColumnProfile {

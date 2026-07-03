@@ -66,6 +66,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [newColLabel, setNewColLabel] = useState('');
   const [newColType, setNewColType] = useState<ColumnType>('text');
   const [newColRequired, setNewColRequired] = useState(false);
+  const [newColIncludeInReceipt, setNewColIncludeInReceipt] = useState(true);
   const [colError, setColError] = useState('');
 
   // Edit existing column states
@@ -73,6 +74,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
   const [editColLabel, setEditColLabel] = useState('');
   const [editColType, setEditColType] = useState<ColumnType>('text');
   const [editColRequired, setEditColRequired] = useState(false);
+  const [editColIncludeInReceipt, setEditColIncludeInReceipt] = useState(true);
   const [editColError, setEditColError] = useState('');
 
   const handleStartEditColumn = (col: ColumnDefinition) => {
@@ -80,6 +82,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setEditColLabel(col.label);
     setEditColType(col.type);
     setEditColRequired(col.required);
+    setEditColIncludeInReceipt(col.includeInReceipt !== false);
     setEditColError('');
   };
 
@@ -99,6 +102,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
           label: editColLabel.trim(),
           type: editColType,
           required: editColRequired,
+          includeInReceipt: editColIncludeInReceipt,
         };
       }
       return col;
@@ -304,6 +308,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
       type: newColType,
       required: newColRequired,
       order: columns.length + 1,
+      includeInReceipt: newColIncludeInReceipt,
     };
 
     const updatedCols = [...columns, newCol];
@@ -314,6 +319,7 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
     setNewColLabel('');
     setNewColType('text');
     setNewColRequired(false);
+    setNewColIncludeInReceipt(true);
     setShowAddCol(false);
     
     showNotification('Kolom baru ditambahkan. Klik "Simpan Urutan & Skema" untuk menerapkan.');
@@ -458,6 +464,8 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
 
     onUpdateConfig({
       columnProfiles: updatedProfiles,
+      activeProfileId: activeProfileId,
+      columns: columns,
     })
       .then(() => {
         showNotification('Profil saat ini diatur sebagai Profil Default.');
@@ -755,6 +763,79 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
               </div>
             </div>
           </div>
+
+          {/* Kolom Cetak Tanda Terima (Checklist) */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm dark:shadow-none space-y-4 transition-colors duration-200">
+            <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wider flex items-center gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800">
+              <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.615 0-1.101-.483-1.12-1.097L6.34 18m11.32 0a1.15 1.15 0 00-.73-.273H7.39c-.282 0-.552.1-.73.273M15 11.25V1.5c0-.621-.504-1.125-1.125-1.125h-3.75c-.621 0-1.125.504-1.125 1.125v9.75M8.25 11.25h7.5" />
+                </svg>
+              </span>
+              Kolom Cetak Tanda Terima
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Sesuaikan informasi kolom apa saja yang ingin Anda tampilkan pada tanda terima penyerahan surat (tanda terima PDF). Beri tanda centang pada kolom yang ingin dicetak.
+            </p>
+
+            <div className="space-y-2.5 pt-1">
+              {columns.map((col) => {
+                const isChecked = col.includeInReceipt !== false;
+                return (
+                  <div 
+                    key={col.key}
+                    onClick={() => {
+                      const updated = columns.map((c) => {
+                        if (c.key === col.key) {
+                          return { ...c, includeInReceipt: !isChecked };
+                        }
+                        return c;
+                      });
+                      setColumns(updated);
+                    }}
+                    className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer select-none transition-all ${
+                      isChecked 
+                        ? 'bg-blue-50/40 border-blue-200 dark:bg-blue-950/15 dark:border-blue-900/30 shadow-sm' 
+                        : 'bg-slate-50/50 border-slate-200 dark:bg-slate-950/10 dark:border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                        isChecked 
+                          ? 'bg-blue-600 border-blue-600 text-white' 
+                          : 'bg-white border-slate-300 dark:bg-slate-900 dark:border-slate-700'
+                      }`}>
+                        {isChecked && (
+                          <svg className="w-3.5 h-3.5 stroke-[3.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          {col.label}
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold font-mono uppercase tracking-wider bg-white dark:bg-slate-900 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-800 mt-1 inline-block w-fit">
+                          {col.type === 'date' ? 'Tanggal' : col.type === 'number' ? 'Angka' : 'Teks'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                      isChecked 
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' 
+                        : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-450'
+                    }`}>
+                      {isChecked ? 'Dicetak' : 'Disembunyikan'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed italic">
+              * Setelah mengatur checklist di atas, pastikan untuk mengklik <strong className="font-bold text-blue-600 dark:text-blue-400">"Simpan Urutan & Skema"</strong> di bagian kanan bawah untuk menyimpan konfigurasi ke sistem secara permanen.
+            </p>
+          </div>
         </div>
 
         {/* Column Right: Columns dynamic schema configuration & Drag-and-Drop ordering */}
@@ -1037,6 +1118,20 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                   </label>
                 </div>
 
+                {/* Column Include in Receipt Check */}
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="receipt_check"
+                    checked={newColIncludeInReceipt}
+                    onChange={(e) => setNewColIncludeInReceipt(e.target.checked)}
+                    className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-blue-600 focus:ring-blue-500 w-4.5 h-4.5 cursor-pointer"
+                  />
+                  <label htmlFor="receipt_check" className="text-xs font-bold text-slate-650 dark:text-slate-400 cursor-pointer">
+                    Cetak di Tanda Terima (Receipt)
+                  </label>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     type="button"
@@ -1196,6 +1291,20 @@ export default function Settings({ config, onUpdateConfig }: SettingsProps) {
                   />
                   <label htmlFor="edit_required_check" className="text-xs font-bold text-slate-650 dark:text-slate-400 cursor-pointer">
                     Kolom Bersifat Wajib Diisi (Required)
+                  </label>
+                </div>
+
+                {/* Column Include in Receipt Check */}
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="edit_receipt_check"
+                    checked={editColIncludeInReceipt}
+                    onChange={(e) => setEditColIncludeInReceipt(e.target.checked)}
+                    className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-blue-600 focus:ring-blue-500 w-4.5 h-4.5 cursor-pointer"
+                  />
+                  <label htmlFor="edit_receipt_check" className="text-xs font-bold text-slate-650 dark:text-slate-400 cursor-pointer">
+                    Cetak di Tanda Terima (Receipt)
                   </label>
                 </div>
 

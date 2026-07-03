@@ -1244,11 +1244,150 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
       return res.status(400).json({ success: false, errors });
     }
 
+    // Identify unique key / identifier column dynamically
+    let uniqueKey = '';
+    const possibleUniqueKeys = ['nomorSurat', 'nosurat', 'no_surat', 'noSurat', 'noAgenda', 'no_agenda', 'noUrut', 'nourut', 'no_urut'];
+    const colKeys = columns.map((col: any) => col.key);
+    
+    uniqueKey = colKeys.find((k: string) => possibleUniqueKeys.includes(k)) || '';
+    if (!uniqueKey) {
+      uniqueKey = colKeys.find((k: string) => {
+        const lowerK = k.toLowerCase();
+        return lowerK.includes('nomor') || lowerK.includes('nosurat') || lowerK.includes('no_') || lowerK.includes('nourut');
+      }) || '';
+    }
+    if (!uniqueKey && colKeys.length > 0) {
+      uniqueKey = colKeys[0];
+    }
+
+    const uniqueCol = columns.find((c: any) => c.key === uniqueKey);
+    const uniqueLabel = uniqueCol ? uniqueCol.label : 'ID / Nomor';
+
+    // Check for duplicates
+    const mode = String(req.query.mode || 'check');
+    const duplicates: any[] = [];
+    const duplicateMap = new Map<string, any>(); // maps uniqueValue -> existingMail
+
+    if (uniqueKey) {
+      db.mails.forEach((existingMail: any) => {
+        const val = existingMail.metadata?.[uniqueKey];
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          duplicateMap.set(String(val).trim().toLowerCase(), existingMail);
+        }
+      });
+
+      validMails.forEach((newMail: any, idx: number) => {
+        const newVal = newMail.metadata?.[uniqueKey];
+        if (newVal !== undefined && newVal !== null && String(newVal).trim() !== '') {
+          const keyStr = String(newVal).trim().toLowerCase();
+          if (duplicateMap.has(keyStr)) {
+            duplicates.push({
+              line: idx + 2, // header is row 1
+              uniqueValue: String(newVal).trim(),
+              uniqueLabel,
+              newData: newMail.metadata,
+              existingData: duplicateMap.get(keyStr).metadata
+            });
+          }
+        }
+      });
+    }
+
+    if (mode === 'check' && duplicates.length > 0) {
+      logMessage('INFO', `Excel import found ${duplicates.length} duplicate records.`);
+      return res.json({
+        success: false,
+        duplicatesFound: true,
+        duplicates,
+        message: `Ditemukan ${duplicates.length} data agenda dengan ${uniqueLabel} yang sama di dalam database.`
+      });
+    }
+
+    let finalMailsToSave = [...db.mails];
+    let importedCount = 0;
+    let skippedCount = 0;
+    let overwrittenCount = 0;
+
+    if (mode === 'skip') {
+      const duplicateVals = new Set(duplicates.map(d => d.uniqueValue.toLowerCase()));
+      validMails.forEach((newMail: any) => {
+        const newVal = newMail.metadata?.[uniqueKey];
+        const keyStr = newVal ? String(newVal).trim().toLowerCase() : '';
+        if (keyStr && duplicateVals.has(keyStr)) {
+          skippedCount++;
+        } else {
+          finalMailsToSave.push(newMail);
+          importedCount++;
+        }
+      });
+    } else if (mode === 'overwrite') {
+      const duplicateValsMap = new Map<string, any>();
+      validMails.forEach((newMail: any) => {
+        const newVal = newMail.metadata?.[uniqueKey];
+        if (newVal) {
+          duplicateValsMap.set(String(newVal).trim().toLowerCase(), newMail);
+        }
+      });
+
+      // Update existing ones
+      finalMailsToSave = finalMailsToSave.map((existingMail: any) => {
+        const val = existingMail.metadata?.[uniqueKey];
+        const keyStr = val ? String(val).trim().toLowerCase() : '';
+        if (keyStr && duplicateValsMap.has(keyStr)) {
+          const newMail = duplicateValsMap.get(keyStr);
+          overwrittenCount++;
+          return {
+            ...existingMail,
+            metadata: {
+              ...existingMail.metadata,
+              ...newMail.metadata
+            },
+            updatedAt: new Date().toISOString(),
+            updatedBy: createdBy,
+            updatedByName: createdByName
+          };
+        }
+        return existingMail;
+      });
+
+      // Add new ones
+      const existingKeys = new Set();
+      db.mails.forEach((existingMail: any) => {
+        const val = existingMail.metadata?.[uniqueKey];
+        if (val) {
+          existingKeys.add(String(val).trim().toLowerCase());
+        }
+      });
+
+      validMails.forEach((newMail: any) => {
+        const newVal = newMail.metadata?.[uniqueKey];
+        const keyStr = newVal ? String(newVal).trim().toLowerCase() : '';
+        if (!keyStr || !existingKeys.has(keyStr)) {
+          finalMailsToSave.push(newMail);
+          importedCount++;
+        }
+      });
+    } else {
+      // Normal import (no duplicates or mode is check but 0 duplicates)
+      finalMailsToSave.push(...validMails);
+      importedCount = validMails.length;
+    }
+
     // Write valid records
-    db.mails.push(...validMails);
+    db.mails = finalMailsToSave;
     writeDb(db);
-    logMessage('INFO', `Successfully imported ${validMails.length} mail records from Excel`);
-    res.json({ success: true, count: validMails.length });
+    logMessage('INFO', `Successfully imported Excel. Mode: ${mode}, Imported: ${importedCount}, Skipped: ${skippedCount}, Overwritten: ${overwrittenCount}`);
+    res.json({
+      success: true,
+      count: importedCount,
+      skippedCount,
+      overwrittenCount,
+      message: mode === 'skip'
+        ? `Berhasil mengimpor ${importedCount} data baru. ${skippedCount} data duplikat dilewati.`
+        : mode === 'overwrite'
+        ? `Berhasil mengimpor ${importedCount} data baru dan memperbarui ${overwrittenCount} data duplikat.`
+        : `Berhasil mengimpor ${importedCount} data agenda surat.`
+    });
   } catch (err: any) {
     logMessage('ERROR', `Excel import failed: ${err.message}`);
     res.status(500).json({ message: 'Gagal mengimpor data dari Excel.' });
@@ -1415,7 +1554,13 @@ app.post('/api/pdf/receipt', (req, res) => {
       signerLeft = inputters.join(', ') || 'Operator';
     }
 
-    const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
+    let columns = db.config.columns
+      .filter((col: any) => col.includeInReceipt !== false)
+      .sort((a: any, b: any) => a.order - b.order);
+
+    if (columns.length === 0) {
+      columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
+    }
 
     // Generate PDF using jsPDF
     const doc = new jsPDF();
@@ -1440,8 +1585,33 @@ app.post('/api/pdf/receipt', (req, res) => {
     
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Nomor Tanda Terima: ${receiptNo}`, 15, 33);
     doc.text(`Tanggal Cetak: ${fullPrintDate}`, 195, 33, { align: 'right' });
+
+    // Calculate dynamic column widths matching database columns
+    const tableWidth = 180;
+    const noWidth = 10;
+    const jenisWidth = 18;
+    const remainingWidth = tableWidth - noWidth - jenisWidth; // 152
+    
+    const rawWidths = columns.map((col: any) => {
+      const key = col.key.toLowerCase();
+      if (key.includes('perihal') || key.includes('isi')) return 45;
+      if (key.includes('pengirim') || key.includes('dari')) return 30;
+      if (key.includes('nosurat') || key.includes('nomor') || key.includes('no_surat')) return 25;
+      if (key.includes('nourut') || key.includes('urut') || key.includes('no_urut')) return 15;
+      if (key.includes('tanggal') || key.includes('tgl')) return 20;
+      if (key.includes('keterangan') || key.includes('ket')) return 20;
+      return 25; // default fallback
+    });
+    
+    const sumRaw = rawWidths.reduce((sum: number, w: number) => sum + w, 0);
+    const colWidths = rawWidths.map((w: number) => Math.floor((w / sumRaw) * remainingWidth));
+    
+    // Adjust last column to match exactly
+    const sumNormalized = colWidths.reduce((sum: number, w: number) => sum + w, 0);
+    if (colWidths.length > 0 && sumNormalized !== remainingWidth) {
+      colWidths[colWidths.length - 1] += (remainingWidth - sumNormalized);
+    }
 
     // Table Header
     doc.setFillColor(240, 240, 240);
@@ -1449,13 +1619,19 @@ app.post('/api/pdf/receipt', (req, res) => {
     doc.setFont('helvetica', 'bold');
     doc.text('No', 17, 42);
     doc.text('Jenis', 27, 42);
-    doc.text('Nomor Surat', 47, 42);
-    doc.text('Pengirim', 95, 42);
-    doc.text('Perihal', 145, 42);
+
+    let currentX = 15 + noWidth + jenisWidth; // 43
+    const colXPositions: number[] = [];
+    columns.forEach((col: any, idx: number) => {
+      colXPositions.push(currentX);
+      doc.text(col.label, currentX + 2, 42);
+      currentX += colWidths[idx];
+    });
 
     // Table Content
     let currentY = 49;
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
     selectedMails.forEach((mail: any, index: number) => {
       if (currentY > 240) {
         doc.addPage();
@@ -1464,17 +1640,19 @@ app.post('/api/pdf/receipt', (req, res) => {
         doc.setFont('helvetica', 'bold');
         doc.text('Lanjutan Tanda Terima...', 15, currentY);
         currentY += 10;
+        doc.setFont('helvetica', 'normal');
       }
-
-      const truncatedNo = String(mail.metadata.noSurat || '-').substring(0, 22);
-      const truncatedPengirim = String(mail.metadata.pengirim || '-').substring(0, 22);
-      const truncatedPerihal = String(mail.metadata.perihal || '-').substring(0, 22);
 
       doc.text(String(index + 1), 17, currentY);
       doc.text(mail.type, 27, currentY);
-      doc.text(truncatedNo, 47, currentY);
-      doc.text(truncatedPengirim, 95, currentY);
-      doc.text(truncatedPerihal, 145, currentY);
+
+      columns.forEach((col: any, idx: number) => {
+        const val = mail.metadata?.[col.key] || '-';
+        const w = colWidths[idx];
+        const maxChars = Math.floor(w / 1.8);
+        const truncatedVal = String(val).substring(0, maxChars);
+        doc.text(truncatedVal, colXPositions[idx] + 2, currentY);
+      });
 
       // Line separator below row
       doc.setDrawColor(220, 220, 220);
@@ -1483,51 +1661,36 @@ app.post('/api/pdf/receipt', (req, res) => {
     });
 
     currentY += 4;
-    if (currentY > 250) {
+    if (currentY > 260) {
       doc.addPage();
       currentY = 25;
     }
 
-    // Beautifully boxed double-column signature structure
+    // Sleek single-row unified signature bar
     const boxWidth = 180;
-    const boxHeight = 28;
+    const boxHeight = 12;
     const boxX = 15;
     const boxY = currentY;
 
-    // Outer rectangle and divider line background
     doc.setFillColor(248, 250, 252);
-    doc.rect(boxX, boxY, boxWidth, 7, 'F'); // Shaded header bg
+    doc.rect(boxX, boxY, boxWidth, boxHeight, 'F'); // Shaded background
 
     doc.setDrawColor(180, 187, 200);
     doc.setLineWidth(0.35);
-    doc.rect(boxX, boxY, boxWidth, boxHeight); // Outer box
+    doc.rect(boxX, boxY, boxWidth, boxHeight); // Outer border
 
     // Middle vertical dividing line
     doc.line(boxX + boxWidth / 2, boxY, boxX + boxWidth / 2, boxY + boxHeight);
-    
-    // Horizontal divider between header and signature space
-    doc.line(boxX, boxY + 7, boxX + boxWidth, boxY + 7);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    // Left Header
-    doc.text('YANG MENYERAHKAN (PENGIRIM / PENGINPUT)', boxX + (boxWidth / 4), boxY + 4.5, { align: 'center' });
-    // Right Header
-    doc.text('YANG MENERIMA (PENERIMA)', boxX + (boxWidth * 3 / 4), boxY + 4.5, { align: 'center' });
+    doc.setTextColor(50, 60, 70);
 
-    // Inner instruction/guide labels
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7.5);
-    doc.setTextColor(110, 120, 130);
-    doc.text('Tanda Tangan & Nama Terang:', boxX + (boxWidth / 4), boxY + 11.5, { align: 'center' });
-    doc.text(`Tanda Tangan (Tanggal: ${dateStr})`, boxX + (boxWidth * 3 / 4), boxY + 11.5, { align: 'center' });
+    // Left side: Yang Menyerahkan
+    doc.text(`YANG MENYERAHKAN:  ${signerLeft || '____________________'}`, boxX + 5, boxY + 7.5);
 
-    // Reset text color for signers names
-    doc.setTextColor(0, 0, 0);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(`( ${signerLeft || '____________________'} )`, boxX + (boxWidth / 4), boxY + 23, { align: 'center' });
-    doc.text(`( ${signerRight || '____________________'} )`, boxX + (boxWidth * 3 / 4), boxY + 23, { align: 'center' });
+    // Right side: Yang Menerima
+    doc.text(`YANG MENERIMA:  ${signerRight || '____________________'}`, boxX + (boxWidth / 2) + 5, boxY + 7.5);
 
     const pdfBuffer = doc.output('arraybuffer');
     res.setHeader('Content-Type', 'application/pdf');
