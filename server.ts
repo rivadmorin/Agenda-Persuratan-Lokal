@@ -1,3 +1,4 @@
+import pg from 'pg';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -11,6 +12,14 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execPromise = promisify(exec);
+
+const pool = new pg.Pool({
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'mail_agenda',
+  password: process.env.DB_PASSWORD || 'postgres123',
+  port: parseInt(process.env.DB_PORT || '5432'),
+});
 
 const app = express();
 const PORT = 3000;
@@ -179,7 +188,7 @@ function generateMissingSidecars(db: any) {
   }
 }
 
-function readDb() {
+function readDbSync() {
   try {
     if (!fs.existsSync(dbPath)) {
       const dir = path.dirname(dbPath);
@@ -383,7 +392,7 @@ function performBackup() {
     logMessage('INFO', `Database backup created: ${path.basename(backupFile)}`);
     
     // Clean old backups
-    const db = readDb();
+    const db = readDbSync();
     const retentionDays = db.config?.backupRetentionDays || 7;
     const files = fs.readdirSync(backupDir);
     const msThreshold = retentionDays * 24 * 60 * 60 * 1000;
@@ -489,9 +498,9 @@ app.get('/api/info', (req, res) => {
 });
 
 // 2. Authentication
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  const db = readDb();
+  const db = await readDb();
   const user = db.users.find(
     (u: any) => u.username === username && u.password === password
   );
@@ -538,28 +547,31 @@ app.get('/api/users/online', (req, res) => {
 });
 
 // 3. User Management
-app.get('/api/users', (req, res) => {
-  const db = readDb();
+app.get('/api/users', async (req, res) => {
+  const db = await readDb();
   const safeUsers = db.users.map(({ password, ...u }: any) => u);
   res.json(safeUsers);
 });
 
-app.post('/api/users', (req, res) => {
+app.post('/api/users', async (req, res) => {
   const { username, name, role, password } = req.body;
-  const db = readDb();
-  if (db.users.some((u: any) => u.username === username)) {
-    return res.status(400).json({ message: 'Username sudah digunakan.' });
+  try {
+    await pool.query(
+      'INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)',
+      [username, password, name, role]
+    );
+    logMessage('INFO', `Created user in PG: ${username} (${role})`);
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err.code === '23505') return res.status(400).json({ message: 'Username sudah digunakan.' });
+    res.status(500).json({ message: 'Gagal membuat user.' });
   }
-  db.users.push({ username, name, role, password });
-  writeDb(db);
-  logMessage('INFO', `Created user: ${username} (${role})`);
-  res.json({ success: true });
 });
 
 app.put('/api/users/:username', (req, res) => {
   const { username } = req.params;
   const { name, role, password } = req.body;
-  const db = readDb();
+  const db = readDbSync();
   const index = db.users.findIndex((u: any) => u.username === username);
   if (index !== -1) {
     db.users[index].name = name;
@@ -575,26 +587,28 @@ app.put('/api/users/:username', (req, res) => {
   }
 });
 
-app.delete('/api/users/:username', (req, res) => {
+app.delete('/api/users/:username', async (req, res) => {
   const { username } = req.params;
   if (username === 'admin') {
     return res.status(400).json({ message: 'User admin bawaan tidak dapat dihapus.' });
   }
-  const db = readDb();
-  db.users = db.users.filter((u: any) => u.username !== username);
-  writeDb(db);
-  logMessage('INFO', `Deleted user: ${username}`);
-  res.json({ success: true });
+  try {
+    await pool.query('DELETE FROM users WHERE username = $1', [username]);
+    logMessage('INFO', `Deleted user from PG: ${username}`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ message: 'Gagal menghapus user.' });
+  }
 });
 
 // 4. Config Management
-app.get('/api/config', (req, res) => {
-  const db = readDb();
+app.get('/api/config', async (req, res) => {
+  const db = await readDb();
   res.json(db.config);
 });
 
-app.post('/api/config', (req, res) => {
-  const db = readDb();
+app.post('/api/config', async (req, res) => {
+  const db = await readDb();
   db.config = { ...db.config, ...req.body };
   
   // Physically rename all existing PDFs on disk to match new column renaming settings!
@@ -606,14 +620,25 @@ app.post('/api/config', (req, res) => {
     });
   }
 
-  writeDb(db);
-  logMessage('INFO', 'Application configuration updated and existing PDFs renamed');
-  res.json({ success: true, config: db.config });
+  try {
+    await pool.query('UPDATE config SET data = $1', [db.config]);
+    // Also sync the mails back if renamed
+    if (db.config.autoRenamePdf !== false && db.mails && db.mails.length > 0) {
+       for (const mail of db.mails) {
+         await pool.query('UPDATE mails SET pdf_path = $1 WHERE id = $2', [mail.pdfPath, mail.id]);
+       }
+    }
+    writeDb(db); // JSON sync
+    logMessage('INFO', 'Application configuration updated and existing PDFs renamed');
+    res.json({ success: true, config: db.config });
+  } catch (err: any) {
+    res.status(500).json({ message: 'Gagal memperbarui konfigurasi.' });
+  }
 });
 
 app.post('/api/config/columns/reorder', (req, res) => {
   const { columns } = req.body;
-  const db = readDb();
+  const db = readDbSync();
   db.config.columns = columns;
   writeDb(db);
   logMessage('INFO', 'Columns reordered successfully');
@@ -624,7 +649,7 @@ app.post('/api/config/columns/reorder', (req, res) => {
 app.get('/api/backup/export', async (req, res) => {
   const release = await dbMutex.acquire();
   try {
-    const db = readDb();
+    const db = readDbSync();
     const dateStr = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=agenda_surat_backup_${dateStr}.json`);
@@ -701,7 +726,7 @@ app.post('/api/backup/import', async (req, res) => {
 app.post('/api/backup/clear', async (req, res) => {
   const release = await dbMutex.acquire();
   try {
-    const db = readDb();
+    const db = readDbSync();
     
     // Physical cleanup of upload directory
     const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
@@ -1020,7 +1045,7 @@ app.get('/api/backup/download/:filename', (req, res) => {
 app.get('/api/backup/integrity', async (req, res) => {
   const release = await dbMutex.acquire();
   try {
-    const db = readDb();
+    const db = await readDb();
     
     // 1. Get all referenced PDF paths from database
     const referencedPaths = new Set(
@@ -1127,7 +1152,7 @@ app.get('/api/backup/integrity', async (req, res) => {
 app.post('/api/backup/integrity/cleanup', async (req, res) => {
   const release = await dbMutex.acquire();
   try {
-    const db = readDb();
+    const db = await readDb();
     
     const referencedPaths = new Set(
       db.mails
@@ -1234,7 +1259,7 @@ app.post('/api/backup/integrity/cleanup', async (req, res) => {
 app.post('/api/backup/integrity/reconstruct', async (req, res) => {
   const release = await dbMutex.acquire();
   try {
-    const db = readDb();
+    const db = await readDb();
     
     const getAllMetaFilesRecursive = (dirPath: string): string[] => {
       let results: string[] = [];
@@ -1258,7 +1283,7 @@ app.post('/api/backup/integrity/reconstruct', async (req, res) => {
     let restoredCount = 0;
     let skippedCount = 0;
 
-    allMetaFiles.forEach((metaFilePath) => {
+    for (const metaFilePath of allMetaFiles) {
       try {
         const fileContent = fs.readFileSync(metaFilePath, 'utf-8');
         const mailRecord = JSON.parse(fileContent);
@@ -1268,6 +1293,10 @@ app.post('/api/backup/integrity/reconstruct', async (req, res) => {
           if (!exists) {
             const pdfFullPath = path.join(process.cwd(), mailRecord.pdfPath);
             if (fs.existsSync(pdfFullPath)) {
+              await pool.query(
+                'INSERT INTO mails (id, metadata, pdf_path, version_id, created_at) VALUES ($1, $2, $3, $4, $5)',
+                [mailRecord.id, { ...mailRecord, metadata: undefined }, mailRecord.pdfPath, mailRecord.versionId || 1, mailRecord.createdAt]
+              );
               db.mails.push(mailRecord);
               restoredCount++;
             } else {
@@ -1280,11 +1309,10 @@ app.post('/api/backup/integrity/reconstruct', async (req, res) => {
       } catch (parseErr: any) {
         logMessage('WARN', `Failed parsing meta file ${metaFilePath}: ${parseErr.message}`);
       }
-    });
+    }
 
     if (restoredCount > 0) {
-      db.mails.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      writeDb(db);
+      writeDb(db); // Sync JSON
       logMessage('INFO', `Database reconstructed: Restored ${restoredCount} mails from sidecar metadata files.`);
     }
 
@@ -1374,8 +1402,8 @@ function serverGetMailSearchScore(mail: any, query: string): { matches: boolean;
 }
 
 // 5. Mail Records (CRUD)
-app.get('/api/mails', (req, res) => {
-  const db = readDb();
+app.get('/api/mails', async (req, res) => {
+  const db = await readDb();
   let mails = [...db.mails];
 
   // 1. Global search (fuzzy match with scoring)
@@ -1472,9 +1500,9 @@ app.get('/api/mails', (req, res) => {
   }
 });
 
-app.post('/api/mails', (req, res) => {
+app.post('/api/mails', async (req, res) => {
   const { type, metadata, pdfData, pdfName } = req.body;
-  const db = readDb();
+  const db = await readDb();
 
   let pdfPath = '';
   if (pdfData && pdfName) {
@@ -1522,17 +1550,25 @@ app.post('/api/mails', (req, res) => {
     updatedByName: createdByName
   };
 
-  db.mails.push(newMail);
-  writeDb(db);
-  saveSidecarMeta(newMail);
-  logMessage('INFO', `Mail record created: ${newMail.id}`);
-  res.json({ success: true, mail: newMail });
+  try {
+    await pool.query(
+      'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
+      [newMail.id, { ...newMail, metadata: undefined }, newMail.pdfPath, newMail.versionId]
+    );
+    writeDb(db); // Sync JSON
+    saveSidecarMeta(newMail);
+    logMessage('INFO', `Mail record created: ${newMail.id}`);
+    res.json({ success: true, mail: newMail });
+  } catch (err: any) {
+    logMessage('ERROR', `Failed creating mail record in PG: ${err.message}`);
+    res.status(500).json({ message: 'Gagal menyimpan surat.' });
+  }
 });
 
-app.put('/api/mails/:id', (req, res) => {
+app.put('/api/mails/:id', async (req, res) => {
   const { id } = req.params;
   const { type, metadata, pdfData, pdfName, versionId, deletePdf } = req.body;
-  const db = readDb();
+  const db = await readDb();
 
   const index = db.mails.findIndex((m: any) => m.id === id);
   if (index === -1) {
@@ -1622,15 +1658,24 @@ app.put('/api/mails/:id', (req, res) => {
     existingMail.createdByName = updatedByName;
   }
 
-  writeDb(db);
-  saveSidecarMeta(existingMail);
-  logMessage('INFO', `Mail record updated: ${id}, new version: ${existingMail.versionId}`);
-  res.json({ success: true, mail: existingMail });
+  try {
+    await pool.query(
+      'UPDATE mails SET metadata = $1, pdf_path = $2, version_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+      [{ ...existingMail, metadata: undefined }, existingMail.pdfPath, existingMail.versionId, id]
+    );
+    writeDb(db);
+    saveSidecarMeta(existingMail);
+    logMessage('INFO', `Mail record updated: ${id}, new version: ${existingMail.versionId}`);
+    res.json({ success: true, mail: existingMail });
+  } catch (err: any) {
+    logMessage('ERROR', `Failed updating mail record in PG: ${err.message}`);
+    res.status(500).json({ message: 'Gagal memperbarui surat.' });
+  }
 });
 
-app.delete('/api/mails/:id', (req, res) => {
+app.delete('/api/mails/:id', async (req, res) => {
   const { id } = req.params;
-  const db = readDb();
+  const db = await readDb();
 
   const mail = db.mails.find((m: any) => m.id === id);
   if (!mail) {
@@ -1651,10 +1696,15 @@ app.delete('/api/mails/:id', (req, res) => {
     }
   }
 
-  db.mails = db.mails.filter((m: any) => m.id !== id);
-  writeDb(db);
-  logMessage('INFO', `Mail record deleted: ${id}`);
-  res.json({ success: true });
+  try {
+    await pool.query('DELETE FROM mails WHERE id = $1', [id]);
+    db.mails = db.mails.filter((m: any) => m.id !== id);
+    writeDb(db);
+    logMessage('INFO', `Mail record deleted: ${id}`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ message: 'Gagal menghapus surat.' });
+  }
 });
 
 // Stream / Get PDF File
@@ -1689,7 +1739,7 @@ app.get('/api/files/*', (req, res) => {
 // Export Data to Excel
 app.get('/api/excel/export', (req, res) => {
   try {
-    const db = readDb();
+    const db = readDbSync();
     const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
     
     // Create rows array with formatted keys
@@ -1736,7 +1786,7 @@ app.get('/api/excel/export', (req, res) => {
 // Download Dynamic Blank Template
 app.get('/api/excel/template', (req, res) => {
   try {
-    const db = readDb();
+    const db = readDbSync();
     const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
 
     // Dynamic Headers
@@ -1779,7 +1829,7 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
       return res.status(400).json({ message: 'Berkas Excel kosong atau tidak terkirim.' });
     }
 
-    const db = readDb();
+    const db = readDbSync();
     const columns = db.config.columns.sort((a: any, b: any) => a.order - b.order);
 
     let workbook;
@@ -2395,10 +2445,10 @@ app.post('/api/pdf/compress', async (req, res) => {
 });
 
 // Generate PDF Receipt (Tanda Terima)
-app.post('/api/pdf/receipt', (req, res) => {
+app.post('/api/pdf/receipt', async (req, res) => {
   try {
     let { mailIds, signerLeft, signerRight } = req.body;
-    const db = readDb();
+    const db = await readDb();
     const selectedMails = db.mails.filter((m: any) => mailIds.includes(m.id));
 
     if (selectedMails.length === 0) {
@@ -2560,7 +2610,7 @@ app.post('/api/pdf/receipt', (req, res) => {
 app.post('/api/pdf/batch-download', async (req, res) => {
   try {
     const { mailIds } = req.body;
-    const db = readDb();
+    const db = await readDb();
     const selectedMails = db.mails.filter((m: any) => mailIds.includes(m.id));
 
     if (selectedMails.length === 0) {
@@ -2602,9 +2652,65 @@ app.post('/api/pdf/batch-download', async (req, res) => {
 // STATIC SERVING & VITE MIDDLWARE
 // ==========================================
 
-async function startServer() {
+async function readDb(): Promise<any> {
+  if (!pgAvailable) return readDbSync();
+  const client = await pool.connect();
   try {
-    const db = readDb();
+    const configRes = await client.query('SELECT data FROM config LIMIT 1');
+    const usersRes = await client.query('SELECT username, password, name, role, data FROM users');
+    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails');
+
+    return {
+      config: configRes.rows[0]?.data || defaultDb.config,
+      users: usersRes.rows.map(u => ({ ...u, ...(u.data || {}) })),
+      mails: mailsRes.rows.map(m => ({ ...m, metadata: m.metadata || {} }))
+    };
+  } catch (err: any) {
+    logMessage('ERROR', `Failed to read DB from PostgreSQL: ${err.message}`);
+    return readDbSync();
+  } finally {
+    client.release();
+  }
+}
+
+let pgAvailable = true;
+
+async function initDb() {
+  let client;
+  try {
+    client = await pool.connect();
+    const schema = fs.readFileSync(path.join(process.cwd(), 'schema.sql'), 'utf-8');
+    await client.query(schema);
+
+    // Check if config exists
+    const res = await client.query('SELECT count(*) FROM config');
+    if (parseInt(res.rows[0].count) === 0) {
+      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDb.config]);
+    }
+
+    // Check if admin user exists
+    const userRes = await client.query('SELECT count(*) FROM users');
+    if (parseInt(userRes.rows[0].count) === 0) {
+      for (const user of defaultDb.users) {
+        await client.query(
+          'INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)',
+          [user.username, user.password, user.name, user.role]
+        );
+      }
+    }
+    logMessage('INFO', 'PostgreSQL Database initialized successfully');
+  } catch (err: any) {
+    pgAvailable = false;
+    logMessage('ERROR', `Failed to initialize PostgreSQL: ${err.message}. Falling back to JSON storage.`);
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function startServer() {
+  await initDb();
+  try {
+    const db = await readDb();
     generateMissingSidecars(db);
   } catch (err: any) {
     logMessage('WARN', `Failed to run initial sidecar check on startup: ${err.message}`);
