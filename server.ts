@@ -107,7 +107,14 @@ async function readDb() {
     return {
       config: configRes.rows[0]?.data || defaultDbConfig,
       users: usersRes.rows,
-      mails: mailsRes.rows.map(m => ({ ...m, metadata: m.metadata || {} }))
+      mails: mailsRes.rows.map(m => {
+        const metadata = m.metadata || {};
+        return {
+          ...m,
+          type: metadata.type || 'Masuk',
+          metadata
+        };
+      })
     };
   } finally {
     client.release();
@@ -343,6 +350,24 @@ app.post('/api/config', async (req, res) => {
   } catch (err) { res.status(500).send(); }
 });
 
+app.post('/api/config/columns/reorder', async (req, res) => {
+  const { columns } = req.body;
+  try {
+    const configRes = await pool.query('SELECT data FROM config LIMIT 1');
+    if (configRes.rows.length > 0) {
+      const configData = configRes.rows[0].data;
+      configData.columns = columns;
+      await pool.query('UPDATE config SET data = $1', [configData]);
+      logMessage('INFO', 'Columns reordered successfully');
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ message: 'Config not found' });
+    }
+  } catch (err) {
+    res.status(500).send();
+  }
+});
+
 // Mail Records
 app.get('/api/mails', async (req, res) => {
   try {
@@ -368,8 +393,9 @@ app.post('/api/mails', async (req, res) => {
       pdfPath = path.join(relDir, formatted).replace(/\\/g, '/');
     }
     const id = `mail_${Date.now()}`;
-    await pool.query('INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)', [id, metadata, pdfPath, 1]);
-    saveSidecarMeta({ id, metadata, pdfPath, createdAt: new Date().toISOString() });
+    const metadataWithType = { ...metadata, type: req.body.type || 'Masuk' };
+    await pool.query('INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)', [id, metadataWithType, pdfPath, 1]);
+    saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: new Date().toISOString() });
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });
@@ -411,8 +437,9 @@ app.put('/api/mails/:id', async (req, res) => {
     } else {
       pdfPath = await renameMailPdfFile(db.config, { ...existing, metadata, pdfPath: existing.pdf_path });
     }
-    await pool.query('UPDATE mails SET metadata = $1, pdf_path = $2, version_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', [metadata, pdfPath, existing.version_id + 1, id]);
-    saveSidecarMeta({ id, metadata, pdfPath, createdAt: existing.created_at });
+    const metadataWithType = { ...metadata, type: req.body.type || existing.metadata?.type || 'Masuk' };
+    await pool.query('UPDATE mails SET metadata = $1, pdf_path = $2, version_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', [metadataWithType, pdfPath, existing.version_id + 1, id]);
+    saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: existing.created_at });
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });

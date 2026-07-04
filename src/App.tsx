@@ -102,7 +102,7 @@ export default function App() {
         'x-username': currentUser?.username || '',
         'x-user-name': currentUser?.name || ''
       },
-      body: JSON.stringify({ ...data, type: 'Masuk', versionId: mailToEdit?.versionId })
+      body: JSON.stringify({ ...data, type: data.type || 'Masuk', versionId: mailToEdit?.versionId })
     });
 
     if (res.ok) {
@@ -110,12 +110,24 @@ export default function App() {
       fetchMails();
     } else {
       const err = await res.json();
-      setConfirmModal({
-        isOpen: true,
-        title: 'Error',
-        message: err.message || 'Gagal menyimpan surat',
-        onConfirm: () => {}
-      });
+      if (res.status === 409 && err.collision) {
+        setConfirmModal({
+          isOpen: true,
+          title: 'Konflik Data (Optimistic Lock)',
+          message: 'Surat ini telah diperbarui oleh operator lain saat Anda sedang melakukan pengeditan. Mohon tutup formulir ini dan buka kembali untuk melihat perubahan terbaru.',
+          onConfirm: () => {
+            setIsDrawerOpen(false);
+            fetchMails();
+          }
+        });
+      } else {
+        setConfirmModal({
+          isOpen: true,
+          title: 'Error',
+          message: err.message || 'Gagal menyimpan surat',
+          onConfirm: () => {}
+        });
+      }
     }
   };
 

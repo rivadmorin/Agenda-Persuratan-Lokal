@@ -1,0 +1,8 @@
+{
+  "name": "Agenda Persuratan Kantor 1.3",
+  "description": "Aplikasi agenda persuratan lokal portabel dengan penomoran, uploader PDF, generator tanda terima resmi, dan manajemen spreadsheet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

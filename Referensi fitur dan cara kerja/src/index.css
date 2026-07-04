@@ -1,0 +1,317 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+body.dark {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+/* Custom styles for professional scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Dark Mode Webkit Scrollbars - fully matches slate/blue theme! */
+.dark ::-webkit-scrollbar-track,
+html.dark ::-webkit-scrollbar-track,
+.dark::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+.dark ::-webkit-scrollbar-thumb,
+html.dark ::-webkit-scrollbar-thumb,
+.dark::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover,
+html.dark ::-webkit-scrollbar-thumb:hover,
+.dark::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Standard scrollbar properties for cross-browser support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.dark, .dark *, html.dark, html.dark * {
+  scrollbar-color: #334155 #0f172a;
+}
+
+/* Spreadsheet table focus ring and transitions */
+.cell-focus:focus-within {
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: -2px;
+}
+
+/* Markdown Body Styles */
+.markdown-body h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+  font-family: var(--font-display);
+}
+.dark .markdown-body h1 {
+  color: #f8fafc;
+  border-bottom: 1px solid #334155;
+}
+
+.markdown-body h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+.dark .markdown-body h2 {
+  color: #f1f5f9;
+}
+
+.markdown-body h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.dark .markdown-body h3 {
+  color: #e2e8f0;
+}
+
+.markdown-body p {
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+}
+.markdown-body hr {
+  margin: 1.25rem 0;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+.dark .markdown-body hr {
+  border-top: 1px solid #334155;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.25rem;
+  font-size: 0.8rem;
+}
+.markdown-body th {
+  background-color: #f8fafc;
+  font-weight: 600;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.6rem;
+  color: #475569;
+}
+.dark .markdown-body th {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  color: #cbd5e1;
+}
+
+.markdown-body td {
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.6rem;
+  color: #334155;
+}
+.dark .markdown-body td {
+  border: 1px solid #334155;
+  color: #cbd5e1;
+}
+
+.markdown-body ul, .markdown-body ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+.markdown-body ul {
+  list-style-type: disc;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+}
+.markdown-body code {
+  font-family: var(--font-mono);
+  background-color: #f1f5f9;
+  color: #2563eb;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+}
+.dark .markdown-body code {
+  background-color: #1e293b;
+  color: #60a5fa;
+}
+
+/* Dynamic Brand Theme Overrides and Material Design 3 Web Tokens */
+:root {
+  --theme-base: #2563eb;
+  --theme-hover: #1d4ed8;
+  --theme-light: rgba(37, 99, 235, 0.08);
+  --theme-light-border: rgba(37, 99, 235, 0.15);
+  --theme-dark-bg: rgba(37, 99, 235, 0.2);
+
+  /* Material Design 3 Palette Tokens */
+  --md-sys-color-primary: #2563eb;
+  --md-sys-color-primary-container: rgba(37, 99, 235, 0.08);
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-on-primary-container: #1d4ed8;
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-surface-container: #f8fafc;
+  --md-sys-color-surface-variant: #f1f5f9;
+  --md-sys-color-on-surface: #0f172a;
+  --md-sys-color-on-surface-variant: #475569;
+  --md-sys-color-outline: #cbd5e1;
+  --md-sys-color-outline-variant: #e2e8f0;
+  --md-sys-color-secondary: #475569;
+  --md-sys-color-secondary-container: #f1f5f9;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-on-secondary-container: #1e293b;
+  --md-sys-color-error: #ef4444;
+  --md-sys-color-error-container: #fee2e2;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-on-error-container: #b91c1c;
+
+  /* Fonts */
+  --md-ref-typeface-brand: "Space Grotesk", sans-serif;
+  --md-ref-typeface-plain: "Inter", sans-serif;
+  
+  /* Body Typography default sizes to M3 */
+  --md-sys-typescale-body-large-font: var(--md-ref-typeface-plain);
+}
+
+.dark {
+  /* Material Design 3 Dark Theme Palette Tokens */
+  --md-sys-color-primary: #60a5fa;
+  --md-sys-color-primary-container: rgba(96, 165, 250, 0.15);
+  --md-sys-color-on-primary: #0f172a;
+  --md-sys-color-on-primary-container: #93c5fd;
+  --md-sys-color-surface: #0f172a;
+  --md-sys-color-surface-container: #1e293b;
+  --md-sys-color-surface-variant: #1e293b;
+  --md-sys-color-on-surface: #f8fafc;
+  --md-sys-color-on-surface-variant: #94a3b8;
+  --md-sys-color-outline: #475569;
+  --md-sys-color-outline-variant: #334155;
+  --md-sys-color-secondary: #94a3b8;
+  --md-sys-color-secondary-container: #1e293b;
+  --md-sys-color-on-secondary: #0f172a;
+  --md-sys-color-on-secondary-container: #cbd5e1;
+  --md-sys-color-error: #f87171;
+  --md-sys-color-error-container: #450a0a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-on-error-container: #fca5a5;
+}
+
+/* Background Color Overrides */
+.bg-blue-50 {
+  background-color: var(--theme-light) !important;
+}
+.bg-blue-600 {
+  background-color: var(--theme-base) !important;
+}
+.hover\:bg-blue-700:hover {
+  background-color: var(--theme-hover) !important;
+}
+.hover\:bg-blue-50:hover {
+  background-color: var(--theme-light) !important;
+}
+.bg-blue-50\/10 {
+  background-color: var(--theme-light) !important;
+}
+
+/* Text Color Overrides */
+.text-blue-500,
+.text-blue-600,
+.text-blue-700,
+.dark\:text-blue-400,
+.dark\:text-blue-450 {
+  color: var(--theme-base) !important;
+}
+.hover\:text-blue-600:hover,
+.dark\:hover\:text-blue-400:hover {
+  color: var(--theme-base) !important;
+}
+
+/* Border Color Overrides */
+.border-blue-100 {
+  border-color: var(--theme-light-border) !important;
+}
+.border-blue-400,
+.border-blue-500,
+.border-blue-600,
+.focus\:border-blue-500:focus,
+.dark\:focus\:border-blue-500:focus,
+.hover\:border-blue-500:hover,
+.dark\:hover\:border-blue-400:hover {
+  border-color: var(--theme-base) !important;
+}
+
+/* Shadows and Accents */
+.shadow-blue-100 {
+  --tw-shadow-color: var(--theme-light-border) !important;
+}
+.shadow-blue-200 {
+  --tw-shadow-color: var(--theme-light-border) !important;
+}
+.accent-blue-600,
+.accent-blue-500 {
+  accent-color: var(--theme-base) !important;
+}
+
+/* Dark mode backgrounds */
+.dark .dark\:bg-blue-900\/20,
+.dark .dark\:bg-blue-950\/10,
+.dark .dark\:bg-blue-950\/20,
+.dark .dark\:bg-blue-950\/40,
+.dark .dark\:hover\:bg-blue-950\/20:hover,
+.dark .dark\:hover\:bg-blue-950\/40:hover {
+  background-color: var(--theme-dark-bg) !important;
+}
+
+@keyframes progress-bar-stripes {
+  from {
+    background-position: 12px 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+
