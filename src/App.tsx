@@ -1,5 +1,5 @@
 import "./material-web.d.ts";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import MailTable from './components/MailTable';
@@ -8,6 +8,7 @@ import Dashboard from './components/Dashboard';
 import Settings from './components/Settings';
 import PdfTools from './components/PdfTools';
 import UserManagement from './components/UserManagement';
+import ConfirmModal from './components/ConfirmModal';
 import { User, AppConfig, MailRecord } from './types';
 import { generateM3Theme } from './utils/theme';
 
@@ -20,6 +21,19 @@ export default function App() {
   const [mailToEdit, setMailToEdit] = useState<MailRecord | null>(null);
   const [onlineCount, setOnlineCount] = useState(1);
 
+  // Modal states
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
   // Initial Load
   useEffect(() => {
     fetchConfig();
@@ -28,29 +42,44 @@ export default function App() {
   }, []);
 
   const fetchConfig = async () => {
-    const res = await fetch('/api/config');
-    const data = await res.json();
-    setConfig(data);
-    if (data.themeColor) generateM3Theme(data.themeColor);
+    try {
+      const res = await fetch('/api/config');
+      const data = await res.json();
+      setConfig(data);
+      if (data.themeColor) generateM3Theme(data.themeColor);
+    } catch (err) {
+      console.error('Failed to fetch config', err);
+    }
   };
 
   const fetchMails = async () => {
-    const res = await fetch('/api/mails');
-    const data = await res.json();
-    setMails(data);
+    try {
+      const res = await fetch('/api/mails');
+      const data = await res.json();
+      setMails(data);
+    } catch (err) {
+      console.error('Failed to fetch mails', err);
+    }
   };
 
   const setupSSE = () => {
     const eventSource = new EventSource('/api/sse/online');
     eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      setOnlineCount(data.onlineCount || 1);
+      try {
+        const data = JSON.parse(event.data);
+        setOnlineCount(data.onlineCount || 1);
+      } catch (err) {
+        console.error('SSE Error', err);
+      }
+    };
+    eventSource.onerror = () => {
+      eventSource.close();
+      setTimeout(setupSSE, 5000); // Retry connection
     };
   };
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
-    // Store user session if needed
   };
 
   const handleLogout = async () => {
@@ -73,7 +102,7 @@ export default function App() {
         'x-username': currentUser?.username || '',
         'x-user-name': currentUser?.name || ''
       },
-      body: JSON.stringify({ ...data, type: 'Masuk' })
+      body: JSON.stringify({ ...data, type: 'Masuk', versionId: mailToEdit?.versionId })
     });
 
     if (res.ok) {
@@ -81,15 +110,25 @@ export default function App() {
       fetchMails();
     } else {
       const err = await res.json();
-      alert(err.message || 'Gagal menyimpan surat');
+      setConfirmModal({
+        isOpen: true,
+        title: 'Error',
+        message: err.message || 'Gagal menyimpan surat',
+        onConfirm: () => {}
+      });
     }
   };
 
-  const handleDeleteMail = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus agenda surat ini?')) {
-      await fetch(`/api/mails/${id}`, { method: 'DELETE' });
-      fetchMails();
-    }
+  const handleDeleteMail = (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Agenda Surat',
+      message: 'Apakah Anda yakin ingin menghapus agenda surat ini? Tindakan ini tidak dapat dibatalkan.',
+      onConfirm: async () => {
+        await fetch(`/api/mails/${id}`, { method: 'DELETE' });
+        fetchMails();
+      }
+    });
   };
 
   const handleSaveConfig = async (newConfig: AppConfig) => {
@@ -163,12 +202,8 @@ export default function App() {
           )}
 
           {activeTab === 'pdf-tools' && <PdfTools />}
-
           {activeTab === 'users' && <UserManagement />}
-
-          {activeTab === 'settings' && (
-            <Settings config={config} onSaveConfig={handleSaveConfig} />
-          )}
+          {activeTab === 'settings' && <Settings config={config} onSaveConfig={handleSaveConfig} />}
         </div>
       </main>
 
@@ -178,6 +213,14 @@ export default function App() {
         columns={config.columns}
         mailToEdit={mailToEdit}
         onSave={handleSaveMail}
+      />
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
       />
     </div>
   );
