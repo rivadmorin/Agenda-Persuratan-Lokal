@@ -1,76 +1,73 @@
 # 📨 Sistem Manajemen Agenda Persuratan Digital
 
-Sistem Manajemen Agenda Persuratan Digital adalah aplikasi berbasis web modern yang dirancang untuk mendigitalisasi, mengelola, dan mengarsipkan agenda surat secara efisien. Dibangun dengan fokus pada portabilitas dan stabilitas, aplikasi ini mendukung manajemen berkas PDF, integrasi spreadsheet, dan persistensi data ganda.
+Aplikasi web modern untuk manajemen agenda surat yang dirancang dengan filosofi: **Simple, Hemat Sumber Daya, Cepat, Stabil, Lokal, & Portable.**
 
 ---
 
-## 🚀 Fitur Utama & Cara Kerja
-
-Aplikasi ini mengintegrasikan alur kerja administrasi konvensional ke dalam ekosistem digital terpadu melalui fitur-fitur berikut:
-
-### 1. Manajemen Berkas PDF & Lampiran
-* **Penyimpanan Terstruktur**: Setiap surat yang diinput dapat disertai lampiran PDF yang disimpan secara otomatis ke dalam hierarki folder berdasarkan tanggal (`Tahun/Bulan/Hari`).
-* **Penamaan Otomatis**: Sistem secara cerdas mengganti nama file PDF berdasarkan kolom metadata (misalnya: Tanggal-NomorSurat-Pengirim) untuk memudahkan pencarian fisik di server.
-* **PDF Tools**: Modul bawaan untuk manipulasi PDF langsung dari browser:
-  - **Merge**: Menggabungkan beberapa PDF menjadi satu dokumen.
-  - **Split**: Memotong atau mengekstrak halaman tertentu dari PDF.
-  - **Compress**: Memperkecil ukuran file PDF menggunakan Ghostscript.
-
-### 2. Dashboard Analitik & Aktivitas
-* **Tren Persuratan**: Visualisasi tren entri surat terbaru menggunakan grafik area (*Area Chart*) interaktif.
-* **Statistik Cepat**: Pemantauan jumlah total agenda, jumlah lampiran fisik, dan efisiensi arsip secara real-time.
-* **Log Aktivitas**: Menampilkan riwayat entri surat terbaru untuk pengawasan operasional yang lebih baik.
-
-### 3. Manajemen Tabel & Integrasi Spreadsheet
-* **Pencarian Fuzzy**: Algoritma pencarian cerdas yang memungkinkan penemuan data meskipun terdapat kesalahan ketik kecil.
-* **Ekspor/Impor Excel**:
-  - Ekspor seluruh database agenda ke format `.xlsx`.
-  - Impor massal data dari Excel dengan fitur **deteksi duplikat** otomatis dan pemetaan kolom yang fleksibel.
-* **Cetak Tanda Terima**: Menghasilkan dokumen PDF tanda terima resmi secara massal untuk surat-surat yang dipilih.
-* **Batch Download**: Mengunduh banyak lampiran PDF sekaligus dalam satu arsip ZIP.
-
-### 4. Integritas & Keamanan Data
-* **Persistensi Ganda**: Menggunakan PostgreSQL sebagai database utama dan `db.json` sebagai fallback/sinkronisasi sinkron untuk stabilitas maksimal.
-* **Cek Integritas**: Fitur untuk mendeteksi berkas PDF sampah (orphans) atau rekaman database yang kehilangan file fisiknya.
-* **Backup & Restore**: Sistem pencadangan database (JSON) dan cadangan lengkap (ZIP + PDF) yang dapat dijadwalkan atau dilakukan secara manual.
+## 🌟 Filosofi Pengembangan
+*   **Simple:** Antarmuka bersih menggunakan Google Material Design 3 (M3).
+*   **Hemat Sumber Daya:** Arsitektur Node.js yang ringan dan efisien.
+*   **Cepat & Stabil:** Menggunakan PostgreSQL sebagai basis data utama untuk integritas data maksimal.
+*   **100% Offline & Lokal:** Semua aset (Font, Ikon, Library) disimpan secara lokal. Tidak ada panggilan ke internet (CDN).
+*   **Portable:** Bisa dijalankan dari Flashdisk menggunakan Docker.
 
 ---
 
-## 📦 Persyaratan Sistem
-
-* **Node.js** versi 18.x atau lebih tinggi.
-* **PostgreSQL** (opsional, aplikasi akan otomatis menggunakan JSON jika DB tidak terdeteksi).
-* **Ghostscript** (opsional, diperlukan untuk fitur kompresi PDF).
-
----
-
-## 📥 Panduan Setup Cepat
-
-Aplikasi dilengkapi dengan skrip instalasi interaktif untuk kemudahan deployment:
-
-### 💻 Windows
-1. Jalankan PowerShell sebagai Administrator.
-2. Eksekusi: `.\setup.ps1`
-3. Ikuti instruksi untuk instalasi dependensi dan konfigurasi.
-
-### 🐧 Linux (Debian/Ubuntu)
-1. Berikan izin eksekusi: `chmod +x setup.sh`
-2. Jalankan: `sudo ./setup.sh`
-3. Skrip akan mengonfigurasi Node.js, npm, dan systemd service secara otomatis.
+## 🚀 Fitur Utama
+- **Manajemen Surat:** Input, edit, dan hapus agenda surat dengan lampiran PDF.
+- **Material Design 3:** UI yang konsisten dengan standar desain terbaru Google.
+- **Real-time Tracking:** Pantau jumlah pengguna yang sedang aktif secara real-time.
+- **Offline Ready:** Font **Product Sans** dan Material Symbols dilayani secara lokal.
+- **PostgreSQL Powered:** Keamanan dan kecepatan akses data terjamin.
 
 ---
 
-## 📖 Dokumentasi Teknis & Arsitektur
-
-Untuk pemahaman mendalam mengenai arsitektur sistem, peta direktori, dependensi antar-file, serta penjabaran logika bisnis terperinci, silakan merujuk pada berkas berikut:
-
-* [**Analisis Teknis Mendalam**](docs/ANALISIS_TEKNIS_MENDALAM.md)
+## 🛠️ Persyaratan Sistem
+- **Node.js** v20+
+- **Docker & Docker Compose** (Untuk menjalankan PostgreSQL)
 
 ---
 
-## 🛠️ Stack Teknologi
+## 📥 Panduan Instalasi (Satu Komando)
 
-* **Frontend**: React 19, Vite, Tailwind CSS v4, Material Web Components (M3).
-* **Backend**: Node.js, Express, esbuild.
-* **Database**: PostgreSQL & Lokal JSON Store.
-* **Libraries**: pdf-lib, jspdf, xlsx, jszip, recharts.
+### 🐧 Linux / macOS
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### 🪟 Windows (PowerShell)
+```powershell
+.\setup.ps1
+```
+
+Skrip di atas akan otomatis:
+1. Memeriksa ketersediaan Docker.
+2. Menjalankan kontainer PostgreSQL.
+3. Memasang semua dependensi.
+4. Melakukan kompilasi (Build) aplikasi.
+
+---
+
+## 🏃 Cara Menjalankan
+Setelah instalasi selesai, cukup jalankan:
+```bash
+npm run start
+```
+Akses aplikasi di: `http://localhost:3000`
+
+---
+
+## 🧪 Pengujian (Playwright E2E)
+Untuk menjalankan otomatisasi pengujian:
+```bash
+npx playwright test
+```
+
+---
+
+## 📖 Dokumentasi Teknis
+Untuk detail arsitektur, silakan baca [Analisis Teknis Mendalam](docs/ANALISIS_TEKNIS_MENDALAM.md).
+
+---
+*Dibuat dengan fokus pada ketahanan sistem dan kemudahan penggunaan lokal.*

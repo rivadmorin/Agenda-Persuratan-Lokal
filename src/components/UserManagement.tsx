@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
+import ConfirmModal from './ConfirmModal';
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    username: '',
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -20,11 +25,10 @@ export default function UserManagement() {
     }
   };
 
-  const handleDelete = async (username: string) => {
-    if (confirm(`Hapus pengguna ${username}?`)) {
-      await fetch(`/api/users/${username}`, { method: 'DELETE' });
-      fetchUsers();
-    }
+  const handleDelete = async () => {
+    await fetch(`/api/users/${confirmModal.username}`, { method: 'DELETE' });
+    setConfirmModal({ isOpen: false, username: '' });
+    fetchUsers();
   };
 
   return (
@@ -51,7 +55,7 @@ export default function UserManagement() {
                 <div slot="headline" className="font-bold">{user.name}</div>
                 <div slot="supporting-text" className="uppercase tracking-widest text-[10px]">{user.role} • @{user.username}</div>
                 <div slot="end" className="flex items-center gap-1">
-                   <md-icon-button onClick={() => handleDelete(user.username)} disabled={user.username === 'admin'}>
+                   <md-icon-button onClick={() => setConfirmModal({ isOpen: true, username: user.username })} disabled={user.username === 'admin'}>
                      <span className="material-symbols-outlined text-error">delete</span>
                    </md-icon-button>
                 </div>
@@ -62,6 +66,14 @@ export default function UserManagement() {
         </md-list>
         {loading && <md-linear-progress indeterminate></md-linear-progress>}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title="Hapus Pengguna"
+        message={`Apakah Anda yakin ingin menghapus pengguna @${confirmModal.username}? Tindakan ini tidak dapat dibatalkan.`}
+        onClose={() => setConfirmModal({ isOpen: false, username: '' })}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
