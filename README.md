@@ -117,3 +117,11 @@ Anda tidak perlu menghapus file secara manual satu per satu. Cukup gunakan skrip
 * **Frontend**: React (TypeScript), Vite, Tailwind CSS, Motion (Framer Motion).
 * **Komponen Diagram**: Recharts, Lucide Icons.
 * **Server Backend**: Node.js, Express, ESBuild compiler.
+
+---
+
+## 📖 Dokumentasi Teknis & Arsitektur
+
+Untuk pemahaman mendalam mengenai arsitektur sistem, peta direktori, dependensi antar-file, serta penjabaran logika bisnis terperinci, silakan merujuk pada berkas berikut:
+
+* [**Analisis Teknis Mendalam**](docs/ANALISIS_TEKNIS_MENDALAM.md)
