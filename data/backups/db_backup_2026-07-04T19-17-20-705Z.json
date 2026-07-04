@@ -1,0 +1,92 @@
+{
+  "users": [
+    {
+      "username": "admin",
+      "name": "Administrator",
+      "role": "admin",
+      "password": "admin"
+    }
+  ],
+  "mails": [],
+  "config": {
+    "appName": "Agenda Persuratan Kantor",
+    "themeColor": "#2563eb",
+    "autoCompressPdf": true,
+    "pdfCompressionLevel": "medium",
+    "maxUploadSizeMb": 50,
+    "backupRetentionDays": 7,
+    "backupRetentionWeeks": 4,
+    "columns": [
+      {
+        "key": "noUrut",
+        "label": "NOMOR",
+        "type": "text",
+        "required": true,
+        "order": 1
+      },
+      {
+        "key": "tanggalTerima",
+        "label": "TANGGAL TERIMA",
+        "type": "date",
+        "required": true,
+        "order": 2
+      },
+      {
+        "key": "tanggalSurat",
+        "label": "TANGGAL SURAT",
+        "type": "date",
+        "required": true,
+        "order": 3
+      },
+      {
+        "key": "jenisSurat",
+        "label": "JENIS SURAT",
+        "type": "text",
+        "required": true,
+        "order": 4
+      },
+      {
+        "key": "noSurat",
+        "label": "NOMOR SURAT",
+        "type": "text",
+        "required": true,
+        "order": 5
+      },
+      {
+        "key": "penomoran",
+        "label": "PENOMORAN",
+        "type": "text",
+        "required": false,
+        "order": 6
+      },
+      {
+        "key": "suratDari",
+        "label": "SURAT DARI",
+        "type": "text",
+        "required": true,
+        "order": 7
+      },
+      {
+        "key": "perihal",
+        "label": "PERIHAL",
+        "type": "text",
+        "required": true,
+        "order": 8
+      },
+      {
+        "key": "disposisi",
+        "label": "DISPOSISI",
+        "type": "text",
+        "required": false,
+        "order": 9
+      },
+      {
+        "key": "catatan",
+        "label": "CATATAN",
+        "type": "text",
+        "required": false,
+        "order": 10
+      }
+    ]
+  }
+}

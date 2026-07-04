@@ -41,10 +41,10 @@ export default function App() {
   };
 
   const setupSSE = () => {
-    const eventSource = new EventSource('/api/sse/online');
+    const eventSource = new EventSource('/api/users/online');
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      setOnlineCount(data.onlineCount || 1);
+      setOnlineCount(data.count || 1);
     };
   };
 
