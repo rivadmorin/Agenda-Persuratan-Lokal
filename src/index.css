@@ -30,11 +30,19 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  --md-sys-color-primary: #2563eb;
+  --md-sys-color-primary: #0d9488;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #ccfbf1;
+  --md-sys-color-on-primary-container: #115e59;
   --md-sys-color-background: #f8fafc;
-  --md-sys-color-on-background: #001d35;
+  --md-sys-color-on-background: #0f172a;
   --md-sys-color-surface: #f8fafc;
-  --md-sys-color-on-surface: #001d35;
+  --md-sys-color-on-surface: #0f172a;
+  --md-sys-color-surface-container-low: #f1f5f9;
+  --md-sys-color-surface-container: #e2e8f0;
+  --md-sys-color-surface-container-high: #cbd5e1;
+  --md-sys-color-outline-variant: #e2e8f0;
+  --md-sys-color-outline: #94a3b8;
   --md-icon-font: 'Material Symbols Outlined Variable';
 }
 
@@ -106,3 +114,8 @@ md-icon, .material-symbols-outlined {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--md-sys-color-outline-variant); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--md-sys-color-outline); }
+
+/* Sidebar transition */
+.sidebar-transition {
+  transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
