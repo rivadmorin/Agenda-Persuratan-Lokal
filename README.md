@@ -25,6 +25,7 @@ Aplikasi web modern untuk manajemen agenda surat yang dirancang dengan filosofi:
 ## 🛠️ Persyaratan Sistem
 - **Node.js** v20+
 - **Docker & Docker Compose** (Untuk menjalankan PostgreSQL)
+- **pnpm** (Manajer paket utama repositori ini)
 
 ---
 
@@ -44,7 +45,7 @@ chmod +x setup.sh
 Skrip di atas akan otomatis:
 1. Memeriksa ketersediaan Docker.
 2. Menjalankan kontainer PostgreSQL.
-3. Memasang semua dependensi.
+3. Memasang semua dependensi menggunakan `pnpm`.
 4. Melakukan kompilasi (Build) aplikasi.
 
 ---
@@ -52,22 +53,31 @@ Skrip di atas akan otomatis:
 ## 🏃 Cara Menjalankan
 Setelah instalasi selesai, cukup jalankan:
 ```bash
-npm run start
+pnpm run start
+```
+Atau untuk lingkungan development:
+```bash
+pnpm run dev
 ```
 Akses aplikasi di: `http://localhost:3000`
 
 ---
 
-## 🧪 Pengujian (Playwright E2E)
-Untuk menjalankan otomatisasi pengujian:
+## 🧪 Pengujian
+Untuk menjalankan unit test (Vitest):
 ```bash
-npx playwright test
+pnpm test
+```
+
+Untuk menjalankan otomatisasi pengujian E2E (Playwright):
+```bash
+pnpm exec playwright test
 ```
 
 ---
 
 ## 📖 Dokumentasi Teknis
-Untuk detail arsitektur, silakan baca [Analisis Teknis Mendalam](docs/ANALISIS_TEKNIS_MENDALAM.md).
+Untuk detail memori agen dan arsitektur repositori, silakan baca [Master Agent Registry](docs/index.md).
 
 ---
 *Dibuat dengan fokus pada ketahanan sistem dan kemudahan penggunaan lokal.*
