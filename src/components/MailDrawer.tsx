@@ -25,10 +25,12 @@ export default function MailDrawer({
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [deletedPdf, setDeletedPdf] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [previewTab, setPreviewTab] = useState<'details' | 'pdf' | 'markdown'>('details');
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAnimationComplete, setIsAnimationComplete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize form when opening / changing mailToEdit
@@ -40,14 +42,28 @@ export default function MailDrawer({
         setFormData(mailToEdit.metadata || {});
         setPdfFile(null);
         setPdfBase64(null);
+        setDeletedPdf(false);
       } else {
         setType('Masuk');
         setFormData({});
         setPdfFile(null);
         setPdfBase64(null);
+        setDeletedPdf(false);
       }
       setErrors({});
     }
+
+    // Manage iframe rendering delay
+    let timeoutId: ReturnType<typeof setTimeout>;
+    if (isOpen) {
+      timeoutId = setTimeout(() => setIsAnimationComplete(true), 400);
+    } else {
+      setIsAnimationComplete(false);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [isOpen, mailToEdit]);
 
   const handleInputChange = (key: string, value: any) => {
@@ -103,6 +119,7 @@ export default function MailDrawer({
       type,
       metadata: formData,
       pdfData: pdfBase64 || undefined,
+      deletePdf: deletedPdf,
     });
   };
 
@@ -116,7 +133,7 @@ export default function MailDrawer({
     return md;
   };
 
-  const pdfSource = pdfBase64 || (mailToEdit?.pdfPath ? `/api/files/${mailToEdit.pdfPath}` : null);
+  const pdfSource = pdfBase64 || (mailToEdit?.pdfPath && !deletedPdf ? `/api/files/${mailToEdit.pdfPath}` : null);
   const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
 
   return (
@@ -243,7 +260,7 @@ export default function MailDrawer({
                               </p>
                             </div>
                           </div>
-                          <md-icon-button onClick={() => { setPdfFile(null); setPdfBase64(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
+                          <md-icon-button onClick={() => { setPdfFile(null); setPdfBase64(null); setDeletedPdf(true); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
                             <span className="material-symbols-outlined text-[var(--md-sys-color-error)]">delete</span>
                           </md-icon-button>
                         </div>
@@ -311,8 +328,12 @@ export default function MailDrawer({
                       )}
 
                       {previewTab === 'pdf' && pdfSource && (
-                        <div className="h-full min-h-[500px]">
-                          <iframe src={pdfSource} className="w-full h-full border-none" title="PDF Preview" />
+                        <div className="h-full min-h-[500px] flex items-center justify-center">
+                          {isAnimationComplete ? (
+                            <iframe src={pdfSource} className="w-full h-full border-none animate-premium-in" title="PDF Preview" />
+                          ) : (
+                            <md-circular-progress indeterminate></md-circular-progress>
+                          )}
                         </div>
                       )}
                     </div>
