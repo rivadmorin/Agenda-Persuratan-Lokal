@@ -203,29 +203,25 @@ export default function PdfTools() {
                           <div slot="supporting-text" className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Urutan ke-{idx + 1}</div>
                           <div slot="end" className="flex items-center gap-1">
                              <md-icon-button
+                               aria-label="Pindahkan ke atas"
                                onClick={() => {
                                 const newFiles = [...mergeFiles];
                                 if (idx > 0) {
                                   [newFiles[idx-1], newFiles[idx]] = [newFiles[idx], newFiles[idx-1]];
                                   setMergeFiles(newFiles);
                                 }
-                             }}
-                             disabled={idx === 0 ? true : undefined}
-                             aria-label="Pindahkan ke atas"
-                             >
+                             }} disabled={idx === 0 ? true : undefined}>
                                <span className="material-symbols-outlined">arrow_upward</span>
                              </md-icon-button>
                              <md-icon-button
+                               aria-label="Pindahkan ke bawah"
                                onClick={() => {
                                 const newFiles = [...mergeFiles];
                                 if (idx < mergeFiles.length - 1) {
                                   [newFiles[idx+1], newFiles[idx]] = [newFiles[idx], newFiles[idx+1]];
                                   setMergeFiles(newFiles);
                                 }
-                             }}
-                             disabled={idx === mergeFiles.length - 1 ? true : undefined}
-                             aria-label="Pindahkan ke bawah"
-                             >
+                             }} disabled={idx === mergeFiles.length - 1 ? true : undefined}>
                                <span className="material-symbols-outlined">arrow_downward</span>
                              </md-icon-button>
                              <md-icon-button
