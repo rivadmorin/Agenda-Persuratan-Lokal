@@ -14,9 +14,11 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'operator'>('operator');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setIsSaving(false);
       if (userToEdit) {
         setName(userToEdit.name);
         setUsername(userToEdit.username);
@@ -44,6 +46,7 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
 
   const handleSave = () => {
     if (!validate()) return;
+    setIsSaving(true);
     onSave({
       name,
       username,
@@ -99,7 +102,14 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
       </form>
       <div slot="actions">
         <md-text-button onClick={onClose}>Batal</md-text-button>
-        <md-filled-button onClick={handleSave}>Simpan</md-filled-button>
+        <md-filled-button onClick={handleSave} disabled={isSaving ? true : undefined}>
+          {isSaving ? (
+            <>
+              <md-circular-progress indeterminate slot="icon" style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
+              Menyimpan...
+            </>
+          ) : 'Simpan'}
+        </md-filled-button>
       </div>
     </md-dialog>
   );
