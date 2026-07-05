@@ -50,6 +50,23 @@ Skrip di atas akan otomatis:
 
 ---
 
+
+---
+
+## 🌐 Penggunaan Jaringan Lokal & Portable
+
+Aplikasi ini dirancang untuk dapat diakses oleh komputer lain dalam satu jaringan lokal (LAN).
+
+### Cara Cepat (Satu Klik)
+Gunakan skrip startup terpadu yang otomatis menyiapkan database dan menjalankan aplikasi:
+```bash
+./launchpad/start-local.sh
+```
+
+### Akses dari Komputer Lain
+1. Cari alamat IP komputer server (misal: `192.168.1.10`).
+2. Dari komputer lain, buka browser dan akses: `http://192.168.1.10:3000`
+
 ## 🏃 Cara Menjalankan
 Setelah instalasi selesai, cukup jalankan:
 ```bash
