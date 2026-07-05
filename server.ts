@@ -107,10 +107,87 @@ async function readDb() {
     return {
       config: configRes.rows[0]?.data || defaultDbConfig,
       users: usersRes.rows,
-      mails: mailsRes.rows.map(m => ({ ...m, metadata: m.metadata || {} }))
+      mails: mailsRes.rows.map(m => {
+        const metadata = m.metadata || {};
+        return {
+          ...m,
+          type: metadata.type || 'Masuk',
+          metadata
+        };
+      })
     };
   } finally {
     client.release();
+  }
+}
+
+async function restoreDbFromJson(dbData: any) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE TABLE mails, config, users CASCADE');
+    
+    // Restore config
+    if (dbData.config) {
+      await client.query('INSERT INTO config (data) VALUES ($1)', [dbData.config]);
+    } else {
+      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
+    }
+
+    // Restore users
+    if (dbData.users && Array.isArray(dbData.users)) {
+      for (const u of dbData.users) {
+        await client.query(
+          'INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING',
+          [u.username, u.password, u.name, u.role]
+        );
+      }
+    } else {
+      await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
+    }
+
+    // Restore mails
+    if (dbData.mails && Array.isArray(dbData.mails)) {
+      for (const m of dbData.mails) {
+        await client.query(
+          'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
+          [m.id, m.metadata || {}, m.pdfPath || null, m.versionId || 1]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function generateBackupFile(includePdf: boolean, type: 'manual' | 'auto' | 'pre_restore') {
+  const db = await readDb();
+  const timestamp = Date.now();
+  const backupsDir = path.join(process.cwd(), 'data', 'backups');
+  if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+
+  if (includePdf) {
+    const filename = `backup_${type}_${timestamp}.zip`;
+    const fullPath = path.join(backupsDir, filename);
+    const zip = new JSZip();
+    zip.file('db_export.json', JSON.stringify(db, null, 2));
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      addDirectoryToZip(zip, uploadsDir, 'uploads');
+    }
+    const content = await zip.generateAsync({ type: 'nodebuffer' });
+    fs.writeFileSync(fullPath, content);
+    return { filename, sizeBytes: content.length };
+  } else {
+    const filename = `backup_${type}_${timestamp}.json`;
+    const fullPath = path.join(backupsDir, filename);
+    const content = JSON.stringify(db, null, 2);
+    fs.writeFileSync(fullPath, content, 'utf-8');
+    return { filename, sizeBytes: Buffer.byteLength(content) };
   }
 }
 
@@ -343,6 +420,24 @@ app.post('/api/config', async (req, res) => {
   } catch (err) { res.status(500).send(); }
 });
 
+app.post('/api/config/columns/reorder', async (req, res) => {
+  const { columns } = req.body;
+  try {
+    const configRes = await pool.query('SELECT data FROM config LIMIT 1');
+    if (configRes.rows.length > 0) {
+      const configData = configRes.rows[0].data;
+      configData.columns = columns;
+      await pool.query('UPDATE config SET data = $1', [configData]);
+      logMessage('INFO', 'Columns reordered successfully');
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ message: 'Config not found' });
+    }
+  } catch (err) {
+    res.status(500).send();
+  }
+});
+
 // Mail Records
 app.get('/api/mails', async (req, res) => {
   try {
@@ -368,8 +463,9 @@ app.post('/api/mails', async (req, res) => {
       pdfPath = path.join(relDir, formatted).replace(/\\/g, '/');
     }
     const id = `mail_${Date.now()}`;
-    await pool.query('INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)', [id, metadata, pdfPath, 1]);
-    saveSidecarMeta({ id, metadata, pdfPath, createdAt: new Date().toISOString() });
+    const metadataWithType = { ...metadata, type: req.body.type || 'Masuk' };
+    await pool.query('INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)', [id, metadataWithType, pdfPath, 1]);
+    saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: new Date().toISOString() });
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });
@@ -411,8 +507,9 @@ app.put('/api/mails/:id', async (req, res) => {
     } else {
       pdfPath = await renameMailPdfFile(db.config, { ...existing, metadata, pdfPath: existing.pdf_path });
     }
-    await pool.query('UPDATE mails SET metadata = $1, pdf_path = $2, version_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', [metadata, pdfPath, existing.version_id + 1, id]);
-    saveSidecarMeta({ id, metadata, pdfPath, createdAt: existing.created_at });
+    const metadataWithType = { ...metadata, type: req.body.type || existing.metadata?.type || 'Masuk' };
+    await pool.query('UPDATE mails SET metadata = $1, pdf_path = $2, version_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', [metadataWithType, pdfPath, existing.version_id + 1, id]);
+    saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: existing.created_at });
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });
@@ -484,18 +581,64 @@ app.post('/api/pdf/receipt', async (req, res) => {
     const db = await readDb();
     const selected = db.mails.filter((m: any) => mailIds.includes(m.id));
     if (selected.length === 0) return res.status(400).send();
+    
+    // Create PDF document
     const doc = new jsPDF();
+    doc.setFontSize(16);
     doc.text(db.config.appName.toUpperCase(), 105, 15, { align: 'center' });
+    doc.setFontSize(12);
     doc.text('TANDA TERIMA PENYERAHAN SURAT', 105, 22, { align: 'center' });
     doc.line(15, 26, 195, 26);
+    
+    // Columns to display (only where includeInReceipt !== false)
+    const activeCols = db.config.columns
+      .filter((c: any) => c.includeInReceipt !== false)
+      .sort((a: any, b: any) => a.order - b.order);
+      
+    // Write table headers
+    doc.setFontSize(9);
+    let x = 15;
     let y = 35;
-    selected.forEach((m: any, i: number) => {
-      doc.text(`${i+1}. ${m.metadata.noSurat || '-'} - ${m.metadata.perihal || '-'}`, 20, y);
-      y += 10;
+    
+    // Draw columns headers
+    activeCols.forEach((col: any) => {
+      doc.text(col.label.substring(0, 15), x, y);
+      x += 35;
     });
+    
+    doc.line(15, y + 2, 195, y + 2);
     y += 10;
+    
+    // Draw table rows
+    selected.forEach((mail: any) => {
+      x = 15;
+      activeCols.forEach((col: any) => {
+        let val = mail.metadata[col.key] || '-';
+        if (col.type === 'date' && val !== '-') {
+          try {
+            val = new Date(val).toLocaleDateString('id-ID');
+          } catch {}
+        }
+        doc.text(String(val).substring(0, 15), x, y);
+        x += 35;
+      });
+      y += 8;
+      
+      if (y > 260) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+    
+    y += 10;
+    if (y > 260) {
+      doc.addPage();
+      y = 20;
+    }
+    
     doc.text(`Diserahkan oleh: ${signerLeft || '-'}`, 20, y);
     doc.text(`Diterima oleh: ${signerRight || '-'}`, 120, y);
+    
     res.setHeader('Content-Type', 'application/pdf');
     res.send(Buffer.from(doc.output('arraybuffer')));
   } catch (err) { res.status(500).send(); }
@@ -549,17 +692,296 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
   } catch (err) { res.status(500).send(); }
 });
 
-// Backup
-app.get('/api/backup/export-zip', async (req, res) => {
+// Backup & Recovery APIs
+app.get('/api/backup/list', async (req, res) => {
   try {
-    const zip = new JSZip();
-    const db = await readDb();
-    zip.file('db_export.json', JSON.stringify(db, null, 2));
-    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-    if (fs.existsSync(uploadsDir)) addDirectoryToZip(zip, uploadsDir, 'uploads');
-    res.setHeader('Content-Type', 'application/zip');
-    res.send(await zip.generateAsync({ type: 'nodebuffer' }));
+    const backupsDir = path.join(process.cwd(), 'data', 'backups');
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+    
+    const files = fs.readdirSync(backupsDir);
+    const backups = files
+      .filter(f => f.startsWith('backup_') && (f.endsWith('.zip') || f.endsWith('.json')))
+      .map(f => {
+        const fullPath = path.join(backupsDir, f);
+        const stats = fs.statSync(fullPath);
+        const isZip = f.endsWith('.zip');
+        const isManual = f.includes('manual');
+        const isPreRestore = f.includes('pre_restore');
+        const isAuto = f.includes('auto');
+        
+        let label = 'Cadangan Data';
+        if (isManual) label = `Cadangan Manual (${isZip ? 'ZIP' : 'JSON'})`;
+        else if (isPreRestore) label = `Cadangan Sebelum Pemulihan (${isZip ? 'ZIP' : 'JSON'})`;
+        else if (isAuto) label = `Cadangan Otomatis (${isZip ? 'ZIP' : 'JSON'})`;
+        
+        return {
+          filename: f,
+          sizeBytes: stats.size,
+          createdAt: stats.birthtime || stats.mtime || new Date(),
+          label,
+          isAuto,
+          isManual,
+          isPreRestore,
+          isZip
+        };
+      });
+      
+    backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    res.json({ success: true, backups });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/backup/create', async (req, res) => {
+  try {
+    const includePdf = req.body.includePdf !== false;
+    const backup = await generateBackupFile(includePdf, 'manual');
+    res.json({ success: true, backup });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/backup/delete/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, error: 'Nama file tidak valid' });
+    }
+    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'File tidak ditemukan' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/backup/download/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).send('Nama file tidak valid');
+    }
+    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
+    if (fs.existsSync(fullPath)) {
+      res.download(fullPath);
+    } else {
+      res.status(404).send('File tidak ditemukan');
+    }
   } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/backup/restore-local', async (req, res) => {
+  try {
+    const { filename } = req.body;
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, message: 'Nama file tidak valid' });
+    }
+    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, message: 'File tidak ditemukan' });
+    }
+
+    // Auto backup for safety before restoration
+    await generateBackupFile(true, 'pre_restore');
+
+    if (filename.endsWith('.json')) {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const dbData = JSON.parse(content);
+      await restoreDbFromJson(dbData);
+    } else if (filename.endsWith('.zip')) {
+      const zipBuffer = fs.readFileSync(fullPath);
+      const zip = await JSZip.loadAsync(zipBuffer);
+      const dbFile = zip.file('db_export.json');
+      if (dbFile) {
+        const dbContent = await dbFile.async('text');
+        const dbData = JSON.parse(dbContent);
+        await restoreDbFromJson(dbData);
+      }
+      
+      const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+      for (const [relPath, file] of Object.entries(zip.files)) {
+        if (relPath.startsWith('uploads/') && !file.dir) {
+          const cleanRel = relPath.substring('uploads/'.length);
+          const destPath = path.join(uploadsDir, cleanRel);
+          const destDir = path.dirname(destPath);
+          if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+          fs.writeFileSync(destPath, await file.async('nodebuffer'));
+        }
+      }
+    }
+    
+    res.json({ success: true, message: 'Sistem berhasil dipulihkan dari cadangan lokal!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal memulihkan dari cadangan lokal.' });
+  }
+});
+
+app.post('/api/backup/import', async (req, res) => {
+  try {
+    await generateBackupFile(true, 'pre_restore');
+    const dbData = req.body;
+    await restoreDbFromJson(dbData);
+    res.json({ success: true, message: 'Database berhasil dipulihkan dari backup!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Gagal memulihkan database.' });
+  }
+});
+
+app.post('/api/backup/import-zip', express.raw({ type: 'application/zip', limit: '100mb' }), async (req, res) => {
+  try {
+    await generateBackupFile(true, 'pre_restore');
+    const zipBuffer = req.body;
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const dbFile = zip.file('db_export.json');
+    if (!dbFile) throw new Error('ZIP tidak valid (db_export.json tidak ditemukan)');
+    
+    const dbContent = await dbFile.async('text');
+    const dbData = JSON.parse(dbContent);
+    await restoreDbFromJson(dbData);
+
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    for (const [relPath, file] of Object.entries(zip.files)) {
+      if (relPath.startsWith('uploads/') && !file.dir) {
+        const cleanRel = relPath.substring('uploads/'.length);
+        const destPath = path.join(uploadsDir, cleanRel);
+        const destDir = path.dirname(destPath);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        fs.writeFileSync(destPath, await file.async('nodebuffer'));
+      }
+    }
+
+    res.json({ success: true, message: 'Sistem berhasil dipulihkan dari berkas ZIP cadangan!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal memulihkan dari berkas ZIP.' });
+  }
+});
+
+app.post('/api/backup/clear', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('TRUNCATE TABLE mails, config, users CASCADE');
+      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
+      await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
+      await client.query('COMMIT');
+    } catch (dbErr) {
+      await client.query('ROLLBACK');
+      throw dbErr;
+    } finally { client.release(); }
+
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      fs.rmSync(uploadsDir, { recursive: true, force: true });
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    res.json({ success: true, message: 'Database & attachment uploads berhasil dibersihkan!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/backup/integrity/cleanup', async (req, res) => {
+  try {
+    const db = await readDb();
+    const activePaths = new Set(db.mails.map((m: any) => m.pdfPath).filter(Boolean));
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    let deletedCount = 0;
+
+    const cleanOrphans = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stats = fs.statSync(fullPath);
+        if (stats.isDirectory()) {
+          cleanOrphans(fullPath);
+          if (fs.readdirSync(fullPath).length === 0) fs.rmdirSync(fullPath);
+        } else if (stats.isFile()) {
+          const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+          if (relPath.endsWith('.json')) {
+            const pdfPair = relPath.substring(0, relPath.length - 5);
+            if (!activePaths.has(pdfPair)) fs.unlinkSync(fullPath);
+          } else if (relPath.endsWith('.pdf')) {
+            if (!activePaths.has(relPath) && !activePaths.has(relPath.replace(/^data\//, ''))) {
+              fs.unlinkSync(fullPath);
+              deletedCount++;
+              if (fs.existsSync(fullPath + '.json')) fs.unlinkSync(fullPath + '.json');
+            }
+          }
+        }
+      }
+    };
+
+    cleanOrphans(uploadsDir);
+    res.json({ success: true, message: `Dibersihkan ${deletedCount} lampiran yatim (tidak memiliki record database).` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/backup/integrity/reconstruct', async (req, res) => {
+  try {
+    const db = await readDb();
+    const activePaths = new Set(db.mails.map((m: any) => m.pdfPath).filter(Boolean));
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    let reconstructedCount = 0;
+
+    const findAndReconstruct = async (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stats = fs.statSync(fullPath);
+        if (stats.isDirectory()) {
+          await findAndReconstruct(fullPath);
+        } else if (stats.isFile() && item.endsWith('.pdf')) {
+          const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+          const checkPath1 = relPath;
+          const checkPath2 = relPath.startsWith('data/') ? relPath.substring(5) : relPath;
+          
+          if (!activePaths.has(checkPath1) && !activePaths.has(checkPath2)) {
+            let meta: any = null;
+            const sidecar = fullPath + '.json';
+            if (fs.existsSync(sidecar)) {
+              try {
+                meta = JSON.parse(fs.readFileSync(sidecar, 'utf-8'));
+              } catch {}
+            }
+
+            const mailId = `mail_reconstructed_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            const metadata = meta?.metadata || {
+              noUrut: item.substring(0, 10).replace(/[^0-9]/g, '') || '000',
+              tanggalTerima: new Date(stats.birthtime || stats.mtime).toISOString().split('T')[0],
+              tanggalSurat: new Date(stats.birthtime || stats.mtime).toISOString().split('T')[0],
+              jenisSurat: 'Masuk',
+              noSurat: item.replace('.pdf', ''),
+              suratDari: 'Direkonstruksi dari Lampiran',
+              perihal: `Dokumen Lampiran: ${item}`,
+              catatan: 'Rekonstruksi Integritas Otomatis'
+            };
+
+            await pool.query(
+              'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
+              [mailId, metadata, checkPath2, 1]
+            );
+            reconstructedCount++;
+          }
+        }
+      }
+    };
+
+    await findAndReconstruct(uploadsDir);
+    res.json({ success: true, message: `Berhasil rekonstruksi ${reconstructedCount} agenda surat dari berkas lampiran yatim.` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 app.get('/api/backup/integrity', async (req, res) => {

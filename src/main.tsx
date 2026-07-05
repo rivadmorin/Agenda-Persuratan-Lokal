@@ -1,4 +1,19 @@
 /// <reference path="./material-web.d.ts" />
+// Patch React 19 / Material Web Components "form" property getter/setter conflict
+Object.defineProperty(HTMLElement.prototype, 'form', {
+  get() {
+    return this.closest('form') || this.getAttribute('form');
+  },
+  set(val) {
+    if (typeof val === 'string') {
+      this.setAttribute('form', val);
+    } else if (!val) {
+      this.removeAttribute('form');
+    }
+  },
+  configurable: true
+});
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';

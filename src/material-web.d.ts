@@ -24,6 +24,7 @@ declare global {
       'md-linear-progress': any;
       'md-circular-progress': any;
       'md-navigation-drawer': any;
+      'md-slider': any;
     }
   }
 }
@@ -52,6 +53,7 @@ declare module 'react' {
       'md-linear-progress': any;
       'md-circular-progress': any;
       'md-navigation-drawer': any;
+      'md-slider': any;
     }
   }
 }
