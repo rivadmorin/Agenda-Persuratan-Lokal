@@ -63,6 +63,8 @@ export default function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [mailToEdit, setMailToEdit] = useState<MailRecord | null>(null);
   const [onlineCount, setOnlineCount] = useState(1);
+  const [connectionError, setConnectionError] = useState(false);
+  const [loadingMails, setLoadingMails] = useState(false);
 
   // Modal states
   const [confirmModal, setConfirmModal] = useState<{
@@ -92,24 +94,52 @@ export default function App() {
     setupSSE();
   }, []);
 
+  const getHeaders = () => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (currentUser) {
+      headers['x-username'] = currentUser.username;
+      headers['x-user-name'] = currentUser.name;
+    }
+    return headers;
+  };
+
   const fetchConfig = async () => {
     try {
       const res = await fetch('/api/config');
-      const data = await res.json();
-      setConfig(data);
-      if (data.themeColor) generateM3Theme(data.themeColor);
+      if (res.ok) {
+        const data = await res.json();
+        setConfig(data);
+        if (data.themeColor) generateM3Theme(data.themeColor);
+        setConnectionError(false);
+      } else {
+        setConnectionError(true);
+      }
     } catch (err) {
       console.error('Failed to fetch config', err);
+      setConnectionError(true);
     }
   };
 
   const fetchMails = async () => {
+    setLoadingMails(true);
     try {
-      const res = await fetch('/api/mails');
-      const data = await res.json();
-      setMails(data);
+      const res = await fetch('/api/mails', {
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMails(data);
+        setConnectionError(false);
+      } else {
+        setConnectionError(true);
+      }
     } catch (err) {
       console.error('Failed to fetch mails', err);
+      setConnectionError(true);
+    } finally {
+      setLoadingMails(false);
     }
   };
 
@@ -228,86 +258,96 @@ export default function App() {
       });
   };
 
-  if (!currentUser || !config) {
-    return <Login appName={config?.appName || 'Agenda Persuratan'} onLoginSuccess={handleLoginSuccess} />;
-  }
-
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--md-sys-color-surface)]">
-      <Sidebar
-        currentUser={currentUser}
-        appName={config.appName}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        onLogout={handleLogout}
-        onlineCount={onlineCount}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-      />
+    <>
+      {!currentUser || !config ? (
+        <Login appName={config?.appName || 'Agenda Persuratan'} onLoginSuccess={handleLoginSuccess} />
+      ) : (
+        <div className="flex h-screen overflow-hidden bg-[var(--md-sys-color-surface)]">
+          <Sidebar
+            currentUser={currentUser}
+            appName={config.appName}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onLogout={handleLogout}
+            onlineCount={onlineCount}
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+          />
 
-      <main className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-7xl mx-auto h-full">
-          {activeTab === 'dashboard' && (
-            <Dashboard
-              mails={mails}
-              config={config}
-              onNavigateToTab={setActiveTab}
-              onSelectMail={(m) => { setMailToEdit(m); setIsDrawerOpen(true); }}
-            />
-          )}
+          <main className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-7xl mx-auto h-full">
+              {activeTab === 'dashboard' && (
+                <Dashboard
+                  mails={mails}
+                  config={config}
+                  onNavigateToTab={setActiveTab}
+                  onSelectMail={(m) => { setMailToEdit(m); setIsDrawerOpen(true); }}
+                />
+              )}
 
-          {activeTab === 'mails' && (
-            <MailTable
-              mails={mails}
-              config={config}
-              onAdd={() => { setMailToEdit(null); setIsDrawerOpen(true); }}
-              onEdit={(m) => { setMailToEdit(m); setIsDrawerOpen(true); }}
-              onDelete={handleDeleteMail}
-              onViewPdf={(path) => window.open(`/api/files/${path}`, '_blank')}
-              onExportExcel={() => window.open('/api/excel/export', '_blank')}
-              onRefresh={fetchMails}
-              onBatchDownload={(ids) => {
-                fetch('/api/pdf/batch-download', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ mailIds: ids })
-                }).then(res => res.blob()).then(blob => {
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'Arsip_Surat.zip';
-                  a.click();
-                });
-              }}
-              onPrintReceipt={(ids) => {
-                setReceiptModal({
-                  isOpen: true,
-                  mailIds: ids
-                });
-              }}
-            />
-          )}
+              {activeTab === 'mails' && (
+                <MailTable
+                  mails={mails}
+                  config={config}
+                  onAdd={() => { setMailToEdit(null); setIsDrawerOpen(true); }}
+                  onEdit={(m) => { setMailToEdit(m); setIsDrawerOpen(true); }}
+                  onDelete={handleDeleteMail}
+                  onViewPdf={(path) => window.open(`/api/files/${path}`, '_blank')}
+                  onExportExcel={() => window.open('/api/excel/export', '_blank')}
+                  onRefresh={fetchMails}
+                  onBatchDownload={(ids) => {
+                    fetch('/api/pdf/batch-download', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ mailIds: ids })
+                    }).then(res => res.blob()).then(blob => {
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'Arsip_Surat.zip';
+                      a.click();
+                    });
+                  }}
+                  onPrintReceipt={(ids) => {
+                    setReceiptModal({
+                      isOpen: true,
+                      mailIds: ids
+                    });
+                  }}
+                />
+              )}
 
-          {activeTab === 'pdf-tools' && <PdfTools />}
-          {activeTab === 'users' && <UserManagement />}
-          {activeTab === 'settings' && (
-            <Settings 
-              config={config} 
-              onSaveConfig={handleSaveConfig} 
-              darkMode={darkMode} 
-              setDarkMode={setDarkMode} 
-            />
-          )}
+              {activeTab === 'pdf-tools' && <PdfTools />}
+              {activeTab === 'users' && <UserManagement />}
+              {activeTab === 'settings' && (
+                <Settings
+                  config={config}
+                  onSaveConfig={handleSaveConfig}
+                  darkMode={darkMode}
+                  setDarkMode={setDarkMode}
+                />
+              )}
+            </div>
+          </main>
+
+          <MailDrawer
+            isOpen={isDrawerOpen}
+            onClose={() => setIsDrawerOpen(false)}
+            columns={config.columns}
+            mailToEdit={mailToEdit}
+            onSave={handleSaveMail}
+          />
+
+          <ReceiptModal
+            isOpen={receiptModal.isOpen}
+            onClose={() => setReceiptModal({ ...receiptModal, isOpen: false })}
+            onConfirm={handleConfirmReceipt}
+            defaultSignerLeft={currentUser?.name || ''}
+            defaultSignerRight=""
+          />
         </div>
-      </main>
-
-      <MailDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        columns={config.columns}
-        mailToEdit={mailToEdit}
-        onSave={handleSaveMail}
-      />
+      )}
 
       <ConfirmModal
         isOpen={confirmModal.isOpen}
@@ -317,13 +357,19 @@ export default function App() {
         onConfirm={confirmModal.onConfirm}
       />
 
-      <ReceiptModal
-        isOpen={receiptModal.isOpen}
-        onClose={() => setReceiptModal({ ...receiptModal, isOpen: false })}
-        onConfirm={handleConfirmReceipt}
-        defaultSignerLeft={currentUser?.name || ''}
-        defaultSignerRight=""
+      <ConfirmModal
+        isOpen={connectionError}
+        title="Kesalahan Koneksi"
+        message="Gagal menghubungkan ke server. Silakan periksa koneksi Anda atau coba lagi nanti."
+        confirmText="Coba Lagi"
+        cancelText="Tutup"
+        onClose={() => setConnectionError(false)}
+        onConfirm={() => {
+          setConnectionError(false);
+          fetchConfig();
+          fetchMails();
+        }}
       />
-    </div>
+    </>
   );
 }
