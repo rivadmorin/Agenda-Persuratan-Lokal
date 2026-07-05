@@ -43,3 +43,13 @@ To ensure all agents can resolve common build, environment, and code compilation
 **Context:** Analyzed historical palette/UI learnings. Icon-only buttons and disabled buttons in Material Web (<md-*>) fail screen-reader accessibility checks.
 **Root Cause:** The `md-icon-button` relies on internal `span` rendering for icons, hiding meaning, and disabled elements may not trigger necessary mouse/focus events for tooltips.
 **Action:** Enforce explicit `aria-label` attributes on any icon-only `<md-icon-button>`. For tooltips on disabled buttons, rely on `aria-describedby` with an external sibling element rather than nested hover states.
+
+## 2024-05-18 - [Sidecar Metadata Architecture]
+**Context:** Storing structured mail data entirely in a single PostgreSQL database creates a single point of failure. If the database is dropped or corrupted, all associated PDF context is lost.
+**Root Cause:** Standard relational DBs decouple the binary storage (file system) from the metadata storage (DB), making recovery complex when out of sync.
+**Action:** Implemented a "Sidecar" architecture (`saveSidecarMeta`). Every PDF upload simultaneously writes a `[filename].pdf.json` sidecar file containing the full JSON payload of the mail record.
+
+## 2024-05-18 - [Data Integrity & Reconstruction Pattern]
+**Context:** Orphaned files (PDFs without DB records) accumulate in `data/uploads/` over time due to interrupted network requests, or database resets.
+**Root Cause:** Deleting orphaned files permanently destroys potentially critical document data.
+**Action:** Created the `/api/backup/integrity/reconstruct` endpoint. Instead of just purging orphans, the system scans `data/uploads/`, identifies `.pdf` files missing from the DB, reads their `.pdf.json` sidecars, and autonomously rebuilds the PostgreSQL database records, ensuring zero data loss.
