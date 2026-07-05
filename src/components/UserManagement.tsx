@@ -37,10 +37,18 @@ export default function UserManagement() {
     setLoading(true);
     try {
       const res = await fetch('/api/users');
+      if (!res.ok) {
+        throw new Error(`Server returned code ${res.status}`);
+      }
       const data = await res.json();
       setUsers(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch users:', error);
+      setErrorModal({
+        isOpen: true,
+        title: 'Gagal Memuat Pengguna',
+        message: error.message || 'Gagal memuat daftar pengguna dari server.',
+      });
     } finally {
       setLoading(false);
     }

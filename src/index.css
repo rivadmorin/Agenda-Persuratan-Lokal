@@ -150,18 +150,145 @@ md-filled-button, md-outlined-button, md-text-button, md-tonal-button {
   --md-sys-typescale-label-large-size: 0.875rem !important;
   --md-sys-typescale-label-large-weight: 700 !important;
   --md-sys-typescale-label-large-tracking: 0.02em !important;
-  --md-filled-button-container-height: 44px;
-  --md-outlined-button-container-height: 44px;
-  --md-filled-button-leading-space: 24px;
-  --md-filled-button-trailing-space: 24px;
-  --md-outlined-button-leading-space: 24px;
-  --md-outlined-button-trailing-space: 24px;
-  white-space: nowrap;
-  min-width: 120px; /* Force minimum width to prevent truncation */
+  --md-filled-button-container-height: 44px !important;
+  --md-outlined-button-container-height: 44px !important;
+  --md-filled-button-leading-space: 32px !important;
+  --md-filled-button-trailing-space: 32px !important;
+  --md-outlined-button-leading-space: 32px !important;
+  --md-outlined-button-trailing-space: 32px !important;
+  --md-filled-button-with-icon-leading-space: 24px !important;
+  --md-filled-button-with-icon-trailing-space: 32px !important;
+  --md-outlined-button-with-icon-leading-space: 24px !important;
+  --md-outlined-button-with-icon-trailing-space: 32px !important;
+  white-space: nowrap !important;
+  min-width: max-content !important; /* Never truncate or cut text */
+
+  /* Micro-interactions & animations */
+  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1), opacity 150ms ease;
+  cursor: pointer;
 }
 
-md-filled-button::part(label), md-outlined-button::part(label) {
+md-filled-button:active, md-outlined-button:active, md-text-button:active, md-tonal-button:active {
+  transform: scale(0.96);
+}
+
+md-filled-button {
+  --md-filled-button-container-shape: 9999px !important;
+  --md-filled-button-container-color: var(--md-sys-color-primary);
+  --md-filled-button-label-text-color: var(--md-sys-color-on-primary);
+  --md-filled-button-hover-state-layer-color: var(--md-sys-color-on-primary);
+  --md-filled-button-pressed-state-layer-color: var(--md-sys-color-on-primary);
+}
+
+md-outlined-button {
+  --md-outlined-button-container-shape: 9999px !important;
+  --md-outlined-button-outline-width: 1px !important;
+  --md-outlined-button-outline-color: var(--md-sys-color-outline-variant);
+  --md-outlined-button-label-text-color: var(--md-sys-color-primary);
+  --md-outlined-button-hover-state-layer-color: var(--md-sys-color-primary);
+  --md-outlined-button-pressed-state-layer-color: var(--md-sys-color-primary);
+  --md-outlined-button-hover-outline-color: var(--md-sys-color-primary);
+}
+
+md-text-button {
+  --md-text-button-container-shape: 9999px !important;
+  --md-text-button-label-text-color: var(--md-sys-color-primary);
+  --md-text-button-hover-state-layer-color: var(--md-sys-color-primary);
+  --md-text-button-pressed-state-layer-color: var(--md-sys-color-primary);
+}
+
+md-filled-button::part(label),
+md-outlined-button::part(label),
+md-filled-tonal-button::part(label),
+md-tonal-button::part(label),
+md-elevated-button::part(label),
+md-text-button::part(label) {
   padding-top: 1px;
+  text-overflow: unset !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+}
+
+md-filled-button [slot="icon"],
+md-outlined-button [slot="icon"],
+md-filled-tonal-button [slot="icon"],
+md-tonal-button [slot="icon"],
+md-elevated-button [slot="icon"],
+md-text-button [slot="icon"] {
+  margin-inline-end: 8px !important;
+}
+
+/* Enforce premium minimum width and perfect text/icon centering inside all Material buttons */
+md-filled-button,
+md-outlined-button,
+md-filled-tonal-button,
+md-tonal-button,
+md-elevated-button {
+  --md-filled-button-leading-space: 24px !important;
+  --md-filled-button-trailing-space: 24px !important;
+  --md-filled-button-with-leading-icon-leading-space: 24px !important;
+  --md-filled-button-with-leading-icon-trailing-space: 24px !important;
+  --md-filled-button-with-icon-leading-space: 24px !important;
+  --md-filled-button-with-icon-trailing-space: 24px !important;
+
+  --md-outlined-button-leading-space: 24px !important;
+  --md-outlined-button-trailing-space: 24px !important;
+  --md-outlined-button-with-leading-icon-leading-space: 24px !important;
+  --md-outlined-button-with-leading-icon-trailing-space: 24px !important;
+  --md-outlined-button-with-icon-leading-space: 24px !important;
+  --md-outlined-button-with-icon-trailing-space: 24px !important;
+
+  --md-filled-tonal-button-leading-space: 24px !important;
+  --md-filled-tonal-button-trailing-space: 24px !important;
+  --md-filled-tonal-button-with-leading-icon-leading-space: 24px !important;
+  --md-filled-tonal-button-with-leading-icon-trailing-space: 24px !important;
+  --md-filled-tonal-button-with-icon-leading-space: 24px !important;
+  --md-filled-tonal-button-with-icon-trailing-space: 24px !important;
+
+  --md-tonal-button-leading-space: 24px !important;
+  --md-tonal-button-trailing-space: 24px !important;
+  --md-tonal-button-with-leading-icon-leading-space: 24px !important;
+  --md-tonal-button-with-leading-icon-trailing-space: 24px !important;
+  --md-tonal-button-with-icon-leading-space: 24px !important;
+  --md-tonal-button-with-icon-trailing-space: 24px !important;
+
+  --md-elevated-button-leading-space: 24px !important;
+  --md-elevated-button-trailing-space: 24px !important;
+  --md-elevated-button-with-leading-icon-leading-space: 24px !important;
+  --md-elevated-button-with-leading-icon-trailing-space: 24px !important;
+  --md-elevated-button-with-icon-leading-space: 24px !important;
+  --md-elevated-button-with-icon-trailing-space: 24px !important;
+
+  min-width: 160px !important;
+}
+
+md-text-button {
+  --md-text-button-leading-space: 16px !important;
+  --md-text-button-trailing-space: 16px !important;
+  --md-text-button-with-leading-icon-leading-space: 16px !important;
+  --md-text-button-with-leading-icon-trailing-space: 16px !important;
+  --md-text-button-with-icon-leading-space: 16px !important;
+  --md-text-button-with-icon-trailing-space: 16px !important;
+  min-width: max-content !important;
+}
+
+/* Perfect full-width expansion and text/icon centering for web components via min-width inheritance */
+md-filled-button.w-full,
+md-outlined-button.w-full,
+md-filled-tonal-button.w-full,
+md-tonal-button.w-full,
+md-elevated-button.w-full {
+  min-width: 100% !important;
+}
+
+@media (min-width: 640px) {
+  md-filled-button.sm\:w-auto,
+  md-outlined-button.sm\:w-auto,
+  md-filled-tonal-button.sm\:w-auto,
+  md-tonal-button.sm\:w-auto,
+  md-elevated-button.sm\:w-auto {
+    min-width: 160px !important;
+  }
 }
 
 /* Custom Rainbow Slider Track */
@@ -190,7 +317,7 @@ md-slider.slider-hue-track::part(track) {
 
 .m3-table-container {
   border-radius: 24px;
-  overflow: hidden;
+  overflow: auto;
   background-color: var(--md-sys-color-surface-container);
   border: 1px solid var(--md-sys-color-outline-variant);
 }
@@ -221,6 +348,46 @@ md-slider.slider-hue-track::part(track) {
 
 .m3-table tr:hover {
   background-color: var(--md-sys-color-surface-container-highest);
+}
+
+/* Table Action Buttons Custom Styling */
+.action-btn-group md-icon-button {
+  --md-icon-button-icon-size: 20px;
+  background-color: var(--md-sys-color-surface-container-high);
+  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  transition: all 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.action-btn-group md-icon-button:hover {
+  background-color: var(--md-sys-color-surface-container-highest);
+  transform: translateY(-1px);
+}
+
+.action-btn-group md-icon-button:active {
+  transform: scale(0.95) translateY(0);
+}
+
+.btn-action-edit {
+  --md-icon-button-icon-color: var(--md-sys-color-primary) !important;
+  --md-icon-button-hover-icon-color: var(--md-sys-color-primary) !important;
+}
+
+.btn-action-download {
+  --md-icon-button-icon-color: #0284c7 !important; /* Sky Blue */
+  --md-icon-button-hover-icon-color: #0369a1 !important;
+}
+
+.btn-action-download[disabled] {
+  --md-icon-button-icon-color: var(--md-sys-color-outline) !important;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.btn-action-delete {
+  --md-icon-button-icon-color: var(--md-sys-color-error, #dc2626) !important;
+  --md-icon-button-hover-icon-color: var(--md-sys-color-error, #dc2626) !important;
 }
 
 .font-fill {

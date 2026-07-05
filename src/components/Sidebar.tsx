@@ -10,6 +10,8 @@ interface SidebarProps {
   onlineCount: number;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export default function Sidebar({
@@ -20,7 +22,9 @@ export default function Sidebar({
   onLogout,
   onlineCount,
   darkMode,
-  setDarkMode
+  setDarkMode,
+  collapsed,
+  onToggleCollapse
 }: SidebarProps) {
 
   const menuItems = [
@@ -34,8 +38,8 @@ export default function Sidebar({
   const filteredItems = menuItems.filter(item => !item.adminOnly || currentUser.role === 'admin');
 
   return (
-    <aside className="w-72 h-screen sticky top-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-4 justify-between z-10 transition-premium">
-      <div className="flex flex-col gap-6">
+    <aside className={`h-screen sticky top-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] justify-between z-10 transition-all duration-300 ease-in-out ${collapsed ? 'w-0 p-0 border-r-0 overflow-hidden opacity-0 pointer-events-none' : 'w-72 p-4 opacity-100'}`}>
+      <div className="flex flex-col gap-6 min-w-[256px]">
         <div className="flex items-start justify-between gap-4 px-2">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] flex items-center justify-center border border-[var(--md-sys-color-outline-variant)] shrink-0">
@@ -49,16 +53,28 @@ export default function Sidebar({
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-sm transition-premium active:scale-90 cursor-pointer shrink-0"
-            title={darkMode ? "Mode Terang" : "Mode Gelap"}
-            aria-label={darkMode ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
-          >
-            <span className="material-symbols-outlined text-lg">
-              {darkMode ? 'light_mode' : 'dark_mode'}
-            </span>
-          </button>
+          <div className="flex gap-1.5 shrink-0">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-sm transition-all duration-200 active:scale-90 cursor-pointer shrink-0"
+              title={darkMode ? "Mode Terang" : "Mode Gelap"}
+              aria-label={darkMode ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+            >
+              <span className="material-symbols-outlined text-lg">
+                {darkMode ? 'light_mode' : 'dark_mode'}
+              </span>
+            </button>
+            <button
+              onClick={onToggleCollapse}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-sm transition-all duration-200 active:scale-90 cursor-pointer shrink-0"
+              title="Sembunyikan Sidebar"
+              aria-label="Sembunyikan Sidebar"
+            >
+              <span className="material-symbols-outlined text-lg">
+                menu_open
+              </span>
+            </button>
+          </div>
         </div>
  
         <nav className="flex flex-col gap-1.5">

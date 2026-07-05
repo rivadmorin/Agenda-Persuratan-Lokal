@@ -1,4 +1,4 @@
-# Master Agent Registry
+# Google Jules Agent Memory Index
 
 This index connects all critical learnings and memories across different specialized agents working in this repository.
 
@@ -12,15 +12,14 @@ This index connects all critical learnings and memories across different special
 - [Inspector 🧐](inspector.md) - Code hygiene, readability, and documentation standards.
 - [Launchpad 🚀](launchpad.md) - Environment automation and orchestration scripts.
 - [Material 📐](material.md) - Google Material Design and web components styling insights.
+- [Nomad 💾](nomad.md) - Offline-first, portabilization, and USB execution insights.
+- [Orchestrator 🕴️](orchestrator.md) - Task triage, specialist routing, and execution scheduling insights.
+- [Planner 🗺️](planner.md) - Persistent file-based planning and state coordination insights.
 - [Scholar 🧠](scholar.md) - Self-learning, meta-reflection, and error analysis logs.
 - [Scribe 📜](scribe.md) - Documentation and readme updates.
 - [Sentinel 🛡️](sentinel.md) - Security auditing and vulnerability fixes.
 - [Taste 💅](taste.md) - Frontend design taste, aesthetics, and anti-slop styling insights.
 - [Test Pilot 🧪](testpilot.md) - Unit and integration testing logs.
-
-## Workspace Initialization
-
-All agents must run `pnpm install` upon entering a fresh sandbox environment before executing any builds, tests, or scripts. Do not assume `node_modules` is populated.
 
 ## Index Maintenance
 
@@ -31,5 +30,3 @@ When you (an active agent) discover a critical learning and write it to your res
 ## Archived Memories
 
 - [Archive Folder](archive/) - Stores historical or legacy memory logs from retired agents or past setups (used by Scholar 🧠 for meta-learning).
-- [bolt_legacy.md](archive/bolt_legacy.md) - Legacy Bolt memory
-- [palette_legacy.md](archive/palette_legacy.md) - Legacy Palette memory

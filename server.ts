@@ -19,11 +19,15 @@ const execPromise = promisify(exec);
  * Philosophy: Simple, Resource-efficient, High Stability, and Local.
  */
 const pool = new pg.Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'mail_agenda',
-  password: process.env.DB_PASSWORD || 'postgres123',
-  port: parseInt(process.env.DB_PORT || '5432'),
+  user: process.env.SQL_USER || process.env.DB_USER || 'postgres',
+  host: process.env.SQL_HOST || process.env.DB_HOST || 'localhost',
+  database: process.env.SQL_DB_NAME || process.env.DB_NAME || 'mail_agenda',
+  password: process.env.SQL_PASSWORD || process.env.DB_PASSWORD || 'postgres123',
+  port: parseInt(process.env.SQL_PORT || process.env.DB_PORT || '5432'),
+});
+
+pool.on('error', (err) => {
+  logMessage('ERROR', `Unexpected error on idle PG client: ${err.message}`);
 });
 
 const app = express();
@@ -103,7 +107,7 @@ async function readDb() {
   try {
     const configRes = await client.query('SELECT data FROM config LIMIT 1');
     const usersRes = await client.query('SELECT username, password, name, role FROM users');
-    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails');
+    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails ORDER BY created_at ASC');
     return {
       config: configRes.rows[0]?.data || defaultDbConfig,
       users: usersRes.rows,
@@ -452,7 +456,8 @@ app.post('/api/mails', async (req, res) => {
     const db = await readDb();
     let pdfPath = '';
     if (pdfData && pdfName) {
-      const buffer = Buffer.from(pdfData, 'base64');
+      const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
+      const buffer = Buffer.from(cleanBase64, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
       const [year, month, day] = tTerima.split('-');
       const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
@@ -489,7 +494,8 @@ app.put('/api/mails/:id', async (req, res) => {
       }
       pdfPath = '';
     } else if (pdfData && pdfName) {
-      const buffer = Buffer.from(pdfData, 'base64');
+      const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
+      const buffer = Buffer.from(cleanBase64, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
       const [year, month, day] = tTerima.split('-');
       const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
@@ -512,6 +518,42 @@ app.put('/api/mails/:id', async (req, res) => {
     saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: existing.created_at });
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/mails/:id/upload', async (req, res) => {
+  const { id } = req.params;
+  const { pdfData } = req.body;
+  try {
+    if (!pdfData) {
+      return res.status(400).json({ success: false, message: 'Data PDF kosong' });
+    }
+    const db = await readDb();
+    const mailRes = await pool.query('SELECT * FROM mails WHERE id = $1', [id]);
+    if (mailRes.rows.length === 0) return res.status(404).send();
+    const existing = mailRes.rows[0];
+    const metadata = existing.metadata || {};
+
+    const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
+    const [year, month, day] = tTerima.split('-');
+    const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
+    const absDir = path.join(process.cwd(), relDir);
+    if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
+
+    const formattedName = getFormattedPdfName(db.config, metadata, 'uploaded_document.pdf');
+    const pdfPath = path.join(relDir, formattedName).replace(/\\/g, '/');
+    fs.writeFileSync(path.join(absDir, formattedName), buffer);
+
+    await pool.query('UPDATE mails SET pdf_path = $1, version_id = version_id + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [pdfPath, id]);
+    saveSidecarMeta({ ...existing, pdf_path: pdfPath, metadata });
+
+    res.json({ success: true, pdfPath });
+  } catch (err: any) {
+    logMessage('ERROR', `Gagal mengunggah PDF secara langsung: ${err.message}`);
+    res.status(500).json({ success: false, message: 'Gagal memproses unggahan PDF.' });
+  }
 });
 
 app.delete('/api/mails/:id', async (req, res) => {
@@ -1007,11 +1049,16 @@ app.get('/api/files/*', (req, res) => {
  * [SYSTEM_BOOTSTRAP]
  */
 async function initDb() {
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     logMessage('INFO', 'Initializing PostgreSQL Schema...');
     const schema = fs.readFileSync(path.join(process.cwd(), 'schema.sql'), 'utf-8');
-    await client.query(schema);
+    try {
+      await client.query(schema);
+    } catch (schemaErr: any) {
+      logMessage('WARN', `Schema execution skipped/failed: ${schemaErr.message}`);
+    }
     const configCheck = await client.query('SELECT count(*) FROM config');
     if (parseInt(configCheck.rows[0].count) === 0) await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
     const userCheck = await client.query('SELECT count(*) FROM users');
@@ -1019,8 +1066,9 @@ async function initDb() {
     logMessage('INFO', 'PostgreSQL Ready');
   } catch (err: any) {
     logMessage('ERROR', `PG Failure: ${err.message}`);
-
-  } finally { client.release(); }
+  } finally {
+    if (client) client.release();
+  }
 }
 
 async function startServer() {

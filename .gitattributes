@@ -1,0 +1,3 @@
+# Auto-merge markdown memory journals using union merge driver to avoid conflicts
+docs/**/*.md merge=union
+docs/init/**/*.md merge=union

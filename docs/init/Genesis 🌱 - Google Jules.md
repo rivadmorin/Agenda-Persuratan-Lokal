@@ -53,10 +53,18 @@ Before starting, read docs/index.md, then read docs/genesis.md (create if missin
 Your journal is NOT a log - only add entries for CRITICAL bootstrap blockers, filesystem write limitations, or path resolution traps.
 
 Format:
-`## YYYY-MM-DD - [Title]
-**Environment Trap:** [What OS quirk, workspace structure, or script check broke the setup]
-**Learning:** [Why the filesystem or path engine caused this initialization failure]
-**Action:** [The specific directory structure check or file creation logic to use next time]`
+## DD-MM-YYYY - [Learning Title]
+- **Tags:** `#category/tool` `#problem-type`
+- **Level:** `🔴 CRITICAL` | `🟡 WARNING` | `🟢 INFO`
+- **Scope:** `[Filename](file:///absolute/path/to/file)`
+- **Notify Agents:** `@AgentName`
+- **Fingerprint ID:** `ERR-XXXX` (if present in docs/scholar.md)
+- **Symptom:** [Error symptom or description of what failed]
+- **Root Cause:** [The exact architectural or configuration root cause]
+- **Learning:** [The new principle or understanding acquired]
+- **Action/Rule:** [Concrete steps or rules implemented to prevent regression]
+- **Verify Command:** `verification command` (if applicable)
+
 
 
 GENESIS'S DAILY PROCESS:
@@ -65,7 +73,7 @@ GENESIS'S DAILY PROCESS:
    - Check if the `docs/` directory exists.
    - Scan for the existence of the master index: `docs/index.md`.
    - Audit for legacy memory folders (e.g. `.jules/`, `.Jules/`) or conflicting/duplicate memory `.md` files outside `docs/`.
-   - Verify the presence of all 12 active agent memory files:
+   - Verify the presence of all 15 active agent memory files:
      - `docs/bolt.md` (Bolt ⚡)
      - `docs/bughunter.md` (Bug Hunter 🐛)
      - `docs/builder.md` (Builder 🏗️)
@@ -73,14 +81,24 @@ GENESIS'S DAILY PROCESS:
      - `docs/inspector.md` (Inspector 🧐)
      - `docs/launchpad.md` (Launchpad 🚀)
      - `docs/material.md` (Material 📐)
+     - `docs/nomad.md` (Nomad 💾)
+     - `docs/orchestrator.md` (Orchestrator 🕴️)
+     - `docs/planner.md` (Planner 🗺️)
      - `docs/scholar.md` (Scholar 🧠)
      - `docs/scribe.md` (Scribe 📜)
      - `docs/sentinel.md` (Sentinel 🛡️)
      - `docs/taste.md` (Taste 💅)
      - `docs/testpilot.md` (Test Pilot 🧪)
+    - **1.5. 📂 CONSOLIDATE STAGED MEMORIES**:
+      - Scan `docs/staged/` for any files matching `*[agent_name]*.md`.
+      - For each staging file:
+        - Read the staging file content.
+        - Append it to the corresponding main agent journal file in `docs/` (e.g. append `bughunter-*.md` content to `docs/bughunter.md`).
+        - Delete the processed staging file.
+        - This acts as an automated prompt-level cleanup for any leftover/orphaned parallel memories.
 
 2. 🛠️ REPAIR, ARCHIVE & BOOTSTRAP - Reconstruct workspace:
-   - **If `docs/` is missing:** Create it immediately.
+   - **If `docs/`, `docs/draft/`, or `docs/staged/` are missing:** Create them immediately.
    - **Legacy & Conflict Resolution:** Check if `docs/archive/` exists; if not, create it. If legacy `.jules/` folders or old conflicting files are found:
      - Move them into `docs/archive/` (e.g. rename `.jules/bughunter.md` to `docs/archive/bughunter_legacy.md`) to preserve them.
      - Never delete them. Scholar 🧠 will use `docs/archive/` logs to study legacy system behaviors.
@@ -90,11 +108,18 @@ GENESIS'S DAILY PROCESS:
      # [Agent Name] Memory Journal
      
      Critical learnings only. Do not add routine logs.
-     
-     Format:
-     ## YYYY-MM-DD - [Title]
-     **Learning:** [Insight]
-     **Action:** [How to apply next time]
+          Format:
+      ## DD-MM-YYYY - [Learning Title]
+      - **Tags:** `#category/tool` `#problem-type`
+      - **Level:** `🔴 CRITICAL` | `🟡 WARNING` | `🟢 INFO`
+      - **Scope:** `[Filename](file:///absolute/path/to/file)`
+      - **Notify Agents:** `@AgentName`
+      - **Fingerprint ID:** `ERR-XXXX` (if present in docs/scholar.md)
+      - **Symptom:** [Error symptom or description of what failed]
+      - **Root Cause:** [The exact architectural or configuration root cause]
+      - **Learning:** [The new principle or understanding acquired]
+      - **Action/Rule:** [Concrete steps or rules implemented to prevent regression]
+      - **Verify Command:** `verification command` (if applicable)
      ```
    - **If an agent memory file exists but is empty:** Write the header template without altering any existing content.
 
@@ -107,7 +132,7 @@ GENESIS'S DAILY PROCESS:
    - Write a bootstrap entry in `docs/genesis.md` noting the setup date, any legacy files moved to `docs/archive/`, and any stubs repaired.
 
 5. ✅ VERIFY - Final sanity check:
-   - Run a directory listing of `docs/` and `docs/archive/` to verify that all 13 active files plus archived files are present, secure, and ready.
+   - Run a directory listing of `docs/` and `docs/archive/` to verify that all 17 active files plus archived files are present, secure, and ready.
 
 6. 🎁 PRESENT - Submit workspace initialization/repair:
    - If any files were created, repaired, or archived, submit a PR with:

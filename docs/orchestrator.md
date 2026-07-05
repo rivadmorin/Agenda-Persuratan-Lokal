@@ -1,4 +1,4 @@
-# Test Pilot Memory Journal
+# Orchestrator Memory Journal
 
 Critical learnings only. Do not add routine logs.
 

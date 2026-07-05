@@ -1,6 +1,6 @@
 import { argbFromHex, themeFromSourceColor, hexFromArgb } from "@material/material-color-utilities";
 
-export function generateM3Theme(seedColor: string) {
+export function generateM3Theme(seedColor: string, customBg?: string, customDarkBg?: string) {
   const theme = themeFromSourceColor(argbFromHex(seedColor));
   
   const getCssVars = (scheme: any) => {
@@ -52,12 +52,31 @@ export function generateM3Theme(seedColor: string) {
     :root {
       ${getCssVars(theme.schemes.light)}
       ${lightSurfaceContainer}
+      ${customBg ? `
+        --md-sys-color-background: ${customBg};
+        --md-sys-color-surface: color-mix(in srgb, ${customBg} 98%, black);
+        --md-sys-color-surface-container-lowest: color-mix(in srgb, ${customBg} 100%, white);
+        --md-sys-color-surface-container-low: color-mix(in srgb, ${customBg} 96%, black);
+        --md-sys-color-surface-container: color-mix(in srgb, ${customBg} 94%, black);
+        --md-sys-color-surface-container-high: color-mix(in srgb, ${customBg} 91%, black);
+        --md-sys-color-surface-container-highest: color-mix(in srgb, ${customBg} 87%, black);
+      ` : ''}
     }
     .dark {
       ${getCssVars(theme.schemes.dark)}
       ${darkSurfaceContainer}
-      --md-sys-color-background: #090e1a;
-      --md-sys-color-surface: #0f172a;
+      --md-sys-color-background: ${customDarkBg || '#090e1a'};
+      ${customDarkBg ? `
+        --md-sys-color-surface: color-mix(in srgb, ${customDarkBg} 94%, white);
+        --md-sys-color-surface-container-lowest: color-mix(in srgb, ${customDarkBg} 80%, black);
+        --md-sys-color-surface-container-low: color-mix(in srgb, ${customDarkBg} 94%, white);
+        --md-sys-color-surface-container: color-mix(in srgb, ${customDarkBg} 91%, white);
+        --md-sys-color-surface-container-high: color-mix(in srgb, ${customDarkBg} 86%, white);
+        --md-sys-color-surface-container-highest: color-mix(in srgb, ${customDarkBg} 81%, white);
+      ` : `
+        --md-sys-color-background: #090e1a;
+        --md-sys-color-surface: #0f172a;
+      `}
     }
   `;
 

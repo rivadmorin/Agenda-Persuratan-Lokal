@@ -2,6 +2,67 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ColumnDefinition, ColumnProfile, ColumnType, AppConfig } from '../types';
 import { generateM3Theme } from '../utils/theme';
 import { Hct, argbFromHex, hexFromArgb } from '@material/material-color-utilities';
+import { motion, AnimatePresence } from 'motion/react';
+
+export interface ColorSchemeOption {
+  id: string;
+  name: string;
+  description: string;
+  chroma: number;
+  tone: number;
+  icon: string;
+}
+
+export const colorSchemes: ColorSchemeOption[] = [
+  {
+    id: 'vibrant',
+    name: 'Vibrant Dynamic',
+    description: 'Saturasi tinggi dan kontras modern khas Material Design 3.',
+    chroma: 48,
+    tone: 40,
+    icon: 'palette'
+  },
+  {
+    id: 'pastel',
+    name: 'Soft Pastel',
+    description: 'Warna lembut, cerah, dan tenang untuk kenyamanan mata.',
+    chroma: 24,
+    tone: 52,
+    icon: 'spa'
+  },
+  {
+    id: 'muted',
+    name: 'Classic Muted',
+    description: 'Saturasi rendah, profesional, formal, dan tidak mencolok.',
+    chroma: 14,
+    tone: 42,
+    icon: 'business_center'
+  },
+  {
+    id: 'deep',
+    name: 'Deep Velvet',
+    description: 'Warna gelap pekat berkarakter kuat untuk kesan eksklusif.',
+    chroma: 68,
+    tone: 34,
+    icon: 'dark_mode'
+  },
+  {
+    id: 'neon',
+    name: 'Cyber Neon',
+    description: 'Warna ultra-vibrant, neon futuristik bergaya synthwave.',
+    chroma: 88,
+    tone: 48,
+    icon: 'bolt'
+  },
+  {
+    id: 'monochrome',
+    name: 'Slate Monochrome',
+    description: 'Warna abu-abu monokromatik modern, elegan, dan minimalis.',
+    chroma: 0,
+    tone: 40,
+    icon: 'filter_b_and_w'
+  }
+];
 
 export default function Settings({
   config,
@@ -16,6 +77,8 @@ export default function Settings({
 }) {
   const [appName, setAppName] = useState(config.appName);
   const [themeColor, setThemeColor] = useState(config.themeColor);
+  const [themeBgColor, setThemeBgColor] = useState(config.themeBgColor || '#f8fafc');
+  const [themeDarkBgColor, setThemeDarkBgColor] = useState(config.themeDarkBgColor || '#090e1a');
   const [logoType, setLogoType] = useState<'lucide' | 'emoji' | 'image'>(config.logoType || 'emoji');
   const [logoUrl, setLogoUrl] = useState(config.logoUrl || '📨');
   const [autoCompressPdf, setAutoCompressPdf] = useState(config.autoCompressPdf);
@@ -77,6 +140,7 @@ export default function Settings({
   const [hue, setHue] = useState(initialHct.hue);
   const [chroma, setChroma] = useState(initialHct.chroma);
   const [tone, setTone] = useState(initialHct.tone);
+  const [colorScheme, setColorScheme] = useState<string>(config.themeColorScheme || 'vibrant');
 
   useEffect(() => {
     const hct = getHctFromHex(themeColor || '#0d9488');
@@ -85,17 +149,56 @@ export default function Settings({
     setTone(hct.tone);
   }, [themeColor]);
 
-  const handleHueChange = (h: number) => {
-    // We use a fixed vibrant chroma and medium tone for the "instant" theme color
-    const newHct = Hct.from(h, 48, 40);
+  const applyThemeColor = (h: number, schemeId: string, currentBg?: string, currentDarkBg?: string) => {
+    const scheme = colorSchemes.find(s => s.id === schemeId) || colorSchemes[0];
+    const newHct = Hct.from(h, scheme.chroma, scheme.tone);
     const newHex = hexFromArgb(newHct.toInt());
     setThemeColor(newHex);
-    generateM3Theme(newHex);
+    generateM3Theme(newHex, currentBg || themeBgColor, currentDarkBg || themeDarkBgColor);
+  };
+
+  const handlePresetClick = (hex: string, h: number) => {
+    setThemeColor(hex);
+    setHue(h);
+    const scheme = colorSchemes.find(s => s.id === colorScheme) || colorSchemes[0];
+    const newHct = Hct.from(h, scheme.chroma, scheme.tone);
+    const newHex = hexFromArgb(newHct.toInt());
+    setThemeColor(newHex);
+    generateM3Theme(newHex, themeBgColor, themeDarkBgColor);
+  };
+
+  const handleHueChange = (h: number) => {
+    setHue(h);
+    applyThemeColor(h, colorScheme);
+  };
+
+  const handleSchemeChange = (schemeId: string) => {
+    setColorScheme(schemeId);
+    applyThemeColor(hue, schemeId);
+  };
+
+  const handleHexPickerChange = (hex: string) => {
+    setThemeColor(hex);
+    const hct = getHctFromHex(hex);
+    setHue(hct.hue);
+    generateM3Theme(hex, themeBgColor, themeDarkBgColor);
+  };
+
+  const handleBgColorChange = (hex: string) => {
+    setThemeBgColor(hex);
+    generateM3Theme(themeColor, hex, themeDarkBgColor);
+  };
+
+  const handleDarkBgColorChange = (hex: string) => {
+    setThemeDarkBgColor(hex);
+    generateM3Theme(themeColor, themeBgColor, hex);
   };
 
   useEffect(() => {
     setAppName(config.appName);
     setThemeColor(config.themeColor);
+    setThemeBgColor(config.themeBgColor || '#f8fafc');
+    setThemeDarkBgColor(config.themeDarkBgColor || '#090e1a');
     setLogoType(config.logoType || 'emoji');
     setLogoUrl(config.logoUrl || '📨');
     setAutoCompressPdf(config.autoCompressPdf);
@@ -107,6 +210,12 @@ export default function Settings({
     setColumns([...(config.columns || [])].sort((a, b) => a.order - b.order));
     setColumnProfiles(config.columnProfiles || []);
     setActiveProfileId(config.activeProfileId || '');
+    if (config.themeColorScheme) {
+      setColorScheme(config.themeColorScheme);
+    }
+    if (config.themeHue !== undefined) {
+      setHue(config.themeHue);
+    }
     fetchBackups();
   }, [config]);
 
@@ -313,6 +422,10 @@ export default function Settings({
       logoType,
       logoUrl,
       themeColor,
+      themeBgColor,
+      themeDarkBgColor,
+      themeColorScheme: colorScheme,
+      themeHue: Math.round(hue),
       autoCompressPdf,
       pdfCompressionLevel,
       maxUploadSizeMb,
@@ -327,7 +440,7 @@ export default function Settings({
 
     onSaveConfig(updatedConfig);
     if (themeColor) {
-      generateM3Theme(themeColor);
+      generateM3Theme(themeColor, themeBgColor, themeDarkBgColor);
     }
     showNotification('Pengaturan sistem berhasil disimpan.');
   };
@@ -428,6 +541,8 @@ export default function Settings({
   };
 
   const handleDeleteColumn = (key: string) => {
+    const colName = columns.find(col => col.key === key)?.label || key;
+    if (!confirm(`Apakah Anda yakin ingin menghapus kolom "${colName}" dari skema?`)) return;
     const filtered = columns.filter(col => col.key !== key);
     const updated = filtered.map((col, i) => ({ ...col, order: i + 1 }));
     setColumns(updated);
@@ -495,7 +610,7 @@ export default function Settings({
   };
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-8 p-4 relative pb-32 text-[var(--md-sys-color-on-surface)]">
+    <div className="max-w-6xl mx-auto flex flex-col gap-8 p-4 relative pb-32 text-[var(--md-sys-color-on-surface)]">
       {/* Toast Notification */}
       {statusMsg && (
         <div className={`fixed bottom-24 right-8 z-50 p-4 rounded-2xl shadow-lg flex items-center gap-3 transition-premium ${statusType === 'success' ? 'bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]' : 'bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]'}`}>
@@ -512,8 +627,8 @@ export default function Settings({
       <div className="flex flex-col gap-6">
         
         {/* Tampilan & Branding */}
-        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8">
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12">
             <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">palette</span>
               Tampilan & Branding
@@ -547,49 +662,254 @@ export default function Settings({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4 mt-2">
-                <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Kustomisasi Warna Tema</span>
-
-                {/* Hex Color Input + Visual Preview */}
-                <div className="flex items-center gap-4">
-                  <md-filled-text-field
-                    label="Seed Color (HEX)"
-                    value={themeColor}
-                    onInput={(e: any) => {
-                      const hex = e.target.value;
-                      if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-                        setThemeColor(hex);
-                        generateM3Theme(hex);
-                      }
-                    }}
-                    className="flex-1"
-                  >
-                    <md-icon slot="leading-icon">palette</md-icon>
-                  </md-filled-text-field>
-                  <div
-                    className="w-12 h-12 rounded-full border border-[var(--md-sys-color-outline-variant)] shadow-sm shrink-0"
-                    style={{ backgroundColor: themeColor }}
-                  ></div>
+              <div className="flex flex-col gap-5 mt-4 p-5 rounded-3xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-widest">Kustomisasi Warna & Skema Tema</span>
+                  <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">Personalisasikan suasana digital aplikasi dengan memilih skema varian warna dan menggeser slider pelangi.</p>
                 </div>
 
-                {/* Single Hue Slider */}
-                <div className="flex flex-col gap-1 bg-[var(--md-sys-color-surface-container-low)] p-4 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
-                  <div className="flex justify-between text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider px-1">
-                    <span>Pilih Warna (Hue)</span>
-                    <span>{Math.round(hue)}°</span>
+                {/* Quick Presets */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Pilihan Warna Cepat</span>
+                  <div className="flex flex-wrap gap-2.5">
+                    {[
+                      { name: 'Teal', hex: '#0d9488', hue: 174 },
+                      { name: 'Indigo', hex: '#4f46e5', hue: 243 },
+                      { name: 'Rose', hex: '#e11d48', hue: 348 },
+                      { name: 'Amber', hex: '#d97706', hue: 37 },
+                      { name: 'Emerald', hex: '#10b981', hue: 160 },
+                      { name: 'Violet', hex: '#7c3aed', hue: 268 },
+                    ].map((preset) => {
+                      const isActive = themeColor.toLowerCase() === preset.hex.toLowerCase();
+                      return (
+                        <button
+                          key={preset.hex}
+                          type="button"
+                          onClick={() => handlePresetClick(preset.hex, preset.hue)}
+                          className={`w-9 h-9 rounded-full cursor-pointer flex items-center justify-center transition-all duration-200 border-2 hover:scale-110 active:scale-95 ${
+                            isActive
+                              ? 'border-[var(--md-sys-color-on-surface)] shadow-md scale-105'
+                              : 'border-transparent shadow-sm'
+                          }`}
+                          style={{ backgroundColor: preset.hex }}
+                          title={preset.name}
+                        >
+                          {isActive && (
+                            <span className="material-symbols-outlined text-white text-base drop-shadow-sm font-black">check</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <md-slider
-                    min="0"
-                    max="360"
-                    value={Math.round(hue)}
-                    className="slider-hue-track"
-                    onInput={(e: any) => {
-                      const val = Number(e.target.value);
-                      setHue(val);
-                      handleHueChange(val);
-                    }}
-                  ></md-slider>
                 </div>
+
+                {/* Compact Skema Warna Selection */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1 font-black">Model Skema Warna</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {colorSchemes.slice(0, 4).map((scheme) => {
+                      const isActive = colorScheme === scheme.id;
+                      return (
+                        <button
+                          key={scheme.id}
+                          type="button"
+                          onClick={() => handleSchemeChange(scheme.id)}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-xl text-left border transition-all duration-200 cursor-pointer ${
+                            isActive
+                              ? 'bg-[var(--md-sys-color-primary-container)] border-[var(--md-sys-color-primary)] shadow-sm'
+                              : 'bg-[var(--md-sys-color-surface-container-low)] border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-high)]'
+                          }`}
+                        >
+                          <span className={`material-symbols-outlined text-sm ${isActive ? 'text-[var(--md-sys-color-primary)]' : 'text-[var(--md-sys-color-on-surface-variant)]'}`}>{scheme.icon}</span>
+                          <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] truncate">{scheme.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Rainbow Hue Slider */}
+                <div className="flex flex-col gap-2 bg-[var(--md-sys-color-surface-container-low)] p-4 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider px-1">
+                    <span>Geser untuk Menyesuaikan Warna</span>
+                    <span className="font-mono text-xs text-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary-container)] px-2.5 py-1 rounded-full">{Math.round(hue)}°</span>
+                  </div>
+                  <div className="mt-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="360"
+                      value={Math.round(hue)}
+                      onChange={(e) => handleHueChange(Number(e.target.value))}
+                      className="w-full h-3 rounded-lg appearance-none cursor-pointer outline-none shadow-inner"
+                      style={{
+                        background: 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* HEX Color Input & Native Picker */}
+                <div className="flex items-center gap-3 bg-[var(--md-sys-color-surface-container-low)] p-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+                  <div className="flex-1">
+                    <md-filled-text-field
+                      label="Warna Kustom (HEX)"
+                      value={themeColor}
+                      onInput={(e: any) => {
+                        const hex = e.target.value;
+                        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+                          handleHexPickerChange(hex);
+                        } else {
+                          setThemeColor(hex);
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      <md-icon slot="leading-icon">palette</md-icon>
+                    </md-filled-text-field>
+                  </div>
+                  <div className="relative w-12 h-12 rounded-full border border-[var(--md-sys-color-outline-variant)] shadow-sm shrink-0 overflow-hidden cursor-pointer" style={{ backgroundColor: themeColor }}>
+                    <input
+                      type="color"
+                      value={themeColor}
+                      onChange={(e) => handleHexPickerChange(e.target.value)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Custom Background Colors */}
+                <div className="flex flex-col gap-4 bg-[var(--md-sys-color-surface-container-low)] p-4 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider">Kustomisasi Latar Belakang (Background)</span>
+                    <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">Pilih preset atau gunakan picker warna untuk menyesuaikan warna latar belakang aplikasi pada mode Terang dan Gelap.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+                    {/* Light Mode Bg */}
+                    <div className="flex flex-col gap-3 p-3 rounded-xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]">
+                      <span className="text-[10px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-wider">Latar Mode Terang</span>
+                      
+                      {/* Presets */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { name: 'Default', hex: '#f8fafc' },
+                          { name: 'Warm', hex: '#fafaf9' },
+                          { name: 'Sky', hex: '#f0f9ff' },
+                          { name: 'Lavender', hex: '#faf5ff' },
+                          { name: 'Mint', hex: '#f0fdf4' }
+                        ].map((bgPreset) => {
+                          const isActive = themeBgColor.toLowerCase() === bgPreset.hex.toLowerCase();
+                          return (
+                            <button
+                              key={bgPreset.hex}
+                              type="button"
+                              onClick={() => handleBgColorChange(bgPreset.hex)}
+                              className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-all cursor-pointer ${
+                                isActive
+                                  ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] border-transparent shadow-sm'
+                                  : 'bg-[var(--md-sys-color-surface-container-low)] text-[var(--md-sys-color-on-surface-variant)] border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-high)] hover:text-[var(--md-sys-color-on-surface)]'
+                              }`}
+                            >
+                              {bgPreset.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Input & Picker */}
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1">
+                          <md-filled-text-field
+                            label="Warna Terang (HEX)"
+                            value={themeBgColor}
+                            onInput={(e: any) => {
+                              const hex = e.target.value;
+                              if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+                                handleBgColorChange(hex);
+                              } else {
+                                setThemeBgColor(hex);
+                              }
+                            }}
+                            className="w-full text-xs"
+                          >
+                            <md-icon slot="leading-icon">wb_sunny</md-icon>
+                          </md-filled-text-field>
+                        </div>
+                        <div className="relative w-10 h-10 rounded-lg border border-[var(--md-sys-color-outline-variant)] shadow-sm shrink-0 overflow-hidden cursor-pointer" style={{ backgroundColor: themeBgColor }}>
+                          <input
+                            type="color"
+                            value={themeBgColor}
+                            onChange={(e) => handleBgColorChange(e.target.value)}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dark Mode Bg */}
+                    <div className="flex flex-col gap-3 p-3 rounded-xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]">
+                      <span className="text-[10px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-wider">Latar Mode Gelap</span>
+                      
+                      {/* Presets */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { name: 'Default', hex: '#090e1a' },
+                          { name: 'OLED', hex: '#000000' },
+                          { name: 'Charcoal', hex: '#121212' },
+                          { name: 'Emerald', hex: '#022c22' },
+                          { name: 'Obsidian', hex: '#0f172a' }
+                        ].map((bgPreset) => {
+                          const isActive = themeDarkBgColor.toLowerCase() === bgPreset.hex.toLowerCase();
+                          return (
+                            <button
+                              key={bgPreset.hex}
+                              type="button"
+                              onClick={() => handleDarkBgColorChange(bgPreset.hex)}
+                              className={`px-2 py-1 rounded-md text-[10px] font-bold border transition-all cursor-pointer ${
+                                isActive
+                                  ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] border-transparent shadow-sm'
+                                  : 'bg-[var(--md-sys-color-surface-container-low)] text-[var(--md-sys-color-on-surface-variant)] border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-high)] hover:text-[var(--md-sys-color-on-surface)]'
+                              }`}
+                            >
+                              {bgPreset.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Input & Picker */}
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1">
+                          <md-filled-text-field
+                            label="Warna Gelap (HEX)"
+                            value={themeDarkBgColor}
+                            onInput={(e: any) => {
+                              const hex = e.target.value;
+                              if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+                                handleDarkBgColorChange(hex);
+                              } else {
+                                setThemeDarkBgColor(hex);
+                              }
+                            }}
+                            className="w-full text-xs"
+                          >
+                            <md-icon slot="leading-icon">bedtime</md-icon>
+                          </md-filled-text-field>
+                        </div>
+                        <div className="relative w-10 h-10 rounded-lg border border-[var(--md-sys-color-outline-variant)] shadow-sm shrink-0 overflow-hidden cursor-pointer" style={{ backgroundColor: themeDarkBgColor }}>
+                          <input
+                            type="color"
+                            value={themeDarkBgColor}
+                            onChange={(e) => handleDarkBgColorChange(e.target.value)}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
                 {/* Mode Tampilan Control */}
                 <div className="flex flex-col gap-2 mt-2">
@@ -635,11 +955,10 @@ export default function Settings({
               </div>
             </div>
           </div>
-        </div>
 
         {/* Manajemen Berkas & Auto-Rename */}
-        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8">
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12">
             <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">description</span>
               Manajemen Berkas & Unggahan
@@ -710,8 +1029,8 @@ export default function Settings({
         </div>
 
         {/* Backup & Pemulihan (Double Bezel) */}
-        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8 flex flex-col gap-5">
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col gap-6">
             <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">backup</span>
               Sistem Database Backup & Pemulihan
@@ -738,49 +1057,49 @@ export default function Settings({
             </div>
 
             {/* Grouped Actions (Utama, Diagnostik, Bahaya) */}
-            <div className="flex flex-col gap-5 bg-[var(--md-sys-color-surface-container-low)] p-5 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
-              <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-6 bg-[var(--md-sys-color-surface-container-low)] p-6 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+              <div className="flex flex-col gap-3">
                 <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Tindakan Utama</span>
                 <div className="flex flex-wrap gap-3">
                   <md-filled-button
                     onClick={handleCreateBackup}
                     disabled={backupsLoading ? true : undefined}
-                    className="w-full sm:w-auto sm:min-w-[200px]"
+                    className="w-full sm:w-auto"
                   >
                     <span slot="icon" className="material-symbols-outlined">cloud_upload</span>
                     Buat Cadangan Baru
                   </md-filled-button>
-                  <md-outlined-button onClick={handleExportJson} className="w-full sm:w-auto sm:min-w-[200px]">
+                  <md-outlined-button onClick={handleExportJson} className="w-full sm:w-auto">
                     <span slot="icon" className="material-symbols-outlined">download</span>
                     Ekspor File Data
                   </md-outlined-button>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
+              <div className="flex flex-col gap-3 border-t border-[var(--md-sys-color-outline-variant)] pt-4">
                 <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Utilitas & Diagnostik</span>
                 <div className="flex flex-wrap gap-3">
-                  <md-outlined-button onClick={handleCheckIntegrity} className="w-full sm:w-auto sm:min-w-[160px]">
+                  <md-outlined-button onClick={handleCheckIntegrity} className="w-full sm:w-auto">
                     <span slot="icon" className="material-symbols-outlined font-fill">verified_user</span>
                     Periksa Integritas
                   </md-outlined-button>
-                  <md-outlined-button onClick={handleCleanupOrphans} className="w-full sm:w-auto sm:min-w-[160px]">
+                  <md-outlined-button onClick={handleCleanupOrphans} className="w-full sm:w-auto">
                     <span slot="icon" className="material-symbols-outlined">clean_hands</span>
                     Bersihkan File Yatim
                   </md-outlined-button>
-                  <md-outlined-button onClick={handleReconstructMetadata} className="w-full sm:w-auto sm:min-w-[160px]">
+                  <md-outlined-button onClick={handleReconstructMetadata} className="w-full sm:w-auto">
                     <span slot="icon" className="material-symbols-outlined">construction</span>
                     Rekonstruksi Metadata
                   </md-outlined-button>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
+              <div className="flex flex-col gap-3 border-t border-[var(--md-sys-color-outline-variant)] pt-4">
                 <span className="text-[10px] font-bold text-[var(--md-sys-color-error)] uppercase tracking-wider ml-1">Zona Bahaya</span>
                 <div className="flex flex-wrap gap-3">
                   <md-outlined-button
                     onClick={handleClearSystem}
-                    className="w-full sm:w-auto sm:min-w-[200px]"
+                    className="w-full sm:w-auto"
                     style={{ '--md-outlined-button-outline-color': 'var(--md-sys-color-error)', '--md-outlined-button-label-text-color': 'var(--md-sys-color-error)' } as any}
                   >
                     <span slot="icon" className="material-symbols-outlined">delete_forever</span>
@@ -883,8 +1202,8 @@ export default function Settings({
         </div>
 
         {/* Kolom Cetak Tanda Terima */}
-        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8 flex flex-col gap-4">
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col gap-5">
             <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">receipt_long</span>
               Kolom Cetak Tanda Terima
@@ -921,8 +1240,8 @@ export default function Settings({
         </div>
 
         {/* Skema Kolom Dinamis */}
-        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8 flex flex-col min-h-[400px]">
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col min-h-[400px]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
                 <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">splitscreen</span>
@@ -1065,125 +1384,191 @@ export default function Settings({
           </div>
         </div>
 
-      {/* Global save button bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--md-sys-color-surface-container-low)]/90 border-t border-[var(--md-sys-color-outline-variant)] flex justify-end gap-3 z-30 shadow-md backdrop-blur-md transition-premium">
-        <md-filled-button onClick={handleSave}  >
-          <span slot="icon" className="material-symbols-outlined">save</span>
-          Simpan Perubahan
-        </md-filled-button>
-      </div>
+        {/* Card for Save Changes */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 flex justify-end gap-3">
+            <md-filled-button onClick={handleSave}>
+              <span slot="icon" className="material-symbols-outlined">save</span>
+              Simpan Perubahan
+            </md-filled-button>
+          </div>
+        </div>
 
       {/* dialog Add Column */}
-      {showAddCol && (
-      <md-dialog open={true} onClose={() => setShowAddCol(false)} style={{ maxWidth: '480px', width: '90vw' }}>
-        <span slot="headline">Tambah Kolom Baru</span>
-        <form slot="content" id="add-col-form" className="flex flex-col gap-4 py-4" onSubmit={handleAddColumnSubmit}>
-          {colError && <p className="text-xs text-red-500 font-bold ml-1">{colError}</p>}
-          <md-filled-text-field
-            label="Key Kolom (Contoh: perihal, noSurat)"
-            value={newColKey}
-            onInput={(e: any) => setNewColKey(e.target.value)}
-            required
-          ></md-filled-text-field>
+      <AnimatePresence>
+        {showAddCol && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAddCol(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px]"
+            />
+            
+            {/* Modal Container */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ duration: 0.2 }}
+              className="relative bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-[28px] shadow-2xl max-w-md w-full overflow-hidden flex flex-col z-10"
+            >
+              {/* Header */}
+              <div className="px-6 pt-6 pb-2">
+                <h3 className="text-xl font-bold font-display text-[var(--md-sys-color-on-surface)]">
+                  Tambah Kolom Baru
+                </h3>
+              </div>
 
-          <md-filled-text-field
-            label="Label Tampilan (Contoh: Perihal, Nomor Surat)"
-            value={newColLabel}
-            onInput={(e: any) => setNewColLabel(e.target.value)}
-            required
-          ></md-filled-text-field>
+              {/* Content Form */}
+              <form id="add-col-form" className="px-6 py-4 flex flex-col gap-4 overflow-y-auto max-h-[70vh]" onSubmit={handleAddColumnSubmit}>
+                {colError && <p className="text-xs text-red-500 font-bold ml-1">{colError}</p>}
+                
+                <md-filled-text-field
+                  label="Key Kolom (Contoh: perihal, noSurat)"
+                  value={newColKey}
+                  onInput={(e: any) => setNewColKey(e.target.value)}
+                  required
+                  className="w-full"
+                ></md-filled-text-field>
 
-          <md-filled-select
-            label="Tipe Data"
-            value={newColType}
-            onInput={(e: any) => setNewColType(e.target.value as ColumnType)}
-          >
-            <md-select-option value="text">Teks</md-select-option>
-            <md-select-option value="date">Tanggal</md-select-option>
-            <md-select-option value="number">Angka</md-select-option>
-          </md-filled-select>
+                <md-filled-text-field
+                  label="Label Tampilan (Contoh: Perihal, Nomor Surat)"
+                  value={newColLabel}
+                  onInput={(e: any) => setNewColLabel(e.target.value)}
+                  required
+                  className="w-full"
+                ></md-filled-text-field>
 
-          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl mt-2">
-            <div>
-              <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Wajib Diisi (Required)</p>
-              <p className="text-[10px] text-slate-450 dark:text-slate-550">Validasi formulir sebelum disimpan</p>
-            </div>
-            <md-checkbox
-              checked={newColRequired}
-              onClick={() => setNewColRequired(!newColRequired)}
-            ></md-checkbox>
+                <md-filled-select
+                  label="Tipe Data"
+                  value={newColType}
+                  onInput={(e: any) => setNewColType(e.target.value as ColumnType)}
+                  className="w-full"
+                >
+                  <md-select-option value="text">Teks</md-select-option>
+                  <md-select-option value="date">Tanggal</md-select-option>
+                  <md-select-option value="number">Angka</md-select-option>
+                </md-filled-select>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl mt-2">
+                  <div>
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Wajib Diisi (Required)</p>
+                    <p className="text-[10px] text-slate-450 dark:text-slate-550">Validasi formulir sebelum disimpan</p>
+                  </div>
+                  <md-checkbox
+                    checked={newColRequired || undefined}
+                    onClick={() => setNewColRequired(!newColRequired)}
+                  ></md-checkbox>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <div>
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Tampilkan di Cetak Tanda Terima</p>
+                    <p className="text-[10px] text-slate-450 dark:text-slate-550">Masukkan informasi kolom ini pada PDF tanda terima</p>
+                  </div>
+                  <md-checkbox
+                    checked={newColIncludeInReceipt || undefined}
+                    onClick={() => setNewColIncludeInReceipt(!newColIncludeInReceipt)}
+                  ></md-checkbox>
+                </div>
+              </form>
+
+              {/* Actions Footer */}
+              <div className="px-6 py-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-end gap-3">
+                <md-text-button type="button" onClick={() => setShowAddCol(false)}>Batal</md-text-button>
+                <md-filled-button type="button" onClick={handleAddColumnSubmit}>Tambah</md-filled-button>
+              </div>
+            </motion.div>
           </div>
-
-          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
-            <div>
-              <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Tampilkan di Cetak Tanda Terima</p>
-              <p className="text-[10px] text-slate-450 dark:text-slate-550">Masukkan informasi kolom ini pada PDF tanda terima</p>
-            </div>
-            <md-checkbox
-              checked={newColIncludeInReceipt}
-              onClick={() => setNewColIncludeInReceipt(!newColIncludeInReceipt)}
-            ></md-checkbox>
-          </div>
-        </form>
-        <div slot="actions">
-          <md-text-button onClick={() => setShowAddCol(false)}>Batal</md-text-button>
-          <md-filled-button onClick={handleAddColumnSubmit}>Tambah</md-filled-button>
-        </div>
-      </md-dialog>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* dialog Edit Column */}
-      {editingColumn && (
-      <md-dialog open={true} onClose={() => setEditingColumn(null)} style={{ maxWidth: '480px', width: '90vw' }}>
-        <span slot="headline">Edit Kolom: {editingColumn?.key}</span>
-        <form slot="content" id="edit-col-form" className="flex flex-col gap-4 py-4" onSubmit={handleSaveEditColumn}>
-          {editColError && <p className="text-xs text-red-500 font-bold ml-1">{editColError}</p>}
-          
-          <md-filled-text-field
-            label="Label Tampilan"
-            value={editColLabel}
-            onInput={(e: any) => setEditColLabel(e.target.value)}
-            required
-          ></md-filled-text-field>
+      <AnimatePresence>
+        {editingColumn && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingColumn(null)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-[2px]"
+            />
+            
+            {/* Modal Container */}
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              transition={{ duration: 0.2 }}
+              className="relative bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-[28px] shadow-2xl max-w-md w-full overflow-hidden flex flex-col z-10"
+            >
+              {/* Header */}
+              <div className="px-6 pt-6 pb-2">
+                <h3 className="text-xl font-bold font-display text-[var(--md-sys-color-on-surface)]">
+                  Edit Kolom: {editingColumn.key}
+                </h3>
+              </div>
 
-          <md-filled-select
-            label="Tipe Data"
-            value={editColType}
-            onInput={(e: any) => setEditColType(e.target.value as ColumnType)}
-          >
-            <md-select-option value="text">Teks</md-select-option>
-            <md-select-option value="date">Tanggal</md-select-option>
-            <md-select-option value="number">Angka</md-select-option>
-          </md-filled-select>
+              {/* Content Form */}
+              <form id="edit-col-form" className="px-6 py-4 flex flex-col gap-4 overflow-y-auto max-h-[70vh]" onSubmit={handleSaveEditColumn}>
+                {editColError && <p className="text-xs text-red-500 font-bold ml-1">{editColError}</p>}
+                
+                <md-filled-text-field
+                  label="Label Tampilan"
+                  value={editColLabel}
+                  onInput={(e: any) => setEditColLabel(e.target.value)}
+                  required
+                  className="w-full"
+                ></md-filled-text-field>
 
-          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl mt-2">
-            <div>
-              <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Wajib Diisi (Required)</p>
-              <p className="text-[10px] text-slate-450 dark:text-slate-550">Validasi formulir sebelum disimpan</p>
-            </div>
-            <md-checkbox
-              checked={editColRequired}
-              onClick={() => setEditColRequired(!editColRequired)}
-            ></md-checkbox>
+                <md-filled-select
+                  label="Tipe Data"
+                  value={editColType}
+                  onInput={(e: any) => setEditColType(e.target.value as ColumnType)}
+                  className="w-full"
+                >
+                  <md-select-option value="text">Teks</md-select-option>
+                  <md-select-option value="date">Tanggal</md-select-option>
+                  <md-select-option value="number">Angka</md-select-option>
+                </md-filled-select>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl mt-2">
+                  <div>
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Wajib Diisi (Required)</p>
+                    <p className="text-[10px] text-slate-450 dark:text-slate-550">Validasi formulir sebelum disimpan</p>
+                  </div>
+                  <md-checkbox
+                    checked={editColRequired || undefined}
+                    onClick={() => setEditColRequired(!editColRequired)}
+                  ></md-checkbox>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
+                  <div>
+                    <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Tampilkan di Cetak Tanda Terima</p>
+                    <p className="text-[10px] text-slate-450 dark:text-slate-550">Masukkan informasi kolom ini pada PDF tanda terima</p>
+                  </div>
+                  <md-checkbox
+                    checked={editColIncludeInReceipt || undefined}
+                    onClick={() => setEditColIncludeInReceipt(!editColIncludeInReceipt)}
+                  ></md-checkbox>
+                </div>
+              </form>
+
+              {/* Actions Footer */}
+              <div className="px-6 py-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-end gap-3">
+                <md-text-button type="button" onClick={() => setEditingColumn(null)}>Batal</md-text-button>
+                <md-filled-button type="button" onClick={handleSaveEditColumn}>Simpan</md-filled-button>
+              </div>
+            </motion.div>
           </div>
-
-          <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl">
-            <div>
-              <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Tampilkan di Cetak Tanda Terima</p>
-              <p className="text-[10px] text-slate-450 dark:text-slate-550">Masukkan informasi kolom ini pada PDF tanda terima</p>
-            </div>
-            <md-checkbox
-              checked={editColIncludeInReceipt}
-              onClick={() => setEditColIncludeInReceipt(!editColIncludeInReceipt)}
-            ></md-checkbox>
-          </div>
-        </form>
-        <div slot="actions">
-          <md-text-button onClick={() => setEditingColumn(null)}>Batal</md-text-button>
-          <md-filled-button onClick={handleSaveEditColumn}>Simpan</md-filled-button>
-        </div>
-      </md-dialog>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }

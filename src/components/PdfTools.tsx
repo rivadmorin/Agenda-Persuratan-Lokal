@@ -311,7 +311,8 @@ export default function PdfTools() {
               style={{
                 padding: '0 48px',
                 height: '56px',
-                borderRadius: '16px',
+                borderRadius: '9999px',
+                '--md-filled-button-container-shape': '9999px',
                 '--md-filled-button-container-color': currentToolData?.colorClass
               } as React.CSSProperties}
             >

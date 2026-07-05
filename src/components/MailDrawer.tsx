@@ -127,10 +127,28 @@ export default function MailDrawer({
     }
   };
 
+  const formatDate = (dateVal: any) => {
+    if (!dateVal) return '-';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return String(dateVal);
+    }
+  };
+
+  const sortedColumns = React.useMemo(() => {
+    return [...columns].sort((a, b) => a.order - b.order);
+  }, [columns]);
+
   const formatMarkdown = (mail: MailRecord) => {
     let md = `# Agenda Surat: ${mail.metadata.nomorSurat || 'Tanpa Nomor'}\n\n`;
     md += `**Tipe:** ${mail.type}\n`;
-    columns.sort((a,b) => a.order - b.order).forEach(col => {
+    sortedColumns.forEach(col => {
       const val = mail.metadata[col.key] || '-';
       md += `**${col.label}:** ${val}\n`;
     });
@@ -138,7 +156,6 @@ export default function MailDrawer({
   };
 
   const pdfSource = pdfBase64 || (mailToEdit?.pdfPath && !deletedPdf ? `/api/files/${mailToEdit.pdfPath}` : null);
-  const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
 
   return (
     <AnimatePresence>
@@ -302,7 +319,7 @@ export default function MailDrawer({
                                <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80">{col.label}</span>
                                <span className="text-sm font-medium text-[var(--md-sys-color-on-surface)] leading-relaxed whitespace-pre-wrap">
                                  {col.type === 'date' && mailToEdit?.metadata[col.key]
-                                   ? new Date(mailToEdit.metadata[col.key]).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
+                                   ? formatDate(mailToEdit?.metadata[col.key])
                                    : String(mailToEdit?.metadata[col.key] || '-')}
                                </span>
                              </div>

@@ -26,6 +26,8 @@ const defaultProps = {
   serverInfo: { ips: ['127.0.0.1'], port: 3000 },
   darkMode: false,
   setDarkMode: vi.fn(),
+  collapsed: false,
+  onToggleCollapse: vi.fn(),
 };
 
 describe('Sidebar Component', () => {

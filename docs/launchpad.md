@@ -3,16 +3,14 @@
 Critical learnings only. Do not add routine logs.
 
 Format:
-## YYYY-MM-DD - [Title]
-**Automation Gap:** [What script logic, command execution, or environment trap broke]
-**Learning:** [Why the shell engine or platform variant caused this failure loop]
-**Action:** [The specific defensive scripting wrapper to apply across platforms next time]
-## 2025-07-05 - 🚀 Launchpad: Standardize lifecycle scripts inside launchpad/
-**Automation Gap:** Disorganized, destructive, and sprawling scripts (`setup.sh` and `setup.ps1` at the root directory) lack a unified menu, robust process traps, and environment containment.
-**Learning:** Legacy scripting practices without designated boundaries result in duplicate logic and platform-specific execution errors. An explicit orchestration directory (`launchpad/`) isolates lifecycle commands.
-**Action:** Created `launchpad/deploy.sh` and `launchpad/deploy.ps1` featuring a strict command menu (`check-prereqs`, `install`, `start`, `stop`, `uninstall`, `help`), idempotent checks, graceful shutdowns with PID tracking, and 100% path isolation. Removed old root scripts.
-
-## 2026-07-06 - 🚀 Launchpad: Sandbox Initialization Hydration
-**Automation Gap:** Execution of test or build scripts in fresh sandbox environments failed instantly due to missing dependencies (`vitest: not found`).
-**Learning:** Sandbox environments are completely stateless on boot. Assuming `node_modules` exists from previous runs leads to instant execution failures.
-**Action:** Any initialization or automation scripts MUST begin with dependency hydration (e.g., `pnpm install`) as a strict pre-requisite before invoking secondary tools like compilers or test runners.
+## DD-MM-YYYY - [Judul Pembelajaran]
+- **Tags:** `#kategori/alat` `#jenis-masalah`
+- **Level:** `🔴 CRITICAL` | `🟡 WARNING` | `🟢 INFO`
+- **Scope:** `[Nama Berkas](file:///absolute/path/to/file)`
+- **Notify Agents:** `@AgentName`
+- **Fingerprint ID:** `ERR-XXXX` (jika ada di docs/scholar.md)
+- **Symptom:** [Gejala/pesan error yang muncul]
+- **Root Cause:** [Penyebab utama arsitektur/konfigurasi]
+- **Learning:** [Prinsip baru yang ditemukan]
+- **Action/Rule:** [Langkah konkret tindakan pencegahan]
+- **Verify Command:** `perintah verifikasi` (jika ada)

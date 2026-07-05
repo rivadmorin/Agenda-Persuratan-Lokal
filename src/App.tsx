@@ -9,6 +9,7 @@ import Settings from './components/Settings';
 import Login from './components/Login';
 import ConfirmModal from './components/ConfirmModal';
 import ReceiptModal from './components/ReceiptModal';
+import CursorInteraction from './components/CursorInteraction';
 import { MailRecord, AppConfig, User } from './types';
 import { generateM3Theme } from './utils/theme';
 
@@ -20,6 +21,7 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [mails, setMails] = useState<MailRecord[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
@@ -31,7 +33,10 @@ export default function App() {
       document.documentElement.classList.remove('dark');
     }
     localStorage.setItem('darkMode', String(darkMode));
-  }, [darkMode]);
+    if (config?.themeColor) {
+      generateM3Theme(config.themeColor, config.themeBgColor, config.themeDarkBgColor);
+    }
+  }, [darkMode, config?.themeColor, config?.themeBgColor, config?.themeDarkBgColor]);
 
   // Drawer states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -87,7 +92,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setConfig(data);
-        if (data.themeColor) generateM3Theme(data.themeColor);
+        if (data.themeColor) generateM3Theme(data.themeColor, data.themeBgColor, data.themeDarkBgColor);
         setConnectionError(false);
       } else {
         setConnectionError(true);
@@ -334,9 +339,21 @@ export default function App() {
             onlineCount={onlineCount}
             darkMode={darkMode}
             setDarkMode={setDarkMode}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
 
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className={`flex-1 overflow-y-auto p-6 transition-all duration-300 relative ${sidebarCollapsed ? 'pl-20' : ''}`}>
+            {sidebarCollapsed && (
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                className="fixed top-6 left-6 z-[45] w-10 h-10 rounded-full flex items-center justify-center bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] border border-[var(--md-sys-color-outline-variant)] shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+                title="Tampilkan Sidebar"
+                aria-label="Tampilkan Sidebar"
+              >
+                <span className="material-symbols-outlined text-lg">menu</span>
+              </button>
+            )}
             <div className="max-w-7xl mx-auto h-full">
               {activeTab === 'dashboard' && (
                 <Dashboard
@@ -424,6 +441,8 @@ export default function App() {
           fetchMails();
         }}
       />
+
+      <CursorInteraction />
     </>
   );
 }

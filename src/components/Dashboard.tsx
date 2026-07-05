@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { MailRecord, AppConfig } from '../types';
 
@@ -28,6 +28,8 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: DashboardProps) {
+  const [timeRange, setTimeRange] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
+
   const stats = useMemo(() => {
     const total = mails.length;
     const withPdf = mails.filter(m => !!m.pdfPath).length;
@@ -42,15 +44,81 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
 
   const chartData = useMemo(() => {
     const groups: Record<string, number> = {};
-    // Group last 20 mail entries by date
-    mails.slice(-20).forEach(m => {
-      const date = m.createdAt.split('T')[0];
-      groups[date] = (groups[date] || 0) + 1;
+    // Sort all mails chronologically ascending using fast string comparison instead of expensive Date object constructions
+    const sortedMails = [...mails].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    
+    sortedMails.forEach(m => {
+      const dateObj = new Date(m.createdAt);
+      if (isNaN(dateObj.getTime())) return;
+
+      let key = '';
+      if (timeRange === 'daily') {
+        key = m.createdAt.split('T')[0]; // YYYY-MM-DD
+      } else if (timeRange === 'weekly') {
+        const day = dateObj.getDay();
+        const diff = dateObj.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(dateObj.getFullYear(), dateObj.getMonth(), diff);
+        key = monday.toISOString().split('T')[0]; // YYYY-MM-DD (Monday start of week)
+      } else if (timeRange === 'monthly') {
+        key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM
+      } else {
+        key = `${dateObj.getFullYear()}`; // YYYY
+      }
+
+      groups[key] = (groups[key] || 0) + 1;
     });
-    return Object.entries(groups).map(([name, count]) => {
-      const [y, month, d] = name.split('-');
-      return { name: `${d}/${month}`, count };
+
+    const entries = Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+
+    // Slice for optimal layout density in different ranges
+    let slicedEntries = entries;
+    if (timeRange === 'daily') {
+      slicedEntries = entries.slice(-30); // Last 30 active days
+    } else if (timeRange === 'weekly') {
+      slicedEntries = entries.slice(-12); // Last 12 weeks
+    } else if (timeRange === 'monthly') {
+      slicedEntries = entries.slice(-12); // Last 12 months
+    }
+
+    return slicedEntries.map(([key, count]) => {
+      let displayName = key;
+      if (timeRange === 'daily') {
+        const parts = key.split('-');
+        displayName = parts.length === 3 ? `${parts[2]}/${parts[1]}` : key;
+      } else if (timeRange === 'weekly') {
+        const parts = key.split('-');
+        displayName = parts.length === 3 ? `Mgg ${parts[2]}/${parts[1]}` : key;
+      } else if (timeRange === 'monthly') {
+        const parts = key.split('-');
+        if (parts.length === 2) {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+          const monthIdx = parseInt(parts[1], 10) - 1;
+          displayName = `${months[monthIdx]} ${parts[0].slice(-2)}`;
+        }
+      } else if (timeRange === 'yearly') {
+        displayName = key;
+      }
+      return { name: displayName, count };
     });
+  }, [mails, timeRange]);
+
+  // Memoize the recent activities list, pre-rendering local date strings and sorting correctly
+  const recentActivities = useMemo(() => {
+    return [...mails]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 5)
+      .map(mail => {
+        let formattedDate = '-';
+        try {
+          formattedDate = new Date(mail.createdAt).toLocaleDateString('id-ID');
+        } catch (e) {
+          // ignore
+        }
+        return {
+          ...mail,
+          formattedDate
+        };
+      });
   }, [mails]);
 
   return (
@@ -61,27 +129,42 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Reading this as: Premium document archival dashboard for administrative personnel, featuring structural Material 3 design tokens, clean geometric layouts with concentric double-bezel curves, and responsive spring-based hover feedback. */}
         {[
           { label: 'Total Agenda', value: stats.total, sub: `${stats.recentCount} dalam 7 hari terakhir`, icon: 'inbox', color: 'teal', tab: 'mails' },
           { label: 'Dengan Lampiran', value: stats.withPdf, sub: `${stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% memiliki PDF`, icon: 'picture_as_pdf', color: 'indigo', tab: 'mails' },
           { label: 'Efisiensi Arsip', value: '100%', sub: 'Penyimpanan lokal terstruktur', icon: 'bolt', color: 'amber', tab: 'dashboard' },
         ].map((stat, i) => {
           const colors = colorClasses[stat.color] || { bg: 'bg-[var(--md-sys-color-surface-container)]', text: 'text-[var(--md-sys-color-on-surface)]', border: 'border-[var(--md-sys-color-outline-variant)]' };
+          
+          // Concentric Radii Math: Outer R = 32px, Padding = 8px (p-2) -> Inner R = 24px (rounded-[24px])
           return (
             <div
               key={i}
               onClick={() => onNavigateToTab(stat.tab)}
-              className="bg-[var(--md-sys-color-surface-container)] p-6 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] shadow-sm flex items-center gap-6 cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-premium active:scale-[0.98]"
+              className="p-2 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[32px] cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-premium active:scale-[0.98] group flex flex-col justify-stretch"
             >
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
-                <span className="material-symbols-outlined text-2xl font-fill">
-                  {stat.icon}
-                </span>
-              </div>
-              <div className="overflow-hidden">
-                <p className="text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest mb-1">{stat.label}</p>
-                <p className="text-2xl font-black text-[var(--md-sys-color-on-surface)] leading-none mb-1.5">{stat.value}</p>
-                <p className="text-[10px] text-[var(--md-sys-color-outline)] font-medium truncate">{stat.sub}</p>
+              <div className="p-5 bg-[var(--md-sys-color-surface-container)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06)] dark:shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.02)] rounded-[24px] flex items-center gap-5 w-full h-full">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
+                  <span className="material-symbols-outlined text-2xl font-fill">
+                    {stat.icon}
+                  </span>
+                </div>
+                <div className="overflow-hidden flex-1">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <p className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest leading-none">{stat.label}</p>
+                    {i === 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-pulse shrink-0" title="Sinkronisasi Live" />
+                    )}
+                  </div>
+                  <p className="text-2xl font-black text-[var(--md-sys-color-on-surface)] leading-none mb-1.5">{stat.value}</p>
+                  <p className="text-[10px] text-[var(--md-sys-color-outline)] font-medium truncate">{stat.sub}</p>
+                </div>
+                {stat.tab !== 'dashboard' && (
+                  <div className="w-8 h-8 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] flex items-center justify-center group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-premium text-[var(--md-sys-color-on-surface-variant)] shrink-0 shadow-sm">
+                    <span className="material-symbols-outlined text-base">arrow_forward</span>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -90,7 +173,36 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-[var(--md-sys-color-surface-container)] p-8 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] shadow-sm">
-          <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)] mb-6">Tren Entri Surat (Terbaru)</h3>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)]">
+              Tren Entri Surat ({timeRange === 'daily' ? 'Harian' : timeRange === 'weekly' ? 'Mingguan' : timeRange === 'monthly' ? 'Bulanan' : 'Tahunan'})
+            </h3>
+            <div className="flex p-1 bg-[var(--md-sys-color-surface-container-high)] rounded-full border border-[var(--md-sys-color-outline-variant)] shrink-0">
+              {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((range) => {
+                const labels = {
+                  daily: 'Harian',
+                  weekly: 'Mingguan',
+                  monthly: 'Bulanan',
+                  yearly: 'Tahunan'
+                };
+                const isActive = timeRange === range;
+                return (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setTimeRange(range)}
+                    className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow-sm font-black'
+                        : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)] hover:text-[var(--md-sys-color-on-surface)]'
+                    }`}
+                  >
+                    {labels[range]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="h-[280px] w-full">
             {chartData.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-[var(--md-sys-color-on-surface-variant)] italic text-sm">
@@ -132,7 +244,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
         <div className="bg-[var(--md-sys-color-surface-container-low)] p-8 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] flex flex-col">
           <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)] mb-6">Aktivitas Terbaru</h3>
           <div className="flex flex-col gap-4 overflow-y-auto max-h-[280px] pr-1">
-            {mails.slice(-5).reverse().map(mail => (
+            {recentActivities.map(mail => (
               <div
                 key={mail.id}
                 onClick={() => onSelectMail(mail)}
@@ -140,7 +252,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
               >
                 <div className="flex justify-between items-start gap-2 mb-1.5">
                   <span className="text-[9px] font-bold text-[var(--md-sys-color-on-primary-container)] bg-[var(--md-sys-color-primary-container)] px-2 py-0.5 rounded-md uppercase tracking-wider">{mail.type}</span>
-                  <span className="text-[9px] text-[var(--md-sys-color-outline)] font-medium">{new Date(mail.createdAt).toLocaleDateString('id-ID')}</span>
+                  <span className="text-[9px] text-[var(--md-sys-color-outline)] font-medium">{mail.formattedDate}</span>
                 </div>
                 <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{mail.metadata.perihal || mail.metadata.isi || 'Tanpa Perihal'}</p>
                 <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] mt-1 truncate">Dari: {mail.metadata.pengirim || '-'}</p>

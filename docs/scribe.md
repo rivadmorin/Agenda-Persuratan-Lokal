@@ -3,10 +3,14 @@
 Critical learnings only. Do not add routine logs.
 
 Format:
-## YYYY-MM-DD - [Title]
-**Learning:** [Insight]
-**Action:** [How to apply next time]
-
-## 2024-03-05 - README Alignment & Documentation Accuracy
-**Learning:** Hardcoded commands (`npm run x`) and broken documentation links in the README can lead to severe confusion, especially when repository standards dictate `pnpm` exclusively and when old markdown files are deleted. Recent additions like dynamic Material Design 3 generation (`src/utils/theme.ts`) and full Playwright E2E testing setups need clear entry points in the documentation.
-**Action:** Always verify links in the README when removing `.md` files. Additionally, whenever new fundamental test frameworks (like Vitest/Playwright) are added, ensure their execution commands are explicitly documented in the README using the enforced package manager (`pnpm`).
+## DD-MM-YYYY - [Judul Pembelajaran]
+- **Tags:** `#kategori/alat` `#jenis-masalah`
+- **Level:** `🔴 CRITICAL` | `🟡 WARNING` | `🟢 INFO`
+- **Scope:** `[Nama Berkas](file:///absolute/path/to/file)`
+- **Notify Agents:** `@AgentName`
+- **Fingerprint ID:** `ERR-XXXX` (jika ada di docs/scholar.md)
+- **Symptom:** [Gejala/pesan error yang muncul]
+- **Root Cause:** [Penyebab utama arsitektur/konfigurasi]
+- **Learning:** [Prinsip baru yang ditemukan]
+- **Action/Rule:** [Langkah konkret tindakan pencegahan]
+- **Verify Command:** `perintah verifikasi` (jika ada)
