@@ -28,3 +28,18 @@ To ensure all agents can resolve common build, environment, and code compilation
 **Context:** Compiling the Express backend (`server.ts`) in the same build step as the React Vite frontend.
 **Root Cause:** Vite is optimized for frontend static asset bundling. Trying to bundle a backend Node.js entry point with standard Vite config leads to module loading issues or bloated bundles due to non-externalized Node.js native modules.
 **Action:** Decoupled the backend build in `package.json`'s `build` script. Used Vite solely for the frontend (`vite build`) and piped immediately to `esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs` for a dedicated, optimized Node.js backend bundle.
+
+## 2024-05-18 - [Optimistic UI in Local Network Apps]
+**Context:** The UserManagement component (from archive analysis) attempts Optimistic UI updates. Delaying UI updates while waiting for local backend requests can make the UI feel sluggish.
+**Root Cause:** Synchronous waiting (`await`) on local API requests blocks the immediate React state transition.
+**Action:** Always implement Optimistic Updates for simple CRUD operations to improve perceived performance, reversing the state if the local API request fails.
+
+## 2024-05-18 - [Global Error Handling via ConfirmModal]
+**Context:** Discovered repeated error bubbling patterns in `App.tsx` and child components for failed fetch requests or network disconnects.
+**Root Cause:** Errors thrown inside asynchronous handlers (`try/catch`) do not automatically bubble up to standard React Error Boundaries and can cause silent failures.
+**Action:** Use a unified `ConfirmModal` state managed in the parent `App` component and pass `onError` callbacks to children. For critical server interactions, ensure the frontend explicitly checks `if (!res.ok)` and displays the backend JSON `err.message` via the `ConfirmModal`.
+
+## 2024-05-18 - [Material Web Component Accessibility]
+**Context:** Analyzed historical palette/UI learnings. Icon-only buttons and disabled buttons in Material Web (<md-*>) fail screen-reader accessibility checks.
+**Root Cause:** The `md-icon-button` relies on internal `span` rendering for icons, hiding meaning, and disabled elements may not trigger necessary mouse/focus events for tooltips.
+**Action:** Enforce explicit `aria-label` attributes on any icon-only `<md-icon-button>`. For tooltips on disabled buttons, rely on `aria-describedby` with an external sibling element rather than nested hover states.
