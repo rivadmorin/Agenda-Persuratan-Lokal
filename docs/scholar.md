@@ -53,3 +53,8 @@ To ensure all agents can resolve common build, environment, and code compilation
 **Context:** Orphaned files (PDFs without DB records) accumulate in `data/uploads/` over time due to interrupted network requests, or database resets.
 **Root Cause:** Deleting orphaned files permanently destroys potentially critical document data.
 **Action:** Created the `/api/backup/integrity/reconstruct` endpoint. Instead of just purging orphans, the system scans `data/uploads/`, identifies `.pdf` files missing from the DB, reads their `.pdf.json` sidecars, and autonomously rebuilds the PostgreSQL database records, ensuring zero data loss.
+
+## 2026-07-07 - [Cross-Disciplinary Component Failures]
+**Context:** When integrating Material Web Components (`<md-*>`) into React applications, issues often emerge across multiple domains simultaneously: UI truncation (Taste), accessibility omissions (Palette), and silent state deadlocks (Bug Hunter/Bolt).
+**Root Cause:** Custom elements (Web Components) encapsulate their internal DOM, meaning React's typical event bubbling, CSS overrides, and ARIA propagation do not work out of the box as they would with native DOM elements.
+**Action:** Establish a mandatory "Component Wrapping Standard" for Web Components: 1) Explicit ARIA and tooltip relationships must be applied externally. 2) Strict `min-width` and `white-space: nowrap` constraints must be applied to prevent shadow-DOM clipping. 3) State binding for `disabled` must use strict ternary logic (`condition ? true : undefined`).
