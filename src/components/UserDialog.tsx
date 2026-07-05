@@ -60,7 +60,9 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
   };
 
   return (
-    <md-dialog open={isOpen ? true : undefined} onClose={onClose} style={{ minWidth: '400px', maxWidth: '480px', width: '90vw', margin: 'auto' }}>
+    <>
+      {isOpen && (
+      <md-dialog open={true} onClose={onClose} style={{ minWidth: '400px', maxWidth: '480px', width: '90vw', margin: 'auto' }}>
       <span slot="headline">
         {userToEdit ? 'Ubah Pengguna' : 'Tambah Pengguna Baru'}
       </span>
@@ -115,6 +117,8 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
           ) : 'Simpan'}
         </md-filled-button>
       </div>
-    </md-dialog>
+      </md-dialog>
+      )}
+    </>
   );
 }
