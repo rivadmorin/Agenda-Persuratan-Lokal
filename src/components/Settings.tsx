@@ -1067,7 +1067,7 @@ export default function Settings({
 
       {/* Global save button bar */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--md-sys-color-surface-container-low)]/90 border-t border-[var(--md-sys-color-outline-variant)] flex justify-end gap-3 z-30 shadow-md backdrop-blur-md transition-premium">
-        <md-filled-button onClick={handleSave} style={{ padding: '0 32px' }}>
+        <md-filled-button onClick={handleSave}  >
           <span slot="icon" className="material-symbols-outlined">save</span>
           Simpan Perubahan
         </md-filled-button>

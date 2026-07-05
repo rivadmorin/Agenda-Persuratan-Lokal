@@ -99,7 +99,7 @@
 
 
 .transition-premium {
-  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .font-tabular {
@@ -112,6 +112,8 @@ body {
   color: var(--md-sys-color-on-background);
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 md-icon, .material-symbols-outlined {
@@ -138,12 +140,26 @@ md-filled-button [slot="icon"],
 md-elevated-button [slot="icon"],
 md-text-button [slot="icon"],
 md-tonal-button [slot="icon"] {
-  font-size: 18px !important;
+  font-size: 20px !important;
 }
 
 /* Ensure material web components buttons have enough internal space for text */
 md-filled-button, md-outlined-button, md-text-button, md-tonal-button {
-  --md-sys-typescale-label-large-size: 0.875rem;
+  --md-sys-typescale-label-large-size: 0.875rem !important;
+  --md-sys-typescale-label-large-weight: 700 !important;
+  --md-sys-typescale-label-large-tracking: 0.02em !important;
+  --md-filled-button-container-height: 44px;
+  --md-outlined-button-container-height: 44px;
+  --md-filled-button-leading-space: 24px;
+  --md-filled-button-trailing-space: 24px;
+  --md-outlined-button-leading-space: 24px;
+  --md-outlined-button-trailing-space: 24px;
+  white-space: nowrap;
+  min-width: 120px; /* Force minimum width to prevent truncation */
+}
+
+md-filled-button::part(label), md-outlined-button::part(label) {
+  padding-top: 1px;
 }
 
 /* Custom Rainbow Slider Track */
@@ -185,7 +201,7 @@ md-slider.slider-hue-track::part(track) {
 .m3-table th {
   background-color: var(--md-sys-color-surface-container-high);
   color: var(--md-sys-color-on-surface-variant);
-  padding: 16px;
+  padding: 12px 16px;
   text-align: left;
   font-weight: 500;
   font-size: 0.75rem;
@@ -195,7 +211,7 @@ md-slider.slider-hue-track::part(track) {
 }
 
 .m3-table td {
-  padding: 16px;
+  padding: 12px 16px;
   color: var(--md-sys-color-on-surface);
   border-bottom: 1px solid var(--md-sys-color-outline-variant);
   font-size: 0.875rem;
@@ -221,15 +237,26 @@ md-slider.slider-hue-track::part(track) {
 }
 
 h1, h2, h3, h4, .font-display {
-  letter-spacing: var(--font-tracking-tight);
-}
-
-.transition-premium {
-  transition: all 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  letter-spacing: -0.025em;
 }
 
 .glass-surface {
   background: rgba(var(--md-sys-color-surface-container-low-rgb), 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* Fix for overlapping touch targets and clipping */
+md-filled-button::part(focus-ring), md-outlined-button::part(focus-ring) {
+  margin: -4px;
+}
+
+/* Elegant Empty State Animation */
+@keyframes premiumFadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-premium-in {
+  animation: premiumFadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
