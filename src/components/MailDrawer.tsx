@@ -7,6 +7,7 @@ interface MailDrawerProps {
   mailToEdit: MailRecord | null;
   columns: ColumnDefinition[];
   onSave: (data: any) => void;
+  onError?: (title: string, message: string) => void;
 }
 
 export default function MailDrawer({
@@ -14,7 +15,8 @@ export default function MailDrawer({
   onClose,
   mailToEdit,
   columns,
-  onSave
+  onSave,
+  onError
 }: MailDrawerProps) {
   const [type, setType] = useState<'Masuk' | 'Keputusan'>('Masuk');
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -65,6 +67,7 @@ export default function MailDrawer({
     const file = e.target.files?.[0];
     if (file) {
       if (file.type !== 'application/pdf') {
+        if (onError) onError('Format Salah', 'Hanya file PDF yang diperbolehkan.');
         setErrors(prev => ({ ...prev, pdf: 'Hanya file PDF yang diperbolehkan.' }));
         return;
       }
@@ -153,6 +156,8 @@ export default function MailDrawer({
 
             {sortedColumns.map(col => {
               const hasError = !!errors[col.key];
+              const isLongText = col.key === 'perihal' || col.key === 'catatan' || col.key === 'disposisi' || col.key === 'isi';
+              const maxLength = isLongText ? 255 : 100;
               return (
                 <div key={col.key} className="flex flex-col gap-1">
                   <md-filled-text-field
@@ -164,6 +169,8 @@ export default function MailDrawer({
                     onInput={(e: any) => setFormData({ ...formData, [col.key]: e.target.value })}
                     required={col.required ? true : undefined}
                     className="w-full"
+                    maxLength={maxLength}
+                    supportingText={`${(formData[col.key] || '').length}/${maxLength}`}
                   ></md-filled-text-field>
                 </div>
               );
@@ -209,7 +216,7 @@ export default function MailDrawer({
 
                   <div className="flex items-center gap-1">
                     {pdfFile ? (
-                      <md-icon-button onClick={handleRemoveUploadedFile}>
+                      <md-icon-button onClick={handleRemoveUploadedFile} aria-label="Hapus file yang dipilih">
                         <span className="material-symbols-outlined text-red-500">cancel</span>
                       </md-icon-button>
                     ) : (

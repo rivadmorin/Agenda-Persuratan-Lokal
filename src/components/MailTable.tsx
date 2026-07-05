@@ -12,26 +12,28 @@ interface MailTableProps {
   onPrintReceipt: (ids: string[]) => void;
   onViewPdf: (path: string) => void;
   onRefresh: () => void;
+  onError?: (title: string, message: string) => void;
 }
 
-export default function MailTable({
-  mails,
-  config,
-  onEdit,
-  onDelete,
-  onAdd,
-  onExportExcel,
-  onBatchDownload,
-  onPrintReceipt,
-  onViewPdf,
-  onRefresh
-}: MailTableProps) {
+export default function MailTable(props: MailTableProps) {
+  const {
+    mails,
+    config,
+    onEdit,
+    onDelete,
+    onAdd,
+    onExportExcel,
+    onBatchDownload,
+    onPrintReceipt,
+    onViewPdf,
+    onRefresh
+  } = props;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedMail, setSelectedMail] = useState<MailRecord | null>(null);
   const [previewTab, setPreviewTab] = useState<'details' | 'pdf' | 'markdown'>('details');
   const [copied, setCopied] = useState(false);
-  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadingMailId, setUploadingMailId] = useState<string | null>(null);
 
   const filteredMails = useMemo(() => {
     if (!searchTerm) return mails;
@@ -53,11 +55,12 @@ export default function MailTable({
 
   const handleInlineUpload = async (mailId: string, file: File) => {
     if (file.type !== 'application/pdf') {
-      alert('Hanya file PDF yang diperbolehkan.');
+      if (props.onError) props.onError('Format Salah', 'Hanya file PDF yang diperbolehkan.');
+      else alert('Hanya file PDF yang diperbolehkan.');
       return;
     }
 
-    setUploadLoading(true);
+    setUploadingMailId(mailId);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
@@ -90,15 +93,17 @@ export default function MailTable({
           }
         } else {
           const err = await res.json();
-          alert(err.message || 'Gagal mengunggah PDF');
+          if (props.onError) props.onError('Gagal Unggah', err.message || 'Gagal mengunggah PDF');
+          else alert(err.message || 'Gagal mengunggah PDF');
         }
       };
       reader.readAsDataURL(file);
     } catch (err) {
       console.error(err);
-      alert('Gagal membaca berkas.');
+      if (props.onError) props.onError('Kesalahan Sistem', 'Gagal membaca berkas.');
+      else alert('Gagal membaca berkas.');
     } finally {
-      setUploadLoading(false);
+      setUploadingMailId(null);
     }
   };
 
@@ -125,11 +130,18 @@ export default function MailTable({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shrink-0">
         <md-outlined-text-field
           placeholder="Cari agenda surat..."
+          value={searchTerm}
           onInput={(e: any) => setSearchTerm(e.target.value)}
           className="flex-grow max-w-md"
+          aria-label="Cari agenda surat"
           style={{ '--md-outlined-text-field-container-shape': '28px' }}
         >
           <span slot="leading-icon" className="material-symbols-outlined">search</span>
+          {searchTerm && (
+            <md-icon-button slot="trailing-icon" onClick={() => setSearchTerm('')} aria-label="Bersihkan pencarian">
+              <span className="material-symbols-outlined">close</span>
+            </md-icon-button>
+          )}
         </md-outlined-text-field>
 
         <div className="flex items-center justify-end gap-2 flex-wrap">
@@ -209,7 +221,12 @@ export default function MailTable({
                   );
                 })}
                 <td className="px-4 py-4 text-sm" onClick={(e) => e.stopPropagation()}>
-                  {mail.pdfPath ? (
+                  {uploadingMailId === mail.id ? (
+                    <div className="flex items-center gap-2 text-[var(--md-sys-color-primary)] animate-pulse">
+                      <md-circular-progress indeterminate style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
+                      <span className="text-[10px] font-bold uppercase">Mengunggah</span>
+                    </div>
+                  ) : mail.pdfPath ? (
                     <button 
                       onClick={() => onViewPdf(mail.pdfPath!)}
                       className="flex items-center gap-1 text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 font-bold transition-premium hover:underline"
@@ -305,6 +322,7 @@ export default function MailTable({
                    <button 
                      onClick={() => setSelectedMail(null)}
                      className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--md-sys-color-outline)] hover:bg-[var(--md-sys-color-surface-container-highest)] transition-premium active:scale-90"
+                     aria-label="Tutup pratinjau"
                    >
                      <span className="material-symbols-outlined text-lg">close</span>
                    </button>
