@@ -85,8 +85,9 @@ export default function Settings({
     setTone(hct.tone);
   }, [themeColor]);
 
-  const handleHctChange = (h: number, c: number, t: number) => {
-    const newHct = Hct.from(h, c, t);
+  const handleHueChange = (h: number) => {
+    // We use a fixed vibrant chroma and medium tone for the "instant" theme color
+    const newHct = Hct.from(h, 48, 40);
     const newHex = hexFromArgb(newHct.toInt());
     setThemeColor(newHex);
     generateM3Theme(newHex);
@@ -494,7 +495,7 @@ export default function Settings({
   };
 
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-8 p-4 relative pb-28 text-[var(--md-sys-color-on-surface)]">
+    <div className="max-w-4xl mx-auto flex flex-col gap-6 p-4 relative pb-28 text-[var(--md-sys-color-on-surface)]">
       {/* Toast Notification */}
       {statusMsg && (
         <div className={`fixed bottom-24 right-8 z-50 p-4 rounded-2xl shadow-lg flex items-center gap-3 transition-premium ${statusType === 'success' ? 'bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]' : 'bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]'}`}>
@@ -503,517 +504,475 @@ export default function Settings({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)]">Pengaturan Sistem</h1>
-        <p className="text-[var(--md-sys-color-on-surface-variant)]">Kelola konfigurasi branding, skema kolom dinamis, dan pengelolaan PDF.</p>
+        <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Kelola konfigurasi branding, skema kolom dinamis, dan pengelolaan PDF.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="flex flex-col gap-6">
         
-        {/* Left Column: Branding and PDF Configuration */}
-        <div className="lg:col-span-5 flex flex-col gap-8">
-          
-          {/* Tampilan & Branding */}
-          <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1.5 transition-premium shadow-sm">
-            <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.375rem)] p-6">
-              <h2 className="text-lg font-bold mb-6 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
-                <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">palette</span>
-                Tampilan & Branding
-              </h2>
-              <div className="flex flex-col gap-4">
-                <md-filled-text-field
-                  label="Nama Aplikasi / Instansi"
-                  value={appName}
-                  onInput={(e: any) => setAppName(e.target.value)}
-                ></md-filled-text-field>
+        {/* Tampilan & Branding */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5">
+            <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
+              <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">palette</span>
+              Tampilan & Branding
+            </h2>
+            <div className="flex flex-col gap-4">
+              <md-filled-text-field
+                label="Nama Aplikasi / Instansi"
+                value={appName}
+                onInput={(e: any) => setAppName(e.target.value)}
+              ></md-filled-text-field>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-1">
-                    <md-filled-select
-                      label="Tipe Logo"
-                      value={logoType}
-                      onInput={(e: any) => setLogoType(e.target.value)}
-                    >
-                      <md-select-option value="emoji">Emoji</md-select-option>
-                      <md-select-option value="image">Gambar URL</md-select-option>
-                    </md-filled-select>
-                  </div>
-                  <div className="col-span-2">
-                    <md-filled-text-field
-                      label={logoType === 'emoji' ? 'Karakter Emoji' : 'URL Gambar Logo'}
-                      value={logoUrl}
-                      onInput={(e: any) => setLogoUrl(e.target.value)}
-                      className="w-full"
-                    ></md-filled-text-field>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-1">
+                  <md-filled-select
+                    label="Tipe Logo"
+                    value={logoType}
+                    onInput={(e: any) => setLogoType(e.target.value)}
+                    className="w-full"
+                  >
+                    <md-select-option value="emoji">Emoji</md-select-option>
+                    <md-select-option value="image">Gambar URL</md-select-option>
+                  </md-filled-select>
                 </div>
-
-                <div className="flex flex-col gap-4 mt-2">
-                  <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Kustomisasi Tema M3 (HCT)</span>
-                  
-                  {/* Hex Color Input + Visual Preview */}
-                  <div className="flex items-center gap-4">
-                    <md-filled-text-field
-                      label="Seed Color (HEX)"
-                      value={themeColor}
-                      onInput={(e: any) => {
-                        const hex = e.target.value;
-                        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-                          setThemeColor(hex);
-                          generateM3Theme(hex);
-                        }
-                      }}
-                      className="flex-1"
-                    >
-                      <md-icon slot="leading-icon">palette</md-icon>
-                    </md-filled-text-field>
-                    <div
-                      className="w-12 h-12 rounded-full border border-[var(--md-sys-color-outline-variant)] shadow-sm shrink-0"
-                      style={{ backgroundColor: themeColor }}
-                    ></div>
-                  </div>
- 
-                  {/* Sliders HCT */}
-                  <div className="flex flex-col gap-4 bg-[var(--md-sys-color-surface-container-low)] p-4 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
-                    
-                    {/* Hue */}
-                    <div className="flex flex-col gap-1">
-                      <div className="flex justify-between text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider px-1">
-                        <span>Hue</span>
-                        <span>{Math.round(hue)}°</span>
-                      </div>
-                      <md-slider
-                        min="0"
-                        max="360"
-                        value={Math.round(hue)}
-                        onInput={(e: any) => {
-                          const val = Number(e.target.value);
-                          setHue(val);
-                          handleHctChange(val, chroma, tone);
-                        }}
-                      ></md-slider>
-                    </div>
- 
-                    {/* Chroma */}
-                    <div className="flex flex-col gap-1">
-                      <div className="flex justify-between text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider px-1">
-                        <span>Chroma</span>
-                        <span>{Math.round(chroma)}</span>
-                      </div>
-                      <md-slider
-                        min="0"
-                        max="150"
-                        value={Math.round(chroma)}
-                        onInput={(e: any) => {
-                          const val = Number(e.target.value);
-                          setChroma(val);
-                          handleHctChange(hue, val, tone);
-                        }}
-                      ></md-slider>
-                    </div>
- 
-                    {/* Tone */}
-                    <div className="flex flex-col gap-1">
-                      <div className="flex justify-between text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider px-1">
-                        <span>Tone</span>
-                        <span>{Math.round(tone)}</span>
-                      </div>
-                      <md-slider
-                        min="0"
-                        max="100"
-                        value={Math.round(tone)}
-                        onInput={(e: any) => {
-                          const val = Number(e.target.value);
-                          setTone(val);
-                          handleHctChange(hue, chroma, val);
-                        }}
-                      ></md-slider>
-                    </div>
-                  </div>
- 
-                  {/* Mode Tampilan Control */}
-                  <div className="flex flex-col gap-2 mt-2">
-                    <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Mode Tampilan</span>
-                    <div className="flex bg-[var(--md-sys-color-surface-container-high)] p-1 rounded-2xl border border-[var(--md-sys-color-outline-variant)] max-w-sm">
-                      <button
-                        type="button"
-                        onClick={() => setDarkMode(true)}
-                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                          darkMode === true
-                            ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow-sm'
-                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-sm">dark_mode</span>
-                        Gelap
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                          setDarkMode(isSystemDark);
-                        }}
-                        className="flex-1 py-2 rounded-xl text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-sm">hdr_auto</span>
-                        Auto
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDarkMode(false)}
-                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                          darkMode === false
-                            ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow-sm'
-                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-sm">light_mode</span>
-                        Terang
-                      </button>
-                    </div>
-                  </div>
+                <div className="sm:col-span-2">
+                  <md-filled-text-field
+                    label={logoType === 'emoji' ? 'Karakter Emoji' : 'URL Gambar Logo'}
+                    value={logoUrl}
+                    onInput={(e: any) => setLogoUrl(e.target.value)}
+                    className="w-full"
+                  ></md-filled-text-field>
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Manajemen Berkas & Auto-Rename */}
-          <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1.5 transition-premium shadow-sm">
-            <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.375rem)] p-6">
-              <h2 className="text-lg font-bold mb-6 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
-                <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">description</span>
-                Manajemen Berkas & Unggahan
-              </h2>
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
-                  <div>
-                    <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)]">Kompresi PDF Otomatis</p>
-                    <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Kompresi ukuran fisik via Ghostscript</p>
-                  </div>
-                  <md-checkbox
-                    checked={autoCompressPdf}
-                    onClick={() => setAutoCompressPdf(!autoCompressPdf)}
-                  ></md-checkbox>
-                </div>
+              <div className="flex flex-col gap-4 mt-2">
+                <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Kustomisasi Warna Tema</span>
 
-                {autoCompressPdf && (
-                  <md-filled-select
-                    label="Level Kompresi Bawaan"
-                    value={pdfCompressionLevel}
-                    onInput={(e: any) => setPdfCompressionLevel(e.target.value)}
+                {/* Hex Color Input + Visual Preview */}
+                <div className="flex items-center gap-4">
+                  <md-filled-text-field
+                    label="Seed Color (HEX)"
+                    value={themeColor}
+                    onInput={(e: any) => {
+                      const hex = e.target.value;
+                      if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+                        setThemeColor(hex);
+                        generateM3Theme(hex);
+                      }
+                    }}
+                    className="flex-1"
                   >
-                    <md-select-option value="low">RENDAH (Kualitas Gambar Tinggi)</md-select-option>
-                    <md-select-option value="medium">SEDANG (Ukuran Seimbang)</md-select-option>
-                    <md-select-option value="high">TINGGI (Kompresi Maksimal)</md-select-option>
-                  </md-filled-select>
-                )}
-
-                <md-filled-text-field
-                  label="Maksimum Ukuran PDF (MB)"
-                  type="number"
-                  value={maxUploadSizeMb}
-                  onInput={(e: any) => setMaxUploadSizeMb(parseInt(e.target.value) || 50)}
-                ></md-filled-text-field>
-
-                <md-divider className="my-2"></md-divider>
-
-                {/* Auto Rename Config */}
-                <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
-                  <div>
-                    <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)] font-display">Penamaan Berkas PDF Otomatis</p>
-                    <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Format: [Nilai Kolom1]-[Nilai Kolom2].pdf</p>
-                  </div>
-                  <md-checkbox
-                    checked={autoRenamePdf}
-                    onClick={() => setAutoRenamePdf(!autoRenamePdf)}
-                  ></md-checkbox>
+                    <md-icon slot="leading-icon">palette</md-icon>
+                  </md-filled-text-field>
+                  <div
+                    className="w-12 h-12 rounded-full border border-[var(--md-sys-color-outline-variant)] shadow-sm shrink-0"
+                    style={{ backgroundColor: themeColor }}
+                  ></div>
                 </div>
 
-                {autoRenamePdf && (
-                  <div className="flex flex-col gap-2 p-3 border border-[var(--md-sys-color-outline-variant)] rounded-2xl bg-[var(--md-sys-color-surface-container-low)] transition-premium">
-                    <label className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">PILIH KOLOM UNTUK FORMAT NAMA</label>
-                    <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
-                      {columns.map(col => (
-                        <label key={col.key} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-container-highest)]/50 cursor-pointer transition-colors text-sm text-[var(--md-sys-color-on-surface)]">
-                          <md-checkbox
-                            checked={pdfRenameCols.includes(col.key)}
-                            onClick={() => handleToggleRenameCol(col.key)}
-                          ></md-checkbox>
-                          <span>{col.label} ({col.key})</span>
-                        </label>
-                      ))}
-                    </div>
+                {/* Single Hue Slider */}
+                <div className="flex flex-col gap-1 bg-[var(--md-sys-color-surface-container-low)] p-4 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+                  <div className="flex justify-between text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider px-1">
+                    <span>Pilih Warna (Hue)</span>
+                    <span>{Math.round(hue)}°</span>
                   </div>
-                )}
+                  <md-slider
+                    min="0"
+                    max="360"
+                    value={Math.round(hue)}
+                    className="slider-hue-track"
+                    onInput={(e: any) => {
+                      const val = Number(e.target.value);
+                      setHue(val);
+                      handleHueChange(val);
+                    }}
+                  ></md-slider>
+                </div>
+
+                {/* Mode Tampilan Control */}
+                <div className="flex flex-col gap-2 mt-2">
+                  <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Mode Tampilan</span>
+                  <div className="flex bg-[var(--md-sys-color-surface-container-high)] p-1 rounded-2xl border border-[var(--md-sys-color-outline-variant)] w-full sm:max-w-sm">
+                    <button
+                      type="button"
+                      onClick={() => setDarkMode(true)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        darkMode === true
+                          ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow-sm'
+                          : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">dark_mode</span>
+                      Gelap
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                        setDarkMode(isSystemDark);
+                      }}
+                      className="flex-1 py-2 rounded-xl text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">hdr_auto</span>
+                      Auto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDarkMode(false)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        darkMode === false
+                          ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow-sm'
+                          : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">light_mode</span>
+                      Terang
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Dynamic Schema, Backup/Restore and Receipt columns */}
-        <div className="lg:col-span-7 flex flex-col gap-8">
-          
-          {/* Backup & Pemulihan (Double Bezel) */}
-          <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1.5 transition-premium shadow-sm">
-            <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.375rem)] p-6 flex flex-col gap-6">
-              <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
-                <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">backup</span>
-                Sistem Database Backup & Pemulihan
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <md-filled-text-field
-                  label="Masa Retensi Cadangan (Hari)"
-                  type="number"
-                  value={backupRetentionDays}
-                  onInput={(e: any) => setBackupRetentionDays(parseInt(e.target.value) || 7)}
-                ></md-filled-text-field>
-
-                <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
-                  <div>
-                    <p className="font-bold text-xs text-[var(--md-sys-color-on-surface)]">Sertakan File PDF Lampiran</p>
-                    <p className="text-[9px] text-[var(--md-sys-color-on-surface-variant)]">Pencadangan dalam format ZIP lengkap</p>
-                  </div>
-                  <md-checkbox
-                    checked={includePdfBackup}
-                    onClick={() => setIncludePdfBackup(!includePdfBackup)}
-                  ></md-checkbox>
+        {/* Manajemen Berkas & Auto-Rename */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5">
+            <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
+              <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">description</span>
+              Manajemen Berkas & Unggahan
+            </h2>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
+                <div>
+                  <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)]">Kompresi PDF Otomatis</p>
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Kompresi ukuran fisik via Ghostscript</p>
                 </div>
+                <md-checkbox
+                  checked={autoCompressPdf}
+                  onClick={() => setAutoCompressPdf(!autoCompressPdf)}
+                ></md-checkbox>
               </div>
 
-              {/* Grouped Actions (Utama, Diagnostik, Bahaya) */}
-              <div className="flex flex-col gap-5 bg-[var(--md-sys-color-surface-container-low)] p-5 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
-                <div className="flex flex-col gap-2">
-                  <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Tindakan Utama</span>
-                  <div className="flex flex-wrap gap-3">
-                    <md-filled-button
-                      onClick={handleCreateBackup}
-                      disabled={backupsLoading ? true : undefined}
-                    >
-                      <span slot="icon" className="material-symbols-outlined">cloud_upload</span>
-                      Buat Cadangan Baru
-                    </md-filled-button>
-                    <md-outlined-button onClick={handleExportJson}>
-                      <span slot="icon" className="material-symbols-outlined">download</span>
-                      Ekspor File Data
-                    </md-outlined-button>
-                  </div>
-                </div>
+              {autoCompressPdf && (
+                <md-filled-select
+                  label="Level Kompresi Bawaan"
+                  value={pdfCompressionLevel}
+                  onInput={(e: any) => setPdfCompressionLevel(e.target.value)}
+                >
+                  <md-select-option value="low">RENDAH (Kualitas Gambar Tinggi)</md-select-option>
+                  <md-select-option value="medium">SEDANG (Ukuran Seimbang)</md-select-option>
+                  <md-select-option value="high">TINGGI (Kompresi Maksimal)</md-select-option>
+                </md-filled-select>
+              )}
 
-                <div className="flex flex-col gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
-                  <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Utilitas & Diagnostik</span>
-                  <div className="flex flex-wrap gap-3">
-                    <md-outlined-button onClick={handleCheckIntegrity}>
-                      <span slot="icon" className="material-symbols-outlined font-fill">verified_user</span>
-                      Periksa Integritas
-                    </md-outlined-button>
-                    <md-outlined-button onClick={handleCleanupOrphans}>
-                      <span slot="icon" className="material-symbols-outlined">clean_hands</span>
-                      Bersihkan File Yatim
-                    </md-outlined-button>
-                    <md-outlined-button onClick={handleReconstructMetadata}>
-                      <span slot="icon" className="material-symbols-outlined">construction</span>
-                      Rekonstruksi Metadata
-                    </md-outlined-button>
-                  </div>
-                </div>
+              <md-filled-text-field
+                label="Maksimum Ukuran PDF (MB)"
+                type="number"
+                value={maxUploadSizeMb}
+                onInput={(e: any) => setMaxUploadSizeMb(parseInt(e.target.value) || 50)}
+              ></md-filled-text-field>
 
-                <div className="flex flex-col gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
-                  <span className="text-[10px] font-bold text-[var(--md-sys-color-error)] uppercase tracking-wider ml-1">Zona Bahaya</span>
-                  <div className="flex flex-wrap gap-3">
-                    <md-outlined-button
-                      onClick={handleClearSystem}
-                      style={{ '--md-outlined-button-outline-color': 'var(--md-sys-color-error)', '--md-outlined-button-label-text-color': 'var(--md-sys-color-error)' } as any}
-                    >
-                      <span slot="icon" className="material-symbols-outlined">delete_forever</span>
-                      Hapus Seluruh Data
-                    </md-outlined-button>
-                  </div>
+              <md-divider className="my-1"></md-divider>
+
+              {/* Auto Rename Config */}
+              <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
+                <div>
+                  <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)] font-display">Penamaan Berkas PDF Otomatis</p>
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Format: [Nilai Kolom1]-[Nilai Kolom2].pdf</p>
                 </div>
+                <md-checkbox
+                  checked={autoRenamePdf}
+                  onClick={() => setAutoRenamePdf(!autoRenamePdf)}
+                ></md-checkbox>
               </div>
 
-              {/* Import drag and drop / upload zone */}
-              <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-6 text-center cursor-pointer bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)]/50 hover:border-[var(--md-sys-color-primary)] transition-premium flex flex-col items-center justify-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-3xl text-[var(--md-sys-color-primary)] font-fill">upload_file</span>
-                <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">Unggah berkas JSON atau ZIP ekspor Anda untuk memulihkan seluruh data</p>
-                <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Format .json atau .zip, maks 100MB</p>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImportFileChange}
-                  accept=".json,.zip"
-                  className="hidden"
-                />
-              </div>
-
-              {/* Backups List Table */}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                   <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">DAFTAR CADANGAN DI SERVER</h4>
-                   <button 
-                     onClick={fetchBackups}
-                     className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 hover:underline flex items-center gap-1 cursor-pointer transition-premium"
-                   >
-                     <span className="material-symbols-outlined text-sm">sync</span>
-                     Segarkan
-                   </button>
-                </div>
-                
-                <div className="border border-[var(--md-sys-color-outline-variant)] rounded-2xl overflow-hidden bg-[var(--md-sys-color-surface-container-low)]">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-[var(--md-sys-color-surface-container-high)] border-b border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-on-surface-variant)] font-bold uppercase tracking-wider">
-                        <th className="px-4 py-3">Label Cadangan</th>
-                        <th className="px-4 py-3">Ukuran</th>
-                        <th className="px-4 py-3">Dibuat Pada</th>
-                        <th className="px-4 py-3 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {backups.map(b => (
-                        <tr key={b.filename} className="border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]/30 transition-premium">
-                          <td className="px-4 py-3 font-semibold text-[var(--md-sys-color-on-surface)] max-w-[200px] truncate" title={b.filename}>
-                            {b.label}
-                          </td>
-                          <td className="px-4 py-3 text-[var(--md-sys-color-on-surface-variant)] font-mono font-tabular">
-                            {formatSize(b.sizeBytes)}
-                          </td>
-                          <td className="px-4 py-3 text-[var(--md-sys-color-on-surface-variant)] font-mono font-tabular">
-                            {new Date(b.createdAt).toLocaleString('id-ID')}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                onClick={() => handleRestoreBackup(b.filename)}
-                                className="px-2.5 py-1 bg-[var(--md-sys-color-primary-container)] hover:bg-[var(--md-sys-color-primary-container)]/80 text-[var(--md-sys-color-on-primary-container)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer"
-                              >
-                                Pulihkan
-                              </button>
-                              <a
-                                href={`/api/backup/download/${b.filename}`}
-                                className="px-2.5 py-1 bg-[var(--md-sys-color-surface-container-high)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] rounded-lg font-bold transition-premium active:scale-95 inline-flex items-center gap-0.5"
-                                title="Unduh berkas backup"
-                              >
-                                <span className="material-symbols-outlined text-xs">download</span>
-                              </a>
-                              <button
-                                onClick={() => handleDeleteBackup(b.filename)}
-                                className="px-2.5 py-1 bg-[var(--md-sys-color-error-container)]/40 hover:bg-[var(--md-sys-color-error-container)]/80 text-[var(--md-sys-color-error)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer"
-                                title="Hapus backup dari server"
-                              >
-                                <span className="material-symbols-outlined text-xs">delete</span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {backups.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="p-8 text-center text-slate-400 dark:text-slate-600 italic">
-                            Belum ada file cadangan di server.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Kolom Cetak Tanda Terima */}
-          <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1.5 transition-premium shadow-sm">
-            <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.375rem)] p-6 flex flex-col gap-4">
-              <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
-                <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">receipt_long</span>
-                Kolom Cetak Tanda Terima
-              </h2>
-              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Tentukan kolom mana saja yang ingin disertakan di hasil cetak PDF tanda terima surat.</p>
-              
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                {columns.map(col => {
-                  const isChecked = col.includeInReceipt !== false;
-                  return (
-                    <div 
-                      key={col.key}
-                      onClick={() => handleToggleReceiptCol(col.key)}
-                      className={`p-3.5 border rounded-2xl flex items-center justify-between cursor-pointer transition-premium active:scale-95 ${
-                        isChecked 
-                          ? 'border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]' 
-                          : 'border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]/50 text-[var(--md-sys-color-on-surface-variant)]'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{col.label}</p>
-                        <p className="text-[9px] text-[var(--md-sys-color-on-surface-variant)] mt-0.5 font-mono uppercase tracking-wider">{col.type}</p>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        isChecked ? 'bg-green-150 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-[var(--md-sys-color-surface-container)] text-[var(--md-sys-color-outline)]'
-                      }`}>
-                        {isChecked ? 'Dicetak' : 'Sembunyi'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-              {/* Skema Kolom Dinamis */}
-          <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1.5 transition-premium shadow-sm">
-            <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.375rem)] p-6 flex flex-col min-h-[500px]">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
-                  <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">splitscreen</span>
-                  Skema Kolom Dinamis
-                </h2>
-                <md-filled-button onClick={() => setShowAddCol(true)}>
-                  <span slot="icon" className="material-symbols-outlined">add</span>
-                  Tambah Kolom
-                </md-filled-button>
-              </div>
- 
-              {/* Profiles Section */}
-              <div className="flex items-end gap-3 p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl mb-6">
-                <div className="flex-1">
-                  <md-filled-select
-                    label="Profil Kolom Aktif"
-                    value={activeProfileId}
-                    onInput={(e: any) => handleSelectProfile(e.target.value)}
-                    className="w-full"
-                  >
-                    <md-select-option value="">-- Kustom (Belum Disimpan) --</md-select-option>
-                    {columnProfiles.map(p => (
-                      <md-select-option key={p.id} value={p.id}>{p.name}</md-select-option>
+              {autoRenamePdf && (
+                <div className="flex flex-col gap-2 p-3 border border-[var(--md-sys-color-outline-variant)] rounded-2xl bg-[var(--md-sys-color-surface-container-low)] transition-premium">
+                  <label className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">PILIH KOLOM UNTUK FORMAT NAMA</label>
+                  <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {columns.map(col => (
+                      <label key={col.key} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-container-highest)]/50 cursor-pointer transition-colors text-sm text-[var(--md-sys-color-on-surface)]">
+                        <md-checkbox
+                          checked={pdfRenameCols.includes(col.key)}
+                          onClick={() => handleToggleRenameCol(col.key)}
+                        ></md-checkbox>
+                        <span>{col.label} ({col.key})</span>
+                      </label>
                     ))}
-                  </md-filled-select>
+                  </div>
                 </div>
-                
-                {activeProfileId && (
-                  <button 
-                    onClick={() => handleDeleteProfile(activeProfileId)} 
-                    className="px-4 py-3 border border-red-200 text-red-650 hover:bg-red-50 dark:hover:bg-red-950/10 rounded-xl text-xs font-bold transition-premium active:scale-95 cursor-pointer shadow-sm h-14"
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Backup & Pemulihan (Double Bezel) */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5 flex flex-col gap-5">
+            <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
+              <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">backup</span>
+              Sistem Database Backup & Pemulihan
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <md-filled-text-field
+                label="Masa Retensi Cadangan (Hari)"
+                type="number"
+                value={backupRetentionDays}
+                onInput={(e: any) => setBackupRetentionDays(parseInt(e.target.value) || 7)}
+              ></md-filled-text-field>
+
+              <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
+                <div>
+                  <p className="font-bold text-xs text-[var(--md-sys-color-on-surface)]">Sertakan File PDF Lampiran</p>
+                  <p className="text-[9px] text-[var(--md-sys-color-on-surface-variant)]">Pencadangan dalam format ZIP lengkap</p>
+                </div>
+                <md-checkbox
+                  checked={includePdfBackup}
+                  onClick={() => setIncludePdfBackup(!includePdfBackup)}
+                ></md-checkbox>
+              </div>
+            </div>
+
+            {/* Grouped Actions (Utama, Diagnostik, Bahaya) */}
+            <div className="flex flex-col gap-5 bg-[var(--md-sys-color-surface-container-low)] p-5 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Tindakan Utama</span>
+                <div className="flex flex-wrap gap-3">
+                  <md-filled-button
+                    onClick={handleCreateBackup}
+                    disabled={backupsLoading ? true : undefined}
+                    className="w-full sm:w-auto sm:min-w-[200px]"
                   >
-                    Hapus Profil
-                  </button>
-                )}
+                    <span slot="icon" className="material-symbols-outlined">cloud_upload</span>
+                    Buat Cadangan Baru
+                  </md-filled-button>
+                  <md-outlined-button onClick={handleExportJson} className="w-full sm:w-auto sm:min-w-[200px]">
+                    <span slot="icon" className="material-symbols-outlined">download</span>
+                    Ekspor File Data
+                  </md-outlined-button>
+                </div>
               </div>
+
+              <div className="flex flex-col gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
+                <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Utilitas & Diagnostik</span>
+                <div className="flex flex-wrap gap-3">
+                  <md-outlined-button onClick={handleCheckIntegrity} className="w-full sm:w-auto sm:min-w-[160px]">
+                    <span slot="icon" className="material-symbols-outlined font-fill">verified_user</span>
+                    Periksa Integritas
+                  </md-outlined-button>
+                  <md-outlined-button onClick={handleCleanupOrphans} className="w-full sm:w-auto sm:min-w-[160px]">
+                    <span slot="icon" className="material-symbols-outlined">clean_hands</span>
+                    Bersihkan File Yatim
+                  </md-outlined-button>
+                  <md-outlined-button onClick={handleReconstructMetadata} className="w-full sm:w-auto sm:min-w-[160px]">
+                    <span slot="icon" className="material-symbols-outlined">construction</span>
+                    Rekonstruksi Metadata
+                  </md-outlined-button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-[var(--md-sys-color-outline-variant)] pt-3">
+                <span className="text-[10px] font-bold text-[var(--md-sys-color-error)] uppercase tracking-wider ml-1">Zona Bahaya</span>
+                <div className="flex flex-wrap gap-3">
+                  <md-outlined-button
+                    onClick={handleClearSystem}
+                    className="w-full sm:w-auto sm:min-w-[200px]"
+                    style={{ '--md-outlined-button-outline-color': 'var(--md-sys-color-error)', '--md-outlined-button-label-text-color': 'var(--md-sys-color-error)' } as any}
+                  >
+                    <span slot="icon" className="material-symbols-outlined">delete_forever</span>
+                    Hapus Seluruh Data
+                  </md-outlined-button>
+                </div>
+              </div>
+            </div>
+
+            {/* Import drag and drop / upload zone */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-6 text-center cursor-pointer bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)]/50 hover:border-[var(--md-sys-color-primary)] transition-premium flex flex-col items-center justify-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-3xl text-[var(--md-sys-color-primary)] font-fill">upload_file</span>
+              <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">Unggah berkas JSON atau ZIP ekspor Anda</p>
+              <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Format .json atau .zip, maks 100MB</p>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImportFileChange}
+                accept=".json,.zip"
+                className="hidden"
+              />
+            </div>
+
+            {/* Backups List Table */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                 <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">DAFTAR CADANGAN DI SERVER</h4>
+                 <button
+                   onClick={fetchBackups}
+                   className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 hover:underline flex items-center gap-1 cursor-pointer transition-premium"
+                 >
+                   <span className="material-symbols-outlined text-sm">sync</span>
+                   Segarkan
+                 </button>
+              </div>
+
+              <div className="border border-[var(--md-sys-color-outline-variant)] rounded-2xl overflow-x-auto bg-[var(--md-sys-color-surface-container-low)]">
+                <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                  <thead>
+                    <tr className="bg-[var(--md-sys-color-surface-container-high)] border-b border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-on-surface-variant)] font-bold uppercase tracking-wider">
+                      <th className="px-4 py-3">Label Cadangan</th>
+                      <th className="px-4 py-3">Ukuran</th>
+                      <th className="px-4 py-3">Dibuat Pada</th>
+                      <th className="px-4 py-3 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backups.map(b => (
+                      <tr key={b.filename} className="border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]/30 transition-premium">
+                        <td className="px-4 py-3 font-semibold text-[var(--md-sys-color-on-surface)] max-w-[180px] truncate" title={b.filename}>
+                          {b.label}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--md-sys-color-on-surface-variant)] font-mono font-tabular">
+                          {formatSize(b.sizeBytes)}
+                        </td>
+                        <td className="px-4 py-3 text-[var(--md-sys-color-on-surface-variant)] font-mono font-tabular">
+                          {new Date(b.createdAt).toLocaleString('id-ID')}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleRestoreBackup(b.filename)}
+                              className="px-2.5 py-1 bg-[var(--md-sys-color-primary-container)] hover:bg-[var(--md-sys-color-primary-container)]/80 text-[var(--md-sys-color-on-primary-container)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer"
+                            >
+                              Pulihkan
+                            </button>
+                            <a
+                              href={`/api/backup/download/${b.filename}`}
+                              className="px-2.5 py-1 bg-[var(--md-sys-color-surface-container-high)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] rounded-lg font-bold transition-premium active:scale-95 inline-flex items-center gap-0.5"
+                              title="Unduh berkas backup"
+                            >
+                              <span className="material-symbols-outlined text-xs">download</span>
+                            </a>
+                            <button
+                              onClick={() => handleDeleteBackup(b.filename)}
+                              className="px-2.5 py-1 bg-[var(--md-sys-color-error-container)]/40 hover:bg-[var(--md-sys-color-error-container)]/80 text-[var(--md-sys-color-error)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer"
+                              title="Hapus backup dari server"
+                            >
+                              <span className="material-symbols-outlined text-xs">delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {backups.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-slate-400 dark:text-slate-600 italic">
+                          Belum ada file cadangan di server.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Kolom Cetak Tanda Terima */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5 flex flex-col gap-4">
+            <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
+              <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">receipt_long</span>
+              Kolom Cetak Tanda Terima
+            </h2>
+            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">Tentukan kolom mana saja yang ingin disertakan di hasil cetak PDF tanda terima surat.</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+              {columns.map(col => {
+                const isChecked = col.includeInReceipt !== false;
+                return (
+                  <div
+                    key={col.key}
+                    onClick={() => handleToggleReceiptCol(col.key)}
+                    className={`p-3 border rounded-2xl flex items-center justify-between cursor-pointer transition-premium active:scale-95 ${
+                      isChecked
+                        ? 'border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]'
+                        : 'border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)]/50 text-[var(--md-sys-color-on-surface-variant)]'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{col.label}</p>
+                      <p className="text-[9px] text-[var(--md-sys-color-on-surface-variant)] mt-0.5 font-mono uppercase tracking-wider">{col.type}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                      isChecked ? 'bg-green-150 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-[var(--md-sys-color-surface-container)] text-[var(--md-sys-color-outline)]'
+                    }`}>
+                      {isChecked ? 'Dicetak' : 'Sembunyi'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Skema Kolom Dinamis */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5 flex flex-col min-h-[400px]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
+                <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">splitscreen</span>
+                Skema Kolom Dinamis
+              </h2>
+              <md-filled-button onClick={() => setShowAddCol(true)}>
+                <span slot="icon" className="material-symbols-outlined">add</span>
+                Tambah Kolom
+              </md-filled-button>
+            </div>
  
-              {/* Profile Saving field */}
-              <div className="flex items-center gap-3 px-4 py-2.5 border border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl mb-6 bg-[var(--md-sys-color-surface-container-low)]">
-                <input
-                  type="text"
-                  placeholder="Nama profil skema baru..."
-                  value={newProfileName}
-                  onChange={(e) => setNewProfileName(e.target.value)}
-                  className="flex-grow bg-transparent border-none outline-none text-sm text-[var(--md-sys-color-on-surface)]"
-                />
-                <md-outlined-button onClick={handleSaveAsNewProfile}>
-                  Simpan Profil
-                </md-outlined-button>
+            {/* Profiles Section */}
+            <div className="flex flex-col sm:flex-row items-end gap-3 p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl mb-6">
+              <div className="flex-1 w-full">
+                <md-filled-select
+                  label="Profil Kolom Aktif"
+                  value={activeProfileId}
+                  onInput={(e: any) => handleSelectProfile(e.target.value)}
+                  className="w-full"
+                >
+                  <md-select-option value="">-- Kustom (Belum Disimpan) --</md-select-option>
+                  {columnProfiles.map(p => (
+                    <md-select-option key={p.id} value={p.id}>{p.name}</md-select-option>
+                  ))}
+                </md-filled-select>
               </div>
+
+              {activeProfileId && (
+                <button
+                  onClick={() => handleDeleteProfile(activeProfileId)}
+                  className="w-full sm:w-auto px-4 py-3 border border-red-200 text-red-650 hover:bg-red-50 dark:hover:bg-red-950/10 rounded-xl text-xs font-bold transition-premium active:scale-95 cursor-pointer shadow-sm h-[56px]"
+                >
+                  Hapus Profil
+                </button>
+              )}
+            </div>
+
+            {/* Profile Saving field */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 px-4 py-2 border border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl mb-6 bg-[var(--md-sys-color-surface-container-low)]">
+              <input
+                type="text"
+                placeholder="Nama profil skema baru..."
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                className="w-full sm:flex-grow bg-transparent border-none outline-none py-2 text-sm text-[var(--md-sys-color-on-surface)]"
+              />
+              <md-outlined-button onClick={handleSaveAsNewProfile} className="w-full sm:w-auto">
+                Simpan Profil
+              </md-outlined-button>
+            </div>
  
               <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] mb-3 italic">
                 * Tahan ikon pegangan di sisi kiri kolom untuk menyeret dan mengurutkan ulang.
@@ -1105,7 +1064,6 @@ export default function Settings({
             </div>
           </div>
         </div>
-      </div>
 
       {/* Global save button bar */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--md-sys-color-surface-container-low)]/90 border-t border-[var(--md-sys-color-outline-variant)] flex justify-end gap-3 z-30 shadow-md backdrop-blur-md transition-premium">
