@@ -7,7 +7,7 @@ interface MailDrawerProps {
   onClose: () => void;
   columns: ColumnDefinition[];
   mailToEdit: MailRecord | null;
-  onSave: (data: any) => void;
+  onSave: (data: any) => Promise<void> | void;
   mode: 'edit' | 'view';
   onError?: (title: string, message: string) => void;
 }
@@ -110,17 +110,21 @@ export default function MailDrawer({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsSaving(true);
-    onSave({
-      type,
-      metadata: formData,
-      pdfData: pdfBase64 || undefined,
-      deletePdf: deletedPdf,
-    });
+    try {
+      await onSave({
+        type,
+        metadata: formData,
+        pdfData: pdfBase64 || undefined,
+        deletePdf: deletedPdf,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatMarkdown = (mail: MailRecord) => {
