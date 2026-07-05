@@ -159,14 +159,14 @@ export default function MailTable(props: MailTableProps) {
                 return (
                   <th 
                     key={col.key} 
-                    className={`px-4 py-4 text-xs font-bold uppercase tracking-widest text-[var(--md-sys-color-on-surface-variant)] ${isSecondary ? 'hidden lg:table-cell' : ''}`}
+                    className={`px-4 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-surface-variant)] ${isSecondary ? 'hidden lg:table-cell' : ''}`}
                   >
                     {col.label}
                   </th>
                 );
               })}
-              <th className="px-4 py-4 text-[var(--md-sys-color-on-surface-variant)] text-xs font-bold uppercase tracking-widest w-24">LAMPIRAN</th>
-              <th className="px-4 py-4 text-right text-xs font-bold uppercase tracking-widest text-[var(--md-sys-color-on-surface-variant)] w-64">AKSI</th>
+              <th className="px-4 py-4 text-[var(--md-sys-color-on-surface-variant)] text-[10px] font-black uppercase tracking-[0.15em] text-[var(--md-sys-color-primary)] w-24">LAMPIRAN</th>
+              <th className="px-4 py-4 text-right text-[10px] font-black uppercase tracking-[0.15em] text-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-surface-variant)] w-64">AKSI</th>
             </tr>
           </thead>
           <tbody>
@@ -174,7 +174,7 @@ export default function MailTable(props: MailTableProps) {
               <tr 
                 key={mail.id} 
                 onClick={() => onViewMail(mail)}
-                className="border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-high)]/50 transition-premium cursor-pointer"
+                className="border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)] transition-premium cursor-pointer"
               >
                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                   <md-checkbox
@@ -199,13 +199,13 @@ export default function MailTable(props: MailTableProps) {
                       <span className="text-[10px] font-bold uppercase">Mengunggah</span>
                     </div>
                   ) : mail.pdfPath ? (
-                    <button 
+                    <md-outlined-button
                       onClick={() => onViewMail(mail)}
                       className="flex items-center gap-1 text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 font-bold transition-premium hover:underline"
                     >
                       <span className="material-symbols-outlined text-sm font-fill">picture_as_pdf</span>
                       <span>PDF</span>
-                    </button>
+                    </md-outlined-button>
                   ) : (
                     <label className="text-xs text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 font-bold cursor-pointer underline decoration-dotted transition-premium">
                       Unggah
@@ -221,36 +221,27 @@ export default function MailTable(props: MailTableProps) {
                     </label>
                   )}
                 </td>
-                <td className="px-4 py-4 text-right w-64" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => onEdit(mail)}
-                      className="px-3 py-1.5 rounded-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-xs font-bold text-[var(--md-sys-color-on-surface)] shadow-sm transition-premium active:scale-95 cursor-pointer"
-                    >
-                      Edit
-                    </button>
+                <td className="px-4 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-end gap-0.5">
+                    <md-icon-button onClick={() => onEdit(mail)} aria-label="Edit Agenda">
+                      <span className="material-symbols-outlined text-[20px]">edit</span>
+                    </md-icon-button>
                     {mail.pdfPath ? (
-                      <button
-                        onClick={() => window.open(`/api/files/${mail.pdfPath}`, '_blank')}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-xs font-bold text-[var(--md-sys-color-on-surface)] shadow-sm transition-premium active:scale-95 cursor-pointer"
-                      >
-                        Unduh
-                      </button>
+                      <md-icon-button onClick={() => window.open(`/api/files/${mail.pdfPath}`, '_blank')} aria-label="Unduh PDF">
+                        <span className="material-symbols-outlined text-[20px]">download</span>
+                      </md-icon-button>
                     ) : (
-                      <button
-                        disabled
-                        className="px-3 py-1.5 rounded-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] text-xs font-bold text-[var(--md-sys-color-outline)] opacity-50 cursor-not-allowed"
-                        title="Tidak ada lampiran PDF untuk diunduh"
-                      >
-                        Unduh
-                      </button>
+                      <md-icon-button disabled aria-label="Tidak ada PDF">
+                        <span className="material-symbols-outlined text-[20px]">download_off</span>
+                      </md-icon-button>
                     )}
-                    <button
+                    <md-icon-button
                       onClick={() => onDelete(mail.id)}
-                      className="px-3 py-1.5 rounded-lg border border-[var(--md-sys-color-error)]/30 bg-[var(--md-sys-color-error-container)]/10 hover:bg-[var(--md-sys-color-error-container)]/20 text-xs font-bold text-[var(--md-sys-color-error)] shadow-sm transition-premium active:scale-95 cursor-pointer"
+                      aria-label="Hapus Agenda"
+                      style={{ '--md-icon-button-icon-color': 'var(--md-sys-color-error)' }}
                     >
-                      Hapus
-                    </button>
+                      <span className="material-symbols-outlined text-[20px]">delete</span>
+                    </md-icon-button>
                   </div>
                 </td>
               </tr>

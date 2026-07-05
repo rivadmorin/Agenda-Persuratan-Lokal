@@ -45,7 +45,7 @@ export default function Sidebar({
               <h2 className="font-display font-bold text-[var(--md-sys-color-on-surface)] text-base leading-tight tracking-tight">{appName}</h2>
               <div className="flex items-center gap-1.5 mt-1">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                <span className="text-[9px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest">{onlineCount} ONLINE</span>
+                <span className="text-[8px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-widest">{onlineCount} ONLINE</span>
               </div>
             </div>
           </div>
@@ -90,7 +90,7 @@ export default function Sidebar({
             </div>
             <div className="overflow-hidden">
               <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)] truncate">{currentUser.name}</p>
-              <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] font-medium uppercase tracking-widest mt-0.5">{currentUser.role}</p>
+              <p className="text-[9px] text-[var(--md-sys-color-outline)] font-medium uppercase tracking-widest mt-0.5">{currentUser.role}</p>
             </div>
           </div>
           <button 

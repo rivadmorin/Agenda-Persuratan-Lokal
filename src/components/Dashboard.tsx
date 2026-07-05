@@ -71,7 +71,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
             <div
               key={i}
               onClick={() => onNavigateToTab(stat.tab)}
-              className="bg-[var(--md-sys-color-surface-container)] p-6 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] shadow-sm flex items-center gap-6 cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-all duration-300 active:scale-[0.98]"
+              className="bg-[var(--md-sys-color-surface-container)] p-6 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] shadow-sm flex items-center gap-6 cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-premium active:scale-[0.98]"
             >
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
                 <span className="material-symbols-outlined text-2xl font-fill">
