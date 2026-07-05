@@ -140,6 +140,34 @@ md-tonal-button [slot="icon"] {
   font-size: 18px !important;
 }
 
+/* Ensure material web components buttons have enough internal space for text */
+md-filled-button, md-outlined-button, md-text-button, md-tonal-button {
+  --md-sys-typescale-label-large-size: 0.875rem;
+}
+
+/* Custom Rainbow Slider Track */
+md-slider.slider-hue-track {
+  --md-slider-active-track-color: transparent;
+  --md-slider-inactive-track-color: transparent;
+  --md-slider-active-track-height: 10px;
+  --md-slider-inactive-track-height: 10px;
+}
+
+md-slider.slider-hue-track::part(track) {
+  background: linear-gradient(
+    to right,
+    #ff0000 0%,
+    #ffff00 17%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 67%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
+  border-radius: 5px;
+  opacity: 0.9;
+}
+
 
 .m3-table-container {
   border-radius: 24px;

@@ -30,11 +30,11 @@ export default function PdfTools() {
   };
 
   const onFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, tool: string) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
 
     if (tool === 'merge') {
-      const newFiles = await Promise.all(files.map(async f => ({
+      const newFiles = await Promise.all(files.map(async (f: File) => ({
         name: f.name,
         base64: await handleFileToBase64(f)
       })));
@@ -173,8 +173,8 @@ export default function PdfTools() {
                  onDrop={async (e) => {
                    e.preventDefault();
                    setIsDragOver(false);
-                   const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.pdf'));
-                   const newFiles = await Promise.all(files.map(async f => ({
+                   const files = (Array.from(e.dataTransfer.files) as File[]).filter(f => f.name.endsWith('.pdf'));
+                   const newFiles = await Promise.all(files.map(async (f: File) => ({
                      name: f.name,
                      base64: await handleFileToBase64(f)
                    })));
