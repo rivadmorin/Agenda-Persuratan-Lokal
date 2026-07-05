@@ -104,8 +104,8 @@ export default function PdfTools() {
   const currentToolData = tools.find(t => t.id === activeTool);
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-8 pb-20">
-      <div className="flex flex-col gap-2">
+    <div className="max-w-4xl mx-auto flex flex-col gap-10 pb-24">
+      <div className="flex flex-col gap-3">
         <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)] tracking-tight">PDF Management Tools</h1>
         <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Olah berkas PDF secara instan tanpa aplikasi tambahan.</p>
       </div>
@@ -115,7 +115,7 @@ export default function PdfTools() {
           <div
             key={tool.id}
             onClick={() => { setActiveTool(tool.id as any); setError(''); }}
-            className={`flex-grow flex-1 p-6 rounded-3xl cursor-pointer border-2 transition-all duration-300 ${
+            className={`flex-grow flex-1 p-8 rounded-[2rem] cursor-pointer border-2 transition-premium shadow-sm hover:shadow-md ${
               activeTool === tool.id
                 ? 'shadow-lg'
                 : 'bg-[var(--md-sys-color-surface-container-low)] border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-outline)]'
@@ -180,7 +180,7 @@ export default function PdfTools() {
                    })));
                    setMergeFiles([...mergeFiles, ...newFiles]);
                  }}
-                 className={`border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center gap-3 transition-all duration-200 ${
+                 className={`border-2 border-dashed rounded-[2rem] p-12 flex flex-col items-center justify-center gap-4 transition-premium ${
                    isDragOver
                     ? 'border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary-container)]/30'
                     : 'border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-primary)]/50 bg-[var(--md-sys-color-surface-container-low)]/50'
