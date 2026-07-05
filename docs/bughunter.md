@@ -6,3 +6,19 @@ Format:
 ## YYYY-MM-DD - [Title]
 **Learning:** [Insight]
 **Action:** [How to apply next time]
+
+## [$(date +"%Y-%m-%d")] UI Responsiveness, Dark Mode, and Deletion Fixes
+**Bug:**
+1. Dark Mode toggle in Sidebar was changing local state but not applying the `dark` class to the HTML document.
+2. Clicking "Hapus PDF" inside `MailDrawer` during Edit mode only cleared the local preview state and didn't instruct the backend to delete the existing PDF file.
+3. Clicking "Edit" or "View" on an item with a heavy PDF caused the application to freeze/jank during the slide-in animation of `MailDrawer` because the `iframe` was rendering synchronously.
+
+**Learning:**
+1. React's state management needs side effects (`useEffect`) to interact with the DOM (like `document.documentElement.classList.add('dark')`) and `localStorage` when handling application-wide concepts like themes. Tailwind v4 syntax requires `@custom-variant dark (&:is(.dark *));` to implement class-based dark mode effectively.
+2. Form state needs to explicitly track when pre-existing server resources are intended to be deleted by the user, sending flags like `deletePdf` to the PUT endpoint instead of just omitting the file from the payload.
+3. Expensive DOM elements like `<iframe src="data:application/pdf...">` should never be rendered during CSS transitions or framer-motion animations. They will block the main thread and drop frames. When using `setTimeout` to delay renders based on boolean state conditions, a `clearTimeout` cleanup function must be provided to prevent memory leaks or race conditions if the component closes before the timeout completes.
+
+**Resolution:**
+1. Added a `useEffect` hook in `App.tsx` that synchronizes `darkMode` state to `document.documentElement` (`.dark` class) and `localStorage`. Updated `src/index.css` to use Tailwind 4's `@custom-variant dark`.
+2. Added `deletedPdf` state in `MailDrawer.tsx` that toggles true when "Hapus PDF" is clicked, and appended `deletePdf: deletedPdf` to the `onSave` payload to signal the backend.
+3. Implemented a deferred render using `isAnimationComplete` state in `MailDrawer.tsx`. It waits 400ms (the duration of `ease-premium`) before rendering the heavy PDF `iframe`, showing a Material Circular Progress spinner in the meantime, with a strict `clearTimeout` applied to prevent race conditions during rapid state changes.
