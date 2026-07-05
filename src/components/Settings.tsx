@@ -10,7 +10,7 @@ export default function Settings({
   setDarkMode
 }: {
   config: AppConfig;
-  onSaveConfig: (newConfig: AppConfig) => void;
+  onSaveConfig: (newConfig: AppConfig) => Promise<boolean> | boolean;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
 }) {
@@ -61,6 +61,7 @@ export default function Settings({
   // Backups State
   const [backups, setBackups] = useState<any[]>([]);
   const [backupsLoading, setBackupsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [includePdfBackup, setIncludePdfBackup] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -307,7 +308,7 @@ export default function Settings({
     window.open('/api/backup/export-zip', '_blank');
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const updatedConfig: AppConfig = {
       appName,
       logoType,
@@ -325,11 +326,18 @@ export default function Settings({
       pdfRenameCols
     };
 
-    onSaveConfig(updatedConfig);
-    if (themeColor) {
-      generateM3Theme(themeColor);
+    setIsSaving(true);
+    try {
+      const success = await onSaveConfig(updatedConfig);
+      if (success !== false) {
+        if (themeColor) {
+          generateM3Theme(themeColor);
+        }
+        showNotification('Pengaturan sistem berhasil disimpan.');
+      }
+    } finally {
+      setIsSaving(false);
     }
-    showNotification('Pengaturan sistem berhasil disimpan.');
   };
 
   // HTML5 Drag and Drop Handlers
@@ -1067,9 +1075,18 @@ export default function Settings({
 
       {/* Global save button bar */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--md-sys-color-surface-container-low)]/90 border-t border-[var(--md-sys-color-outline-variant)] flex justify-end gap-3 z-30 shadow-md backdrop-blur-md transition-premium">
-        <md-filled-button onClick={handleSave}  >
-          <span slot="icon" className="material-symbols-outlined">save</span>
-          Simpan Perubahan
+        <md-filled-button onClick={handleSave} disabled={isSaving ? true : undefined}>
+          {isSaving ? (
+            <>
+              <md-circular-progress indeterminate slot="icon" style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
+              Menyimpan...
+            </>
+          ) : (
+            <>
+              <span slot="icon" className="material-symbols-outlined">save</span>
+              Simpan Perubahan
+            </>
+          )}
         </md-filled-button>
       </div>
 

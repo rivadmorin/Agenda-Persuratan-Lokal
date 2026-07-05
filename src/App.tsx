@@ -234,7 +234,7 @@ export default function App() {
     });
   };
 
-  const handleSaveConfig = async (newConfig: AppConfig) => {
+  const handleSaveConfig = async (newConfig: AppConfig): Promise<boolean> => {
     try {
       const res = await fetch('/api/config', {
         method: 'POST',
@@ -243,6 +243,7 @@ export default function App() {
       });
       if (res.ok) {
         setConfig(newConfig);
+        return true;
       } else {
         const err = await res.json();
         setConfirmModal({
@@ -251,6 +252,7 @@ export default function App() {
           message: err.message || 'Terjadi kesalahan saat menyimpan pengaturan.',
           onConfirm: () => {}
         });
+        return false;
       }
     } catch (err: any) {
        setConfirmModal({
@@ -259,6 +261,7 @@ export default function App() {
           message: err.message || 'Gagal menyimpan pengaturan.',
           onConfirm: () => {}
         });
+       return false;
     }
   };
 
