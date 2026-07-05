@@ -61,7 +61,6 @@ export default function App() {
   const [mails, setMails] = useState<MailRecord[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<'edit' | 'view'>('edit');
   const [mailToEdit, setMailToEdit] = useState<MailRecord | null>(null);
   const [onlineCount, setOnlineCount] = useState(1);
   const [connectionError, setConnectionError] = useState(false);
@@ -176,10 +175,6 @@ export default function App() {
   };
 
   const handleSaveMail = async (data: any) => {
-    if (data.isSwitchToEdit) {
-      setDrawerMode('edit');
-      return;
-    }
     const url = mailToEdit ? `/api/mails/${mailToEdit.id}` : '/api/mails';
     const method = mailToEdit ? 'PUT' : 'POST';
 
@@ -287,7 +282,7 @@ export default function App() {
                   mails={mails}
                   config={config}
                   onNavigateToTab={setActiveTab}
-                  onSelectMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
+                  onSelectMail={(m) => { setMailToEdit(m); setIsDrawerOpen(true); }}
                 />
               )}
 
@@ -295,10 +290,10 @@ export default function App() {
                 <MailTable
                   mails={mails}
                   config={config}
-                  onAdd={() => { setMailToEdit(null); setDrawerMode('edit'); setIsDrawerOpen(true); }}
-                  onEdit={(m) => { setMailToEdit(m); setDrawerMode('edit'); setIsDrawerOpen(true); }}
+                  onAdd={() => { setMailToEdit(null); setIsDrawerOpen(true); }}
+                  onEdit={(m) => { setMailToEdit(m); setIsDrawerOpen(true); }}
                   onDelete={handleDeleteMail}
-                  onViewMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
+                  onViewPdf={(path) => window.open(`/api/files/${path}`, '_blank')}
                   onExportExcel={() => window.open('/api/excel/export', '_blank')}
                   onRefresh={fetchMails}
                     onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
@@ -343,7 +338,6 @@ export default function App() {
             columns={config.columns}
             mailToEdit={mailToEdit}
             onSave={handleSaveMail}
-            mode={drawerMode}
             onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
           />
 
