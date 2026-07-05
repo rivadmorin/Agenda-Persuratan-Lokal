@@ -123,7 +123,7 @@ export default function MailTable(props: MailTableProps) {
              <>
                <md-filled-button onClick={() => onPrintReceipt(selectedIds)} style={{ '--md-filled-button-container-color': 'var(--md-sys-color-tertiary)' }}>
                  <span slot="icon" className="material-symbols-outlined">receipt_long</span>
-                 Tanda Terima ({selectedIds.length})
+                 Tanda Terima
                </md-filled-button>
                <md-outlined-button onClick={() => onBatchDownload(selectedIds)}>
                  <span slot="icon" className="material-symbols-outlined">download_for_offline</span>
@@ -249,8 +249,8 @@ export default function MailTable(props: MailTableProps) {
           </tbody>
         </table>
         {filteredMails.length === 0 && (
-          <div className="py-24 text-center text-slate-400">
-             <span className="material-symbols-outlined text-6xl mb-4 text-slate-300">inventory_2</span>
+          <div className="py-24 text-center text-[var(--md-sys-color-outline)] animate-premium-in">
+             <span className="material-symbols-outlined text-6xl mb-4 text-[var(--md-sys-color-primary)] opacity-20 font-fill">inventory_2</span>
              <p className="text-sm font-medium">Tidak ada data surat ditemukan.</p>
           </div>
         )}

@@ -53,11 +53,11 @@ export default function ConfirmModal({
               </div>
 
               {/* Actions */}
-              <div className="p-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-end gap-2">
+              <div className="p-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-end gap-3">
                 <md-text-button onClick={onClose}>{cancelText}</md-text-button>
                 <md-filled-button 
                   onClick={() => { onConfirm(); onClose(); }}
-                  style={confirmText === 'Hapus' ? { '--md-filled-button-container-color': 'var(--md-sys-color-error)' } : {}}
+                  style={confirmText === 'Hapus' ? { '--md-filled-button-container-color': 'var(--md-sys-color-error)' } : undefined}
                 >
                   {confirmText}
                 </md-filled-button>

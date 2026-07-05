@@ -163,11 +163,11 @@ export default function MailDrawer({
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
             className={`fixed top-0 right-0 h-full bg-[var(--md-sys-color-surface)] shadow-2xl z-[101] flex flex-col border-l border-[var(--md-sys-color-outline-variant)] overflow-hidden`}
             style={{ 
               width: isWide ? 'min(1100px, 95vw)' : 'min(550px, 95vw)',
-              transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+              transition: 'width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)'
             }}
           >
             {/* Header */}
@@ -211,7 +211,7 @@ export default function MailDrawer({
               {/* Form / Details (Right) */}
               <div className={`${isWide ? 'w-full lg:w-[450px]' : 'w-full'} flex flex-col bg-[var(--md-sys-color-surface)] overflow-y-auto`}>
                 {mode === 'edit' ? (
-                  <form className="p-6 flex flex-col gap-5 pb-24" onSubmit={handleSubmit}>
+                  <form className="p-4 flex flex-col gap-4 pb-20" onSubmit={handleSubmit}>
                     <md-filled-select
                       label="Tipe Surat"
                       value={type}
@@ -288,9 +288,9 @@ export default function MailDrawer({
 
                     <div className="p-6 overflow-y-auto pb-24">
                       {previewTab === 'details' && (
-                        <div className="flex flex-col gap-6">
+                        <div className="flex flex-col gap-4">
                            {sortedColumns.map(col => (
-                             <div key={col.key} className="flex flex-col gap-1.5 p-3 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50">
+                             <div key={col.key} className="flex flex-col gap-1 p-2 rounded-lg bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50">
                                <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80 uppercase tracking-widest">{col.label}</span>
                                <span className="text-sm font-medium text-[var(--md-sys-color-on-surface)] leading-relaxed">
                                  {col.type === 'date' && mailToEdit?.metadata[col.key]

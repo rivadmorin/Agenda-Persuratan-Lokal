@@ -34,8 +34,8 @@ export default function Sidebar({
   const filteredItems = menuItems.filter(item => !item.adminOnly || currentUser.role === 'admin');
 
   return (
-    <aside className="w-80 h-screen sticky top-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-6 justify-between z-10 transition-premium">
-      <div className="flex flex-col gap-8">
+    <aside className="w-72 h-screen sticky top-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] p-4 justify-between z-10 transition-premium">
+      <div className="flex flex-col gap-6">
         <div className="flex items-start justify-between gap-4 px-2">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] flex items-center justify-center border border-[var(--md-sys-color-outline-variant)] shrink-0">
@@ -68,7 +68,7 @@ export default function Sidebar({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-4 px-6 py-3.5 rounded-full text-sm font-medium transition-all duration-300 relative overflow-hidden group active:scale-[0.98] text-left ${
+                className={`flex items-center gap-4 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-300 relative overflow-hidden group active:scale-[0.98] text-left ${
                   isActive
                     ? 'bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)] font-bold shadow-sm'
                     : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-high)] hover:text-[var(--md-sys-color-on-surface)]'
