@@ -1,4 +1,4 @@
-# Google Jules Agent Memory Index
+# Master Agent Registry
 
 This index connects all critical learnings and memories across different specialized agents working in this repository.
 
@@ -27,3 +27,5 @@ When you (an active agent) discover a critical learning and write it to your res
 ## Archived Memories
 
 - [Archive Folder](archive/) - Stores historical or legacy memory logs from retired agents or past setups (used by Scholar 🧠 for meta-learning).
+- [bolt_legacy.md](archive/bolt_legacy.md) - Legacy Bolt memory
+- [palette_legacy.md](archive/palette_legacy.md) - Legacy Palette memory
