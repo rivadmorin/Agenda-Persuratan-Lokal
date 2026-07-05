@@ -24,6 +24,7 @@
 @theme {
   --font-sans: "Product Sans", "Roboto", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Product Sans", "Space Grotesk", sans-serif;
+  --font-tracking-tight: -0.02em;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
@@ -217,4 +218,18 @@ md-slider.slider-hue-track::part(track) {
 /* Sidebar transition */
 .sidebar-transition {
   transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+h1, h2, h3, h4, .font-display {
+  letter-spacing: var(--font-tracking-tight);
+}
+
+.transition-premium {
+  transition: all 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.glass-surface {
+  background: rgba(var(--md-sys-color-surface-container-low-rgb), 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }

@@ -177,7 +177,7 @@ export default function MailDrawer({
                   {mode === 'view' ? 'Rincian Agenda Surat' : (mailToEdit ? 'Ubah Agenda Surat' : 'Tambah Agenda Surat')}
                 </h2>
                 {mailToEdit && (
-                  <span className="text-[10px] font-bold text-[var(--md-sys-color-primary)] uppercase tracking-widest mt-1">ID: {mailToEdit.id}</span>
+                  <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80 uppercase tracking-widest mt-1">ID: {mailToEdit.id}</span>
                 )}
               </div>
               <md-icon-button onClick={onClose} aria-label="Tutup panel">
@@ -291,8 +291,8 @@ export default function MailDrawer({
                         <div className="flex flex-col gap-6">
                            {sortedColumns.map(col => (
                              <div key={col.key} className="flex flex-col gap-1.5 p-3 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50">
-                               <span className="text-[10px] font-bold text-[var(--md-sys-color-primary)] uppercase tracking-widest">{col.label}</span>
-                               <span className="text-sm font-bold text-[var(--md-sys-color-on-surface)] leading-relaxed">
+                               <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80 uppercase tracking-widest">{col.label}</span>
+                               <span className="text-sm font-medium text-[var(--md-sys-color-on-surface)] leading-relaxed">
                                  {col.type === 'date' && mailToEdit?.metadata[col.key]
                                    ? new Date(mailToEdit.metadata[col.key]).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
                                    : String(mailToEdit?.metadata[col.key] || '-')}
