@@ -1074,7 +1074,8 @@ export default function Settings({
       </div>
 
       {/* dialog Add Column */}
-      <md-dialog open={showAddCol ? true : undefined} onClose={() => setShowAddCol(false)} style={{ maxWidth: '480px', width: '90vw' }}>
+      {showAddCol && (
+      <md-dialog open={true} onClose={() => setShowAddCol(false)} style={{ maxWidth: '480px', width: '90vw' }}>
         <span slot="headline">Tambah Kolom Baru</span>
         <form slot="content" id="add-col-form" className="flex flex-col gap-4 py-4" onSubmit={handleAddColumnSubmit}>
           {colError && <p className="text-xs text-red-500 font-bold ml-1">{colError}</p>}
@@ -1129,9 +1130,11 @@ export default function Settings({
           <md-filled-button onClick={handleAddColumnSubmit}>Tambah</md-filled-button>
         </div>
       </md-dialog>
+      )}
 
       {/* dialog Edit Column */}
-      <md-dialog open={editingColumn ? true : undefined} onClose={() => setEditingColumn(null)} style={{ maxWidth: '480px', width: '90vw' }}>
+      {editingColumn && (
+      <md-dialog open={true} onClose={() => setEditingColumn(null)} style={{ maxWidth: '480px', width: '90vw' }}>
         <span slot="headline">Edit Kolom: {editingColumn?.key}</span>
         <form slot="content" id="edit-col-form" className="flex flex-col gap-4 py-4" onSubmit={handleSaveEditColumn}>
           {editColError && <p className="text-xs text-red-500 font-bold ml-1">{editColError}</p>}
@@ -1180,6 +1183,7 @@ export default function Settings({
           <md-filled-button onClick={handleSaveEditColumn}>Simpan</md-filled-button>
         </div>
       </md-dialog>
+      )}
     </div>
   );
 }

@@ -210,15 +210,13 @@ export default function MailTable(props: MailTableProps) {
                     <md-icon-button onClick={() => onEdit(mail)} aria-label="Edit Agenda">
                       <span className="material-symbols-outlined text-[20px]">edit</span>
                     </md-icon-button>
-                    {mail.pdfPath ? (
-                      <md-icon-button onClick={() => window.open(`/api/files/${mail.pdfPath}`, '_blank')} aria-label="Unduh PDF">
-                        <span className="material-symbols-outlined text-[20px]">download</span>
-                      </md-icon-button>
-                    ) : (
-                      <md-icon-button disabled aria-label="Tidak ada PDF">
-                        <span className="material-symbols-outlined text-[20px]">download_off</span>
-                      </md-icon-button>
-                    )}
+                    <md-icon-button
+                      onClick={mail.pdfPath ? () => window.open(`/api/files/${mail.pdfPath}`, '_blank') : undefined}
+                      disabled={mail.pdfPath ? undefined : true}
+                      aria-label={mail.pdfPath ? "Unduh PDF" : "Tidak ada PDF"}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">{mail.pdfPath ? "download" : "download_off"}</span>
+                    </md-icon-button>
                     <md-icon-button
                       onClick={() => onDelete(mail.id)}
                       aria-label="Hapus Agenda"

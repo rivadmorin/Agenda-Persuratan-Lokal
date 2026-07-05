@@ -4,7 +4,7 @@ import { User } from '../types';
 interface UserDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (user: User & { password?: string }) => void;
+  onSave: (user: User & { password?: string }) => Promise<void> | void;
   userToEdit?: User | null;
 }
 
@@ -44,19 +44,25 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
     setIsSaving(true);
-    onSave({
-      name,
-      username,
-      password: password || undefined,
-      role
-    });
+    try {
+      await onSave({
+        name,
+        username,
+        password: password || undefined,
+        role
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <md-dialog open={isOpen ? true : undefined} onClose={onClose} style={{ minWidth: '400px', maxWidth: '480px', width: '90vw', margin: 'auto' }}>
+    <>
+      {isOpen && (
+      <md-dialog open={true} onClose={onClose} style={{ minWidth: '400px', maxWidth: '480px', width: '90vw', margin: 'auto' }}>
       <span slot="headline">
         {userToEdit ? 'Ubah Pengguna' : 'Tambah Pengguna Baru'}
       </span>
@@ -111,6 +117,8 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
           ) : 'Simpan'}
         </md-filled-button>
       </div>
-    </md-dialog>
+      </md-dialog>
+      )}
+    </>
   );
 }
