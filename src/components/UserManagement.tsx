@@ -55,7 +55,11 @@ export default function UserManagement() {
                 <div slot="headline" className="font-bold">{user.name}</div>
                 <div slot="supporting-text" className="uppercase tracking-widest text-[10px]">{user.role} • @{user.username}</div>
                 <div slot="end" className="flex items-center gap-1">
-                   <md-icon-button onClick={() => setConfirmModal({ isOpen: true, username: user.username })} disabled={user.username === 'admin'}>
+                   <md-icon-button
+                     onClick={() => setConfirmModal({ isOpen: true, username: user.username })}
+                     disabled={user.username === 'admin' ? true : undefined}
+                     aria-label={`Hapus pengguna ${user.name}`}
+                   >
                      <span className="material-symbols-outlined text-error">delete</span>
                    </md-icon-button>
                 </div>

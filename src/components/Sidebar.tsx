@@ -53,6 +53,7 @@ export default function Sidebar({
             onClick={() => setDarkMode(!darkMode)}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-sm transition-premium active:scale-90 cursor-pointer shrink-0"
             title={darkMode ? "Mode Terang" : "Mode Gelap"}
+            aria-label={darkMode ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
           >
             <span className="material-symbols-outlined text-lg">
               {darkMode ? 'light_mode' : 'dark_mode'}
@@ -96,6 +97,7 @@ export default function Sidebar({
             onClick={onLogout} 
             className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--md-sys-color-outline)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors shrink-0"
             title="Keluar Sesi"
+            aria-label="Keluar sesi"
           >
             <span className="material-symbols-outlined text-xl">logout</span>
           </button>
