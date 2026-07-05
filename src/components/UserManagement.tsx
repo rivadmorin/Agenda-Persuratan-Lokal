@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import ConfirmModal from './ConfirmModal';
+import UserDialog from './UserDialog';
+
+/**
+ * BOLT OPTIMIZATION: Optimistic UI Updates
+ * The UI updates immediately before the server responds to provide a lag-free experience.
+ * If the server request fails, the state is rolled back.
+ */
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
@@ -8,6 +15,13 @@ export default function UserManagement() {
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     username: '',
+  });
+  const [userDialog, setUserDialog] = useState<{
+    isOpen: boolean;
+    userToEdit: User | null;
+  }>({
+    isOpen: false,
+    userToEdit: null,
   });
 
   useEffect(() => {
@@ -20,15 +34,67 @@ export default function UserManagement() {
       const res = await fetch('/api/users');
       const data = await res.json();
       setUsers(data);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSaveUser = async (userData: User & { password?: string }) => {
+    const isEditing = !!userDialog.userToEdit;
+    const previousUsers = [...users];
+
+    // Optimistic Update
+    if (isEditing) {
+      setUsers(users.map(u => u.username === userData.username ? { ...u, ...userData } : u));
+    } else {
+      setUsers([{ ...userData, role: userData.role as any }, ...users]);
+    }
+
+    setUserDialog({ isOpen: false, userToEdit: null });
+
+    try {
+      const method = isEditing ? 'PUT' : 'POST';
+      const url = isEditing ? `/api/users/${userData.username}` : '/api/users';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to save user');
+      }
+
+      // Refresh to get actual state (and correct IDs if any)
+      fetchUsers();
+    } catch (error) {
+      // Rollback on error
+      setUsers(previousUsers);
+      console.error('Error saving user:', error);
+    }
+  };
+
   const handleDelete = async () => {
-    await fetch(`/api/users/${confirmModal.username}`, { method: 'DELETE' });
+    const usernameToDelete = confirmModal.username;
+    const previousUsers = [...users];
+
+    // Optimistic Delete
+    setUsers(users.filter(u => u.username !== usernameToDelete));
     setConfirmModal({ isOpen: false, username: '' });
-    fetchUsers();
+
+    try {
+      const res = await fetch(`/api/users/${usernameToDelete}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error('Failed to delete user');
+      }
+    } catch (error) {
+      // Rollback on error
+      setUsers(previousUsers);
+      console.error('Error deleting user:', error);
+    }
   };
 
   return (
@@ -38,19 +104,10 @@ export default function UserManagement() {
           <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)] tracking-tight">Manajemen Pengguna</h1>
           <p className="text-[var(--md-sys-color-on-surface-variant)] text-sm">Kelola akun operator dan administrator.</p>
         </div>
-        <div className="relative group">
-          <md-filled-button disabled aria-describedby="add-user-tooltip">
-            <span slot="icon" className="material-symbols-outlined">person_add</span>
-            Tambah User
-          </md-filled-button>
-          <div
-            id="add-user-tooltip"
-            role="tooltip"
-            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-[var(--md-sys-color-inverse-surface)] text-[var(--md-sys-color-inverse-on-surface)] text-[10px] font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-md"
-          >
-            Fitur Tambah User Segera Hadir
-          </div>
-        </div>
+        <md-filled-button onClick={() => setUserDialog({ isOpen: true, userToEdit: null })}>
+          <span slot="icon" className="material-symbols-outlined">person_add</span>
+          Tambah User
+        </md-filled-button>
       </div>
 
       <div className="bg-[var(--md-sys-color-surface-container)] rounded-[32px] overflow-hidden border border-[var(--md-sys-color-outline-variant)] shadow-sm">
@@ -61,9 +118,24 @@ export default function UserManagement() {
                 <div slot="start" className="w-12 h-12 rounded-2xl bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] flex items-center justify-center font-bold shadow-sm border border-[var(--md-sys-color-outline-variant)]">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
-                <div slot="headline" className="font-bold text-[var(--md-sys-color-on-surface)]">{user.name}</div>
-                <div slot="supporting-text" className="uppercase tracking-widest text-[10px] text-[var(--md-sys-color-on-surface-variant)] font-semibold mt-0.5">{user.role} • @{user.username}</div>
+                <div slot="headline" className="font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2">
+                  {user.name}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                    user.role === 'admin'
+                      ? 'bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)] border-[var(--md-sys-color-tertiary-outline)]'
+                      : 'bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)] border-[var(--md-sys-color-secondary-outline)]'
+                  }`}>
+                    {user.role.toUpperCase()}
+                  </span>
+                </div>
+                <div slot="supporting-text" className="tracking-wide text-xs text-[var(--md-sys-color-on-surface-variant)]">@{user.username}</div>
                 <div slot="end" className="flex items-center gap-1">
+                   <md-icon-button
+                     onClick={() => setUserDialog({ isOpen: true, userToEdit: user })}
+                     aria-label={`Ubah pengguna ${user.name}`}
+                   >
+                     <span className="material-symbols-outlined text-[var(--md-sys-color-primary)]">edit</span>
+                   </md-icon-button>
                    <md-icon-button
                      onClick={() => setConfirmModal({ isOpen: true, username: user.username })}
                      disabled={user.username === 'admin' ? true : undefined}
@@ -78,7 +150,7 @@ export default function UserManagement() {
             </React.Fragment>
           ))}
         </md-list>
-        {loading && <md-linear-progress indeterminate></md-linear-progress>}
+        {loading && users.length === 0 && <md-linear-progress indeterminate></md-linear-progress>}
         {!loading && users.length === 0 && (
           <div className="py-20 text-center flex flex-col items-center gap-2">
             <span className="material-symbols-outlined text-4xl text-[var(--md-sys-color-outline)]">person_off</span>
@@ -86,6 +158,13 @@ export default function UserManagement() {
           </div>
         )}
       </div>
+
+      <UserDialog
+        isOpen={userDialog.isOpen}
+        userToEdit={userDialog.userToEdit}
+        onClose={() => setUserDialog({ isOpen: false, userToEdit: null })}
+        onSave={handleSaveUser}
+      />
 
       <ConfirmModal
         isOpen={confirmModal.isOpen}
