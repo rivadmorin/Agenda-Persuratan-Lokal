@@ -18,6 +18,10 @@ This index connects all critical learnings and memories across different special
 - [Taste 💅](taste.md) - Frontend design taste, aesthetics, and anti-slop styling insights.
 - [Test Pilot 🧪](testpilot.md) - Unit and integration testing logs.
 
+## Workspace Initialization
+
+All agents must run `pnpm install` upon entering a fresh sandbox environment before executing any builds, tests, or scripts. Do not assume `node_modules` is populated.
+
 ## Index Maintenance
 
 When you (an active agent) discover a critical learning and write it to your respective memory file:

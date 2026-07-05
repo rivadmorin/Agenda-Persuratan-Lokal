@@ -18,6 +18,8 @@ To ensure all agents can resolve common build, environment, and code compilation
 | --- | --- | --- |
 | `Cannot find module '@components/...'` | Missing TypeScript path mapping in tsconfig.json or vite.config.ts | Add alias to `vite.config.ts` and tsconfig paths |
 | `exit code 127: ... command not found` | Tool is not installed globally or missing from local PATH | Install via npm/pnpm/pip, or use explicit executable path |
+| `vitest: not found` \| `Local package.json exists, but node_modules missing` | Sandbox is unhydrated; dependencies are not installed in the current environment | Run `pnpm install` before executing commands |
+| `failed to mount .* overlayfs .* err: invalid argument` | Restricted environment privileges preventing Docker storage driver mounts | Use mocked backend API endpoints or fallback to unit tests instead of containerized DBs |
 
 ## 2026-07-05 - [Vite HMR and Agent Edit Optimization]
 **Context:** When AI agents edit code in AI Studio environments, hot module replacement (HMR) and constant file watching can cause flickering, loop updates, or excessive CPU consumption.
@@ -53,3 +55,13 @@ To ensure all agents can resolve common build, environment, and code compilation
 **Context:** Orphaned files (PDFs without DB records) accumulate in `data/uploads/` over time due to interrupted network requests, or database resets.
 **Root Cause:** Deleting orphaned files permanently destroys potentially critical document data.
 **Action:** Created the `/api/backup/integrity/reconstruct` endpoint. Instead of just purging orphans, the system scans `data/uploads/`, identifies `.pdf` files missing from the DB, reads their `.pdf.json` sidecars, and autonomously rebuilds the PostgreSQL database records, ensuring zero data loss.
+
+## 2026-07-06 - [Sandbox Initialization & Dependency Hydration]
+**Context:** Executing `pnpm test` in a fresh sandbox environment failed with `vitest: not found` and warnings about missing `node_modules`.
+**Root Cause:** AI agents and automated scripts assumed dependencies were persisted across sessions, but the environment was stateless and required explicit hydration.
+**Action:** Always execute `pnpm install` as the absolute first step in any new workspace session before running tests, builds, or development servers.
+
+## 2026-07-06 - [Restricted Environment Docker Restrictions]
+**Context:** `docker compose up -d` failed to start PostgreSQL with an `overlayfs` mount error (`err: invalid argument`).
+**Root Cause:** The sandbox or container execution environment restricts nested filesystem mounts or lacks the privileges required for the Docker daemon's storage driver.
+**Action:** Do not rely on containerized backend services (like PostgreSQL) for testing in restricted AI execution environments. Fallback to mocked API responses or in-memory unit tests when Docker is unavailable.
