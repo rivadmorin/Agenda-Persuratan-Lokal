@@ -15,9 +15,9 @@ export default function PdfTools() {
   const [compressLevel, setCompressLevel] = useState('medium');
 
   const tools = [
-    { id: 'merge', label: 'Gabungkan PDF', icon: 'layers', desc: 'Satukan beberapa PDF menjadi satu.' },
-    { id: 'split', label: 'Potong PDF', icon: 'content_cut', desc: 'Ekstrak halaman PDF.' },
-    { id: 'compress', label: 'Kompresi PDF', icon: 'compress', desc: 'Perkecil ukuran berkas PDF.' },
+    { id: 'merge', label: 'Gabungkan PDF', icon: 'layers', desc: 'Satukan beberapa PDF menjadi satu.', colorClass: 'var(--md-sys-color-primary)', bgClass: 'var(--md-sys-color-primary-container)', onBgClass: 'var(--md-sys-color-on-primary-container)' },
+    { id: 'split', label: 'Potong PDF', icon: 'content_cut', desc: 'Ekstrak halaman PDF.', colorClass: 'var(--md-sys-color-secondary)', bgClass: 'var(--md-sys-color-secondary-container)', onBgClass: 'var(--md-sys-color-on-secondary-container)' },
+    { id: 'compress', label: 'Kompresi PDF', icon: 'compress', desc: 'Perkecil ukuran berkas PDF.', colorClass: 'var(--md-sys-color-tertiary)', bgClass: 'var(--md-sys-color-tertiary-container)', onBgClass: 'var(--md-sys-color-on-tertiary-container)' },
   ];
 
   const handleFileToBase64 = (file: File): Promise<string> => {
@@ -67,7 +67,6 @@ export default function PdfTools() {
       if (activeTool === 'merge') {
         if (mergeFiles.length < 2) throw new Error('Pilih minimal 2 file untuk digabungkan');
         endpoint = '/api/pdf/merge';
-        // Match payload schema expected by server.ts: { pdfFiles: string[] }
         body = { pdfFiles: mergeFiles.map(f => f.base64) };
         fileName = 'Merged_Document.pdf';
       } else if (activeTool === 'split') {
@@ -102,11 +101,13 @@ export default function PdfTools() {
     }
   };
 
+  const currentToolData = tools.find(t => t.id === activeTool);
+
   return (
     <div className="max-w-4xl mx-auto flex flex-col gap-8 pb-20">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-display font-bold text-slate-800 tracking-tight">PDF Management Tools</h1>
-        <p className="text-sm text-slate-500">Olah berkas PDF secara instan tanpa aplikasi tambahan.</p>
+        <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)] tracking-tight">PDF Management Tools</h1>
+        <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Olah berkas PDF secara instan tanpa aplikasi tambahan.</p>
       </div>
 
       <div className="flex gap-4">
@@ -114,25 +115,36 @@ export default function PdfTools() {
           <div
             key={tool.id}
             onClick={() => { setActiveTool(tool.id as any); setError(''); }}
-            className={`flex-grow flex-1 p-6 rounded-3xl cursor-pointer border-2 transition-all duration-200 ${
+            className={`flex-grow flex-1 p-6 rounded-3xl cursor-pointer border-2 transition-all duration-300 ${
               activeTool === tool.id
-                ? 'bg-teal-50/50 border-teal-600 shadow-[0_4px_16px_rgba(13,148,136,0.05)]'
-                : 'bg-white border-slate-200 hover:border-slate-300 shadow-[0_2px_8px_rgba(0,0,0,0.005)]'
+                ? 'shadow-lg'
+                : 'bg-[var(--md-sys-color-surface-container-low)] border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-outline)]'
             }`}
+            style={{
+              backgroundColor: activeTool === tool.id ? tool.bgClass : undefined,
+              borderColor: activeTool === tool.id ? tool.colorClass : undefined,
+            }}
           >
-            <span className={`material-symbols-outlined text-4xl mb-4 font-fill ${
-              activeTool === tool.id ? 'text-teal-600' : 'text-slate-400'
-            }`}>{tool.icon}</span>
-            <h3 className="font-bold text-base text-slate-800">{tool.label}</h3>
-            <p className="text-xs text-slate-400 mt-1">{tool.desc}</p>
+            <span className={`material-symbols-outlined text-4xl mb-4 font-fill transition-colors duration-300`}
+                  style={{ color: activeTool === tool.id ? tool.colorClass : 'var(--md-sys-color-outline)' }}>
+              {tool.icon}
+            </span>
+            <h3 className="font-bold text-base transition-colors duration-300"
+                style={{ color: activeTool === tool.id ? tool.onBgClass : 'var(--md-sys-color-on-surface)' }}>
+              {tool.label}
+            </h3>
+            <p className="text-xs mt-1 transition-colors duration-300"
+               style={{ color: activeTool === tool.id ? tool.onBgClass : 'var(--md-sys-color-on-surface-variant)', opacity: activeTool === tool.id ? 0.8 : 1 }}>
+              {tool.desc}
+            </p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white p-8 rounded-3xl border border-slate-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.015)] min-h-[400px]">
+      <div className="bg-[var(--md-sys-color-surface-container)] p-8 rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm min-h-[400px]">
          {error && (
-            <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-100 text-rose-700 flex items-center gap-3">
-              <span className="material-symbols-outlined text-rose-500">error</span>
+            <div className="mb-6 p-4 rounded-2xl bg-[var(--md-sys-color-error-container)] border border-[var(--md-sys-color-error)]/20 text-[var(--md-sys-color-on-error-container)] flex items-center gap-3">
+              <span className="material-symbols-outlined text-[var(--md-sys-color-error)]">error</span>
               <p className="text-xs font-bold">{error}</p>
             </div>
          )}
@@ -140,7 +152,7 @@ export default function PdfTools() {
          {activeTool === 'merge' && (
             <div className="flex flex-col gap-6 animate-in fade-in duration-200">
                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Gabungkan PDF</h3>
+                  <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)]">Gabungkan PDF</h3>
                   <div className="flex gap-2">
                     <md-outlined-button onClick={() => setMergeFiles([])} disabled={mergeFiles.length === 0 ? true : undefined}>
                       Hapus Semua
@@ -150,7 +162,7 @@ export default function PdfTools() {
                          <span slot="icon" className="material-symbols-outlined">add</span>
                          Tambah File
                        </md-filled-button>
-                       <input type="file" multiple accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => onFileSelect(e, 'merge')} />
+                       <input type="file" multiple accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Unggah file PDF untuk digabungkan" onChange={(e) => onFileSelect(e, 'merge')} />
                     </div>
                   </div>
                </div>
@@ -169,26 +181,30 @@ export default function PdfTools() {
                    setMergeFiles([...mergeFiles, ...newFiles]);
                  }}
                  className={`border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center gap-3 transition-all duration-200 ${
-                   isDragOver ? 'border-teal-500 bg-teal-50/20' : 'border-slate-200 hover:border-teal-500/40 bg-slate-50/50'
+                   isDragOver
+                    ? 'border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-primary-container)]/30'
+                    : 'border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-primary)]/50 bg-[var(--md-sys-color-surface-container-low)]/50'
                  }`}
                >
-                 <span className={`material-symbols-outlined text-4xl ${isDragOver ? 'text-teal-600 font-fill' : 'text-slate-400'}`}>upload_file</span>
+                 <span className={`material-symbols-outlined text-4xl ${isDragOver ? 'text-[var(--md-sys-color-primary)] font-fill' : 'text-[var(--md-sys-color-outline)]'}`}>upload_file</span>
                  <div className="text-center">
-                   <p className="font-bold text-sm text-slate-700">Tarik berkas PDF ke sini</p>
-                   <p className="text-xs text-slate-400 mt-1">Atau klik Tambah File di atas untuk memilih berkas</p>
+                   <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)]">Tarik berkas PDF ke sini</p>
+                   <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-1">Atau klik Tambah File di atas untuk memilih berkas</p>
                  </div>
                </div>
 
-               <div className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm">
-                  <md-list className="p-0">
+               <div className="bg-[var(--md-sys-color-surface-container-low)] rounded-2xl border border-[var(--md-sys-color-outline-variant)] overflow-hidden shadow-sm">
+                  <md-list className="p-0 bg-transparent">
                     {mergeFiles.map((file, idx) => (
                       <React.Fragment key={idx}>
                         <md-list-item>
-                          <span slot="start" className="material-symbols-outlined opacity-50">description</span>
-                          <div slot="headline" className="text-sm font-medium">{file.name}</div>
-                          <div slot="supporting-text" className="text-[10px]">Urutan ke-{idx + 1}</div>
+                          <span slot="start" className="material-symbols-outlined text-[var(--md-sys-color-outline)]">description</span>
+                          <div slot="headline" className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{file.name}</div>
+                          <div slot="supporting-text" className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Urutan ke-{idx + 1}</div>
                           <div slot="end" className="flex items-center gap-1">
-                             <md-icon-button onClick={() => {
+                             <md-icon-button
+                               aria-label="Pindahkan ke atas"
+                               onClick={() => {
                                 const newFiles = [...mergeFiles];
                                 if (idx > 0) {
                                   [newFiles[idx-1], newFiles[idx]] = [newFiles[idx], newFiles[idx-1]];
@@ -197,7 +213,9 @@ export default function PdfTools() {
                              }} disabled={idx === 0 ? true : undefined} aria-label="Pindahkan ke atas">
                                <span className="material-symbols-outlined">arrow_upward</span>
                              </md-icon-button>
-                             <md-icon-button onClick={() => {
+                             <md-icon-button
+                               aria-label="Pindahkan ke bawah"
+                               onClick={() => {
                                 const newFiles = [...mergeFiles];
                                 if (idx < mergeFiles.length - 1) {
                                   [newFiles[idx+1], newFiles[idx]] = [newFiles[idx], newFiles[idx+1]];
@@ -206,7 +224,11 @@ export default function PdfTools() {
                              }} disabled={idx === mergeFiles.length - 1 ? true : undefined} aria-label="Pindahkan ke bawah">
                                <span className="material-symbols-outlined">arrow_downward</span>
                              </md-icon-button>
-                             <md-icon-button onClick={() => setMergeFiles(mergeFiles.filter((_, i) => i !== idx))} className="text-rose-500" aria-label="Hapus dari daftar">
+                             <md-icon-button
+                               aria-label="Hapus dari daftar"
+                               onClick={() => setMergeFiles(mergeFiles.filter((_, i) => i !== idx))}
+                               style={{ '--md-icon-button-icon-color': 'var(--md-sys-color-error)' }}
+                             >
                                <span className="material-symbols-outlined">delete</span>
                              </md-icon-button>
                           </div>
@@ -216,7 +238,7 @@ export default function PdfTools() {
                     ))}
                   </md-list>
                   {mergeFiles.length === 0 && (
-                    <div className="p-16 text-center opacity-30 italic text-sm text-slate-400">
+                    <div className="p-16 text-center opacity-40 italic text-sm text-[var(--md-sys-color-on-surface-variant)]">
                        <p>Belum ada file dipilih</p>
                     </div>
                   )}
@@ -226,12 +248,12 @@ export default function PdfTools() {
 
          {activeTool === 'split' && (
             <div className="flex flex-col gap-8 items-center text-center max-w-lg mx-auto py-6 animate-in fade-in duration-200">
-                <div className="w-20 h-20 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center font-fill text-4xl shadow-sm">
+                <div className="w-20 h-20 rounded-2xl bg-[var(--md-sys-color-secondary-container)] border border-[var(--md-sys-color-secondary)]/10 text-[var(--md-sys-color-on-secondary-container)] flex items-center justify-center font-fill text-4xl shadow-sm">
                   <span className="material-symbols-outlined">content_cut</span>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800">Potong Halaman PDF</h3>
-                  <p className="text-xs text-slate-400 mt-2">Pilih file PDF dan tentukan rentang halaman yang ingin dipisahkan.</p>
+                  <h3 className="text-xl font-bold text-[var(--md-sys-color-on-surface)]">Potong Halaman PDF</h3>
+                  <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-2">Pilih file PDF dan tentukan rentang halaman yang ingin dipisahkan.</p>
                 </div>
 
                 <div className="w-full flex flex-col gap-6">
@@ -239,7 +261,7 @@ export default function PdfTools() {
                     <md-outlined-button className="w-full h-16">
                       {splitFile ? `File: ${splitFile.name}` : 'Pilih File PDF'}
                     </md-outlined-button>
-                    <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => onFileSelect(e, 'split')} />
+                    <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Pilih file PDF untuk dipotong" onChange={(e) => onFileSelect(e, 'split')} />
                   </div>
 
                   <md-filled-text-field
@@ -253,12 +275,12 @@ export default function PdfTools() {
 
          {activeTool === 'compress' && (
             <div className="flex flex-col gap-8 items-center text-center max-w-lg mx-auto py-6 animate-in fade-in duration-200">
-                <div className="w-20 h-20 rounded-2xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center font-fill text-4xl shadow-sm">
+                <div className="w-20 h-20 rounded-2xl bg-[var(--md-sys-color-tertiary-container)] border border-[var(--md-sys-color-tertiary)]/10 text-[var(--md-sys-color-on-tertiary-container)] flex items-center justify-center font-fill text-4xl shadow-sm">
                   <span className="material-symbols-outlined">compress</span>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-slate-800">Optimasi Ukuran PDF</h3>
-                  <p className="text-xs text-slate-400 mt-2">Perkecil ukuran berkas PDF untuk kemudahan pengiriman dan penyimpanan.</p>
+                  <h3 className="text-xl font-bold text-[var(--md-sys-color-on-surface)]">Optimasi Ukuran PDF</h3>
+                  <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-2">Perkecil ukuran berkas PDF untuk kemudahan pengiriman dan penyimpanan.</p>
                 </div>
 
                 <div className="w-full flex flex-col gap-6 text-left">
@@ -266,7 +288,7 @@ export default function PdfTools() {
                     <md-outlined-button className="w-full h-16">
                       {compressFile ? `File: ${compressFile.name}` : 'Pilih File PDF'}
                     </md-outlined-button>
-                    <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => onFileSelect(e, 'compress')} />
+                    <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Pilih file PDF untuk dikompres" onChange={(e) => onFileSelect(e, 'compress')} />
                   </div>
 
                   <md-filled-select
@@ -282,11 +304,16 @@ export default function PdfTools() {
             </div>
          )}
 
-         <div className="mt-12 flex justify-center border-t border-slate-100 pt-8">
+         <div className="mt-12 flex justify-center border-t border-[var(--md-sys-color-outline-variant)] pt-8">
             <md-filled-button
               onClick={executeTool}
               disabled={loading ? true : undefined}
-              style={{ padding: '0 48px', height: '56px', borderRadius: '16px' }}
+              style={{
+                padding: '0 48px',
+                height: '56px',
+                borderRadius: '16px',
+                '--md-filled-button-container-color': currentToolData?.colorClass
+              } as React.CSSProperties}
             >
               {loading ? (
                  <div className="flex items-center gap-2">
