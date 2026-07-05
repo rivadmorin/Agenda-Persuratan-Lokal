@@ -1,47 +1,71 @@
-import { argbFromHex, themeFromSourceColor, applyTheme, hexFromArgb } from "@material/material-color-utilities";
+import { argbFromHex, themeFromSourceColor, hexFromArgb } from "@material/material-color-utilities";
 
 export function generateM3Theme(seedColor: string) {
   const theme = themeFromSourceColor(argbFromHex(seedColor));
-  const tokens: Record<string, string> = {};
-
-  // Map M3 dynamic colors to CSS variables
-  const colorMap = {
-    primary: theme.schemes.light.primary,
-    'on-primary': theme.schemes.light.onPrimary,
-    'primary-container': theme.schemes.light.primaryContainer,
-    'on-primary-container': theme.schemes.light.onPrimaryContainer,
-    secondary: theme.schemes.light.secondary,
-    'on-secondary': theme.schemes.light.onSecondary,
-    'secondary-container': theme.schemes.light.secondaryContainer,
-    'on-secondary-container': theme.schemes.light.onSecondaryContainer,
-    tertiary: theme.schemes.light.tertiary,
-    'on-tertiary': theme.schemes.light.onTertiary,
-    'tertiary-container': theme.schemes.light.tertiaryContainer,
-    'on-tertiary-container': theme.schemes.light.onTertiaryContainer,
-    error: theme.schemes.light.error,
-    'on-error': theme.schemes.light.onError,
-    'error-container': theme.schemes.light.errorContainer,
-    'on-error-container': theme.schemes.light.onErrorContainer,
-    background: theme.schemes.light.background,
-    'on-background': theme.schemes.light.onBackground,
-    surface: theme.schemes.light.surface,
-    'on-surface': theme.schemes.light.onSurface,
-    'surface-variant': theme.schemes.light.surfaceVariant,
-    'on-surface-variant': theme.schemes.light.onSurfaceVariant,
-    outline: theme.schemes.light.outline,
-    'outline-variant': theme.schemes.light.outlineVariant,
-    'surface-container-lowest': theme.palettes.neutral.tone(100),
-    'surface-container-low': theme.palettes.neutral.tone(96),
-    'surface-container': theme.palettes.neutral.tone(94),
-    'surface-container-high': theme.palettes.neutral.tone(92),
-    'surface-container-highest': theme.palettes.neutral.tone(90),
+  
+  const getCssVars = (scheme: any) => {
+    return `
+      --md-sys-color-primary: ${hexFromArgb(scheme.primary)};
+      --md-sys-color-on-primary: ${hexFromArgb(scheme.onPrimary)};
+      --md-sys-color-primary-container: ${hexFromArgb(scheme.primaryContainer)};
+      --md-sys-color-on-primary-container: ${hexFromArgb(scheme.onPrimaryContainer)};
+      --md-sys-color-secondary: ${hexFromArgb(scheme.secondary)};
+      --md-sys-color-on-secondary: ${hexFromArgb(scheme.onSecondary)};
+      --md-sys-color-secondary-container: ${hexFromArgb(scheme.secondaryContainer)};
+      --md-sys-color-on-secondary-container: ${hexFromArgb(scheme.onSecondaryContainer)};
+      --md-sys-color-tertiary: ${hexFromArgb(scheme.tertiary)};
+      --md-sys-color-on-tertiary: ${hexFromArgb(scheme.onTertiary)};
+      --md-sys-color-tertiary-container: ${hexFromArgb(scheme.tertiaryContainer)};
+      --md-sys-color-on-tertiary-container: ${hexFromArgb(scheme.onTertiaryContainer)};
+      --md-sys-color-error: ${hexFromArgb(scheme.error)};
+      --md-sys-color-on-error: ${hexFromArgb(scheme.onError)};
+      --md-sys-color-error-container: ${hexFromArgb(scheme.errorContainer)};
+      --md-sys-color-on-error-container: ${hexFromArgb(scheme.onErrorContainer)};
+      --md-sys-color-background: ${hexFromArgb(scheme.background)};
+      --md-sys-color-on-background: ${hexFromArgb(scheme.onBackground)};
+      --md-sys-color-surface: ${hexFromArgb(scheme.surface)};
+      --md-sys-color-on-surface: ${hexFromArgb(scheme.onSurface)};
+      --md-sys-color-surface-variant: ${hexFromArgb(scheme.surfaceVariant)};
+      --md-sys-color-on-surface-variant: ${hexFromArgb(scheme.onSurfaceVariant)};
+      --md-sys-color-outline: ${hexFromArgb(scheme.outline)};
+      --md-sys-color-outline-variant: ${hexFromArgb(scheme.outlineVariant)};
+    `;
   };
 
-  Object.entries(colorMap).forEach(([key, value]) => {
-    const hex = hexFromArgb(value);
-    tokens[`--md-sys-color-${key}`] = hex;
-    document.documentElement.style.setProperty(`--md-sys-color-${key}`, hex);
-  });
+  const lightSurfaceContainer = `
+    --md-sys-color-surface-container-lowest: ${hexFromArgb(theme.palettes.neutral.tone(100))};
+    --md-sys-color-surface-container-low: ${hexFromArgb(theme.palettes.neutral.tone(96))};
+    --md-sys-color-surface-container: ${hexFromArgb(theme.palettes.neutral.tone(94))};
+    --md-sys-color-surface-container-high: ${hexFromArgb(theme.palettes.neutral.tone(92))};
+    --md-sys-color-surface-container-highest: ${hexFromArgb(theme.palettes.neutral.tone(90))};
+  `;
 
-  return tokens;
+  const darkSurfaceContainer = `
+    --md-sys-color-surface-container-lowest: ${hexFromArgb(theme.palettes.neutral.tone(4))};
+    --md-sys-color-surface-container-low: ${hexFromArgb(theme.palettes.neutral.tone(10))};
+    --md-sys-color-surface-container: ${hexFromArgb(theme.palettes.neutral.tone(12))};
+    --md-sys-color-surface-container-high: ${hexFromArgb(theme.palettes.neutral.tone(17))};
+    --md-sys-color-surface-container-highest: ${hexFromArgb(theme.palettes.neutral.tone(22))};
+  `;
+
+  const cssContent = `
+    :root {
+      ${getCssVars(theme.schemes.light)}
+      ${lightSurfaceContainer}
+    }
+    .dark {
+      ${getCssVars(theme.schemes.dark)}
+      ${darkSurfaceContainer}
+      --md-sys-color-background: #090e1a;
+      --md-sys-color-surface: #0f172a;
+    }
+  `;
+
+  let styleTag = document.getElementById("m3-dynamic-theme");
+  if (!styleTag) {
+    styleTag = document.createElement("style");
+    styleTag.id = "m3-dynamic-theme";
+    document.head.appendChild(styleTag);
+  }
+  styleTag.textContent = cssContent;
 }
