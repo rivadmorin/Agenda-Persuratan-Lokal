@@ -56,11 +56,11 @@ export default function UserDialog({ isOpen, onClose, onSave, userToEdit }: User
   };
 
   return (
-    <md-dialog open={isOpen ? true : undefined} onClose={onClose}>
+    <md-dialog open={isOpen ? true : undefined} onClose={onClose} style={{ minWidth: '400px', maxWidth: '480px', width: '90vw', margin: 'auto' }}>
       <span slot="headline">
         {userToEdit ? 'Ubah Pengguna' : 'Tambah Pengguna Baru'}
       </span>
-      <form slot="content" className="flex flex-col gap-4 py-2 min-w-[300px]" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+      <form slot="content" className="flex flex-col gap-6 py-4 w-full" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
         <md-filled-text-field
           label="Nama Lengkap"
           value={name}

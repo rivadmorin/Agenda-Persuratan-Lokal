@@ -495,7 +495,7 @@ export default function Settings({
   };
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-6 p-4 relative pb-28 text-[var(--md-sys-color-on-surface)]">
+    <div className="max-w-4xl mx-auto flex flex-col gap-8 p-4 relative pb-32 text-[var(--md-sys-color-on-surface)]">
       {/* Toast Notification */}
       {statusMsg && (
         <div className={`fixed bottom-24 right-8 z-50 p-4 rounded-2xl shadow-lg flex items-center gap-3 transition-premium ${statusType === 'success' ? 'bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]' : 'bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]'}`}>
@@ -505,7 +505,7 @@ export default function Settings({
       )}
 
       <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)]">Pengaturan Sistem</h1>
+        <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)] tracking-tight">Pengaturan Sistem</h1>
         <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Kelola konfigurasi branding, skema kolom dinamis, dan pengelolaan PDF.</p>
       </div>
 
@@ -513,7 +513,7 @@ export default function Settings({
         
         {/* Tampilan & Branding */}
         <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8">
             <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">palette</span>
               Tampilan & Branding
@@ -639,7 +639,7 @@ export default function Settings({
 
         {/* Manajemen Berkas & Auto-Rename */}
         <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8">
             <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">description</span>
               Manajemen Berkas & Unggahan
@@ -711,7 +711,7 @@ export default function Settings({
 
         {/* Backup & Pemulihan (Double Bezel) */}
         <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5 flex flex-col gap-5">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8 flex flex-col gap-5">
             <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">backup</span>
               Sistem Database Backup & Pemulihan
@@ -884,7 +884,7 @@ export default function Settings({
 
         {/* Kolom Cetak Tanda Terima */}
         <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5 flex flex-col gap-4">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8 flex flex-col gap-4">
             <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">receipt_long</span>
               Kolom Cetak Tanda Terima
@@ -922,7 +922,7 @@ export default function Settings({
 
         {/* Skema Kolom Dinamis */}
         <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-1 transition-premium shadow-sm">
-          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-5 flex flex-col min-h-[400px]">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2rem-0.25rem)] p-8 flex flex-col min-h-[400px]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
                 <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">splitscreen</span>
