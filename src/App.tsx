@@ -296,6 +296,7 @@ export default function App() {
                   onViewPdf={(path) => window.open(`/api/files/${path}`, '_blank')}
                   onExportExcel={() => window.open('/api/excel/export', '_blank')}
                   onRefresh={fetchMails}
+                    onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
                   onBatchDownload={(ids) => {
                     fetch('/api/pdf/batch-download', {
                       method: 'POST',
@@ -337,6 +338,7 @@ export default function App() {
             columns={config.columns}
             mailToEdit={mailToEdit}
             onSave={handleSaveMail}
+            onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
           />
 
           <ReceiptModal

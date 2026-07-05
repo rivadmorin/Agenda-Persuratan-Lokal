@@ -194,7 +194,7 @@ export default function PdfTools() {
                                   [newFiles[idx-1], newFiles[idx]] = [newFiles[idx], newFiles[idx-1]];
                                   setMergeFiles(newFiles);
                                 }
-                             }} disabled={idx === 0 ? true : undefined}>
+                             }} disabled={idx === 0 ? true : undefined} aria-label="Pindahkan ke atas">
                                <span className="material-symbols-outlined">arrow_upward</span>
                              </md-icon-button>
                              <md-icon-button onClick={() => {
@@ -203,10 +203,10 @@ export default function PdfTools() {
                                   [newFiles[idx+1], newFiles[idx]] = [newFiles[idx], newFiles[idx+1]];
                                   setMergeFiles(newFiles);
                                 }
-                             }} disabled={idx === mergeFiles.length - 1 ? true : undefined}>
+                             }} disabled={idx === mergeFiles.length - 1 ? true : undefined} aria-label="Pindahkan ke bawah">
                                <span className="material-symbols-outlined">arrow_downward</span>
                              </md-icon-button>
-                             <md-icon-button onClick={() => setMergeFiles(mergeFiles.filter((_, i) => i !== idx))} className="text-rose-500">
+                             <md-icon-button onClick={() => setMergeFiles(mergeFiles.filter((_, i) => i !== idx))} className="text-rose-500" aria-label="Hapus dari daftar">
                                <span className="material-symbols-outlined">delete</span>
                              </md-icon-button>
                           </div>
