@@ -7,6 +7,7 @@ interface ReceiptModalProps {
   onConfirm: (signerLeft: string, signerRight: string) => void;
   defaultSignerLeft: string;
   defaultSignerRight: string;
+  isProcessing?: boolean;
 }
 
 export default function ReceiptModal({
@@ -15,6 +16,7 @@ export default function ReceiptModal({
   onConfirm,
   defaultSignerLeft,
   defaultSignerRight,
+  isProcessing
 }: ReceiptModalProps) {
   const [signerLeft, setSignerLeft] = useState('');
   const [signerRight, setSignerRight] = useState('');
@@ -29,7 +31,6 @@ export default function ReceiptModal({
   const handleSubmit = () => {
     if (!signerLeft.trim() || !signerRight.trim()) return;
     onConfirm(signerLeft, signerRight);
-    onClose();
   };
 
   return (
@@ -89,10 +90,19 @@ export default function ReceiptModal({
                 <md-text-button onClick={onClose}>Batal</md-text-button>
                 <md-filled-button 
                   onClick={handleSubmit} 
-                  disabled={!signerLeft.trim() || !signerRight.trim() ? true : undefined}
+                  disabled={(isProcessing || !signerLeft.trim() || !signerRight.trim()) ? true : undefined}
                 >
-                  <span slot="icon" className="material-symbols-outlined">print</span>
-                  Cetak PDF
+                  {isProcessing ? (
+                    <>
+                      <md-circular-progress indeterminate slot="icon" style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
+                      Memproses...
+                    </>
+                  ) : (
+                    <>
+                      <span slot="icon" className="material-symbols-outlined">print</span>
+                      Cetak PDF
+                    </>
+                  )}
                 </md-filled-button>
               </div>
             </motion.div>

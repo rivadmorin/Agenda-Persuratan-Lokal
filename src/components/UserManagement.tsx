@@ -16,6 +16,11 @@ export default function UserManagement() {
     isOpen: false,
     username: '',
   });
+  const [errorModal, setErrorModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
   const [userDialog, setUserDialog] = useState<{
     isOpen: boolean;
     userToEdit: User | null;
@@ -65,15 +70,20 @@ export default function UserManagement() {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to save user');
+        const err = await res.json();
+        throw new Error(err.message || 'Gagal menyimpan pengguna');
       }
 
-      // Refresh to get actual state (and correct IDs if any)
+      // Refresh to get actual state
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       // Rollback on error
       setUsers(previousUsers);
-      console.error('Error saving user:', error);
+      setErrorModal({
+        isOpen: true,
+        title: 'Gagal Simpan User',
+        message: error.message || 'Terjadi kesalahan saat menghubungi server.',
+      });
     }
   };
 
@@ -88,12 +98,17 @@ export default function UserManagement() {
     try {
       const res = await fetch(`/api/users/${usernameToDelete}`, { method: 'DELETE' });
       if (!res.ok) {
-        throw new Error('Failed to delete user');
+        const err = await res.json();
+        throw new Error(err.message || 'Gagal menghapus pengguna');
       }
-    } catch (error) {
+    } catch (error: any) {
       // Rollback on error
       setUsers(previousUsers);
-      console.error('Error deleting user:', error);
+      setErrorModal({
+        isOpen: true,
+        title: 'Gagal Hapus User',
+        message: error.message || 'Gagal menghapus pengguna dari server.',
+      });
     }
   };
 
@@ -172,6 +187,14 @@ export default function UserManagement() {
         message={`Apakah Anda yakin ingin menghapus pengguna @${confirmModal.username}? Tindakan ini tidak dapat dibatalkan.`}
         onClose={() => setConfirmModal({ isOpen: false, username: '' })}
         onConfirm={handleDelete}
+      />
+
+      <ConfirmModal
+        isOpen={errorModal.isOpen}
+        title={errorModal.title}
+        message={errorModal.message}
+        onClose={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
       />
     </div>
   );

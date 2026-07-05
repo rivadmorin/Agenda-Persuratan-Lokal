@@ -1,71 +1,37 @@
-import "./material-web.d.ts";
 import React, { useState, useEffect } from 'react';
-import Login from './components/Login';
 import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
 import MailTable from './components/MailTable';
 import MailDrawer from './components/MailDrawer';
-import Dashboard from './components/Dashboard';
-import Settings from './components/Settings';
 import PdfTools from './components/PdfTools';
 import UserManagement from './components/UserManagement';
+import Settings from './components/Settings';
+import Login from './components/Login';
 import ConfirmModal from './components/ConfirmModal';
 import ReceiptModal from './components/ReceiptModal';
-import { User, AppConfig, MailRecord } from './types';
+import { MailRecord, AppConfig, User } from './types';
 import { generateM3Theme } from './utils/theme';
-
-// Intercept fetch to automatically append user session headers for backend SSE / active session tracking
-const originalFetch = window.fetch;
-window.fetch = function (input, init) {
-  const saved = localStorage.getItem('currentUser');
-  if (saved) {
-    try {
-      const user = JSON.parse(saved);
-      const headers = new Headers(init?.headers);
-      headers.set('x-username', user.username);
-      headers.set('x-user-name', user.name);
-      headers.set('x-user-role', user.role);
-      
-      return originalFetch(input, {
-        ...init,
-        headers
-      });
-    } catch (err) {
-      console.error('Failed to parse currentUser for fetch headers', err);
-    }
-  }
-  return originalFetch(input, init);
-};
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('currentUser');
     return saved ? JSON.parse(saved) : null;
   });
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    return localStorage.getItem('theme') === 'dark';
-  });
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-      document.body.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [darkMode]);
-
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [mails, setMails] = useState<MailRecord[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  // Drawer states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<'edit' | 'view'>('edit');
   const [mailToEdit, setMailToEdit] = useState<MailRecord | null>(null);
   const [onlineCount, setOnlineCount] = useState(1);
   const [connectionError, setConnectionError] = useState(false);
   const [loadingMails, setLoadingMails] = useState(false);
+  const [isBatchLoading, setIsBatchLoading] = useState(false);
 
   // Modal states
   const [confirmModal, setConfirmModal] = useState<{
@@ -183,39 +149,48 @@ export default function App() {
     const url = mailToEdit ? `/api/mails/${mailToEdit.id}` : '/api/mails';
     const method = mailToEdit ? 'PUT' : 'POST';
 
-    const res = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-username': currentUser?.username || '',
-        'x-user-name': currentUser?.name || ''
-      },
-      body: JSON.stringify({ ...data, type: data.type || 'Masuk', versionId: mailToEdit?.versionId })
-    });
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-username': currentUser?.username || '',
+          'x-user-name': currentUser?.name || ''
+        },
+        body: JSON.stringify({ ...data, type: data.type || 'Masuk', versionId: mailToEdit?.versionId })
+      });
 
-    if (res.ok) {
-      setIsDrawerOpen(false);
-      fetchMails();
-    } else {
-      const err = await res.json();
-      if (res.status === 409 && err.collision) {
-        setConfirmModal({
-          isOpen: true,
-          title: 'Konflik Data (Optimistic Lock)',
-          message: 'Surat ini telah diperbarui oleh operator lain saat Anda sedang melakukan pengeditan. Mohon tutup formulir ini dan buka kembali untuk melihat perubahan terbaru.',
-          onConfirm: () => {
-            setIsDrawerOpen(false);
-            fetchMails();
-          }
-        });
+      if (res.ok) {
+        setIsDrawerOpen(false);
+        fetchMails();
       } else {
-        setConfirmModal({
+        const err = await res.json();
+        if (res.status === 409 && err.collision) {
+          setConfirmModal({
+            isOpen: true,
+            title: 'Konflik Data (Optimistic Lock)',
+            message: 'Surat ini telah diperbarui oleh operator lain saat Anda sedang melakukan pengeditan. Mohon tutup formulir ini dan buka kembali untuk melihat perubahan terbaru.',
+            onConfirm: () => {
+              setIsDrawerOpen(false);
+              fetchMails();
+            }
+          });
+        } else {
+          setConfirmModal({
+            isOpen: true,
+            title: 'Error',
+            message: err.message || 'Gagal menyimpan surat',
+            onConfirm: () => {}
+          });
+        }
+      }
+    } catch (err: any) {
+       setConfirmModal({
           isOpen: true,
-          title: 'Error',
-          message: err.message || 'Gagal menyimpan surat',
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Terjadi kesalahan saat menghubungi server.',
           onConfirm: () => {}
         });
-      }
     }
   };
 
@@ -225,42 +200,114 @@ export default function App() {
       title: 'Hapus Agenda Surat',
       message: 'Apakah Anda yakin ingin menghapus agenda surat ini? Tindakan ini tidak dapat dibatalkan.',
       onConfirm: async () => {
-        await fetch(`/api/mails/${id}`, { method: 'DELETE' });
-        fetchMails();
+        try {
+          const res = await fetch(`/api/mails/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            fetchMails();
+          } else {
+            const err = await res.json();
+            setConfirmModal({
+              isOpen: true,
+              title: 'Gagal Hapus',
+              message: err.message || 'Gagal menghapus surat dari server.',
+              onConfirm: () => {}
+            });
+          }
+        } catch (err: any) {
+           setConfirmModal({
+            isOpen: true,
+            title: 'Kesalahan Sistem',
+            message: err.message || 'Gagal menghapus data.',
+            onConfirm: () => {}
+          });
+        }
       }
     });
   };
 
   const handleSaveConfig = async (newConfig: AppConfig) => {
-    const res = await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newConfig)
-    });
-    if (res.ok) setConfig(newConfig);
+    try {
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig)
+      });
+      if (res.ok) {
+        setConfig(newConfig);
+      } else {
+        const err = await res.json();
+        setConfirmModal({
+          isOpen: true,
+          title: 'Gagal Simpan Pengaturan',
+          message: err.message || 'Terjadi kesalahan saat menyimpan pengaturan.',
+          onConfirm: () => {}
+        });
+      }
+    } catch (err: any) {
+       setConfirmModal({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal menyimpan pengaturan.',
+          onConfirm: () => {}
+        });
+    }
   };
 
-  const handleConfirmReceipt = (signerLeft: string, signerRight: string) => {
-    fetch('/api/pdf/receipt', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mailIds: receiptModal.mailIds,
-        signerLeft,
-        signerRight
-      })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to generate receipt');
-        return res.blob();
-      })
-      .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-      })
-      .catch(err => {
-        console.error('Print receipt failed', err);
+  const handleConfirmReceipt = async (signerLeft: string, signerRight: string) => {
+    setIsBatchLoading(true);
+    try {
+      const res = await fetch('/api/pdf/receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mailIds: receiptModal.mailIds,
+          signerLeft,
+          signerRight
+        })
       });
+      if (!res.ok) throw new Error('Gagal membuat tanda terima PDF');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setReceiptModal(prev => ({ ...prev, isOpen: false }));
+    } catch (err: any) {
+      console.error('Print receipt failed', err);
+      setConfirmModal({
+        isOpen: true,
+        title: 'Gagal Membuat PDF',
+        message: err.message || 'Terjadi kesalahan saat memproses tanda terima.',
+        onConfirm: () => {}
+      });
+    } finally {
+      setIsBatchLoading(false);
+    }
+  };
+
+  const onBatchDownload = async (ids: string[]) => {
+    setIsBatchLoading(true);
+    try {
+      const res = await fetch('/api/pdf/batch-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mailIds: ids })
+      });
+      if (!res.ok) throw new Error('Gagal mengunduh berkas ZIP');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Arsip_Surat.zip';
+      a.click();
+    } catch (err: any) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Gagal Unduh',
+        message: err.message || 'Terjadi kesalahan saat membuat arsip ZIP.',
+        onConfirm: () => {}
+      });
+    } finally {
+      setIsBatchLoading(false);
+    }
   };
 
   return (
@@ -295,26 +342,15 @@ export default function App() {
                 <MailTable
                   mails={mails}
                   config={config}
+                  isBatchLoading={isBatchLoading}
                   onAdd={() => { setMailToEdit(null); setDrawerMode('edit'); setIsDrawerOpen(true); }}
                   onEdit={(m) => { setMailToEdit(m); setDrawerMode('edit'); setIsDrawerOpen(true); }}
                   onDelete={handleDeleteMail}
                   onViewMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
                   onExportExcel={() => window.open('/api/excel/export', '_blank')}
                   onRefresh={fetchMails}
-                    onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
-                  onBatchDownload={(ids) => {
-                    fetch('/api/pdf/batch-download', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ mailIds: ids })
-                    }).then(res => res.blob()).then(blob => {
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'Arsip_Surat.zip';
-                      a.click();
-                    });
-                  }}
+                  onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
+                  onBatchDownload={onBatchDownload}
                   onPrintReceipt={(ids) => {
                     setReceiptModal({
                       isOpen: true,
@@ -349,6 +385,7 @@ export default function App() {
 
           <ReceiptModal
             isOpen={receiptModal.isOpen}
+            isProcessing={isBatchLoading}
             onClose={() => setReceiptModal({ ...receiptModal, isOpen: false })}
             onConfirm={handleConfirmReceipt}
             defaultSignerLeft={currentUser?.name || ''}
