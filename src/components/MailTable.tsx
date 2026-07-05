@@ -7,10 +7,10 @@ interface MailTableProps {
   onEdit: (mail: MailRecord) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
-  onViewMail: (mail: MailRecord) => void;
   onExportExcel: () => void;
   onBatchDownload: (ids: string[]) => void;
   onPrintReceipt: (ids: string[]) => void;
+  onViewPdf: (path: string) => void;
   onRefresh: () => void;
   onError?: (title: string, message: string) => void;
 }
@@ -22,14 +22,17 @@ export default function MailTable(props: MailTableProps) {
     onEdit,
     onDelete,
     onAdd,
-    onViewMail,
     onExportExcel,
     onBatchDownload,
     onPrintReceipt,
+    onViewPdf,
     onRefresh
   } = props;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedMail, setSelectedMail] = useState<MailRecord | null>(null);
+  const [previewTab, setPreviewTab] = useState<'details' | 'pdf' | 'markdown'>('details');
+  const [copied, setCopied] = useState(false);
   const [uploadingMailId, setUploadingMailId] = useState<string | null>(null);
 
   const filteredMails = useMemo(() => {
@@ -83,6 +86,11 @@ export default function MailTable(props: MailTableProps) {
 
         if (res.ok) {
           onRefresh();
+          // Update selectedMail preview state if currently viewed
+          if (selectedMail && selectedMail.id === mailId) {
+            const updated = await res.json();
+            setSelectedMail(updated.mail || updated);
+          }
         } else {
           const err = await res.json();
           if (props.onError) props.onError('Gagal Unggah', err.message || 'Gagal mengunggah PDF');
@@ -97,6 +105,24 @@ export default function MailTable(props: MailTableProps) {
     } finally {
       setUploadingMailId(null);
     }
+  };
+
+  const formatMarkdown = (mail: MailRecord) => {
+    let r = `# 📄 Rincian Agenda Surat\n\n`;
+    r += `| Atribut | Detail Informasi |\n`;
+    r += `| :--- | :--- |\n`;
+    r += `| **ID Surat** | \`${mail.id}\` |\n`;
+    config.columns.forEach(col => {
+      let val = mail.metadata[col.key];
+      if (val == null || val === "") val = "-";
+      else if (col.type === "date") {
+        try {
+          val = new Date(val).toLocaleDateString("id-ID", { year: "numeric", month: "long", day: "numeric" });
+        } catch {}
+      }
+      r += `| **${col.label}** | ${val} |\n`;
+    });
+    return r;
   };
 
   return (
@@ -173,8 +199,10 @@ export default function MailTable(props: MailTableProps) {
             {filteredMails.map(mail => (
               <tr 
                 key={mail.id} 
-                onClick={() => onViewMail(mail)}
-                className="border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-high)]/50 transition-premium cursor-pointer"
+                onClick={() => setSelectedMail(mail)}
+                className={`border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-high)]/50 transition-premium cursor-pointer ${
+                  selectedMail?.id === mail.id ? 'bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)] font-semibold shadow-sm' : ''
+                }`}
               >
                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                   <md-checkbox
@@ -200,7 +228,7 @@ export default function MailTable(props: MailTableProps) {
                     </div>
                   ) : mail.pdfPath ? (
                     <button 
-                      onClick={() => onViewMail(mail)}
+                      onClick={() => onViewPdf(mail.pdfPath!)}
                       className="flex items-center gap-1 text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 font-bold transition-premium hover:underline"
                     >
                       <span className="material-symbols-outlined text-sm font-fill">picture_as_pdf</span>
@@ -265,6 +293,132 @@ export default function MailTable(props: MailTableProps) {
         )}
       </div>
 
+      {selectedMail && (
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-lg h-[450px] shrink-0 mt-6">
+          <div className="w-full h-full bg-[var(--md-sys-color-surface-container-high)] rounded-[calc(2.5rem-0.375rem)] flex flex-col overflow-hidden">
+             {/* Header */}
+             <div className="p-4 border-b border-[var(--md-sys-color-outline-variant)] flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                   <h4 className="font-bold text-[var(--md-sys-color-on-surface)] text-sm font-display truncate">Pratinjau Lampiran</h4>
+                   <span className="text-[10px] font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider font-mono">ID: {selectedMail.id}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                   <button
+                     onClick={() => onEdit(selectedMail)}
+                     className="px-3 py-1.5 rounded-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-xs font-bold text-[var(--md-sys-color-on-surface)] transition-premium active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                   >
+                     <span className="material-symbols-outlined text-sm">edit</span>
+                     Ubah Rincian
+                   </button>
+                   {selectedMail.pdfPath && (
+                     <button
+                       onClick={() => window.open(`/api/files/${selectedMail.pdfPath}`, '_blank')}
+                       className="px-3 py-1.5 rounded-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-xs font-bold text-[var(--md-sys-color-on-surface)] transition-premium active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                     >
+                       <span className="material-symbols-outlined text-sm">open_in_new</span>
+                       Maksimalkan Pratinjau
+                     </button>
+                   )}
+                   <button 
+                     onClick={() => setSelectedMail(null)}
+                     className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--md-sys-color-outline)] hover:bg-[var(--md-sys-color-surface-container-highest)] transition-premium active:scale-90"
+                     aria-label="Tutup pratinjau"
+                   >
+                     <span className="material-symbols-outlined text-lg">close</span>
+                   </button>
+                </div>
+             </div>
+             
+             {/* Tabs & Content */}
+             <div className="flex-grow flex flex-col overflow-hidden">
+                <div className="flex border-b border-[var(--md-sys-color-outline-variant)] px-4 bg-[var(--md-sys-color-surface-container)] shrink-0">
+                  <md-tabs active-tab-index={previewTab === 'details' ? 0 : previewTab === 'pdf' ? 1 : 2} className="w-full">
+                    <md-primary-tab onClick={() => setPreviewTab('details')}>
+                      <md-icon slot="icon">info</md-icon>
+                      Rincian
+                    </md-primary-tab>
+                    <md-primary-tab onClick={() => setPreviewTab('pdf')}>
+                      <md-icon slot="icon">picture_as_pdf</md-icon>
+                      Berkas PDF
+                    </md-primary-tab>
+                    <md-primary-tab onClick={() => setPreviewTab('markdown')}>
+                      <md-icon slot="icon">description</md-icon>
+                      Markdown
+                    </md-primary-tab>
+                  </md-tabs>
+                </div>
+                
+                <div className="flex-grow overflow-auto p-6 bg-[var(--md-sys-color-surface-container-high)]">
+                   {previewTab === 'details' && (
+                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6 max-w-4xl">
+                        {config.columns.map(col => (
+                          <div key={col.key} className="flex flex-col gap-1">
+                            <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest">{col.label}</span>
+                            <span className="text-sm font-semibold text-[var(--md-sys-color-on-surface)]">
+                              {col.type === 'date' && selectedMail.metadata[col.key]
+                                ? new Date(selectedMail.metadata[col.key]).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
+                                : String(selectedMail.metadata[col.key] || '-')}
+                            </span>
+                          </div>
+                        ))}
+                     </div>
+                   )}
+                   
+                   {previewTab === 'pdf' && (
+                     selectedMail.pdfPath ? (
+                       <iframe
+                         src={`/api/files/${selectedMail.pdfPath}`}
+                         className="w-full h-full border-none rounded-xl bg-[var(--md-sys-color-surface-container)]"
+                         title="PDF Review"
+                       />
+                     ) : (
+                       <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl p-6 bg-[var(--md-sys-color-surface-container)] gap-2">
+                          <span className="material-symbols-outlined text-4xl text-[var(--md-sys-color-outline)]">upload_file</span>
+                          <span className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">Pilih berkas PDF atau Seret ke sini</span>
+                          <span className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Format dokumen PDF wajib di bawah 50MB</span>
+                          <label className="mt-2">
+                            <span className="px-4 py-2 bg-[var(--md-sys-color-primary)] hover:bg-[var(--md-sys-color-primary)]/80 text-[var(--md-sys-color-on-primary)] rounded-xl text-xs font-bold transition-premium active:scale-95 inline-block cursor-pointer shadow-sm">
+                              Choose File
+                            </span>
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleInlineUpload(selectedMail.id, file);
+                              }}
+                            />
+                          </label>
+                       </div>
+                     )
+                   )}
+                   
+                   {previewTab === 'markdown' && (
+                     <div className="relative h-full flex flex-col bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl p-4 overflow-hidden">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(formatMarkdown(selectedMail));
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          className="absolute right-4 top-4 px-3 py-1.5 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)] rounded-lg text-xs font-bold text-[var(--md-sys-color-on-surface)] transition-premium shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-sm">
+                            {copied ? 'done' : 'content_copy'}
+                          </span>
+                          {copied ? 'Tersalin!' : 'Salin'}
+                        </button>
+                        <pre className="font-mono text-xs text-[var(--md-sys-color-on-surface)] overflow-auto whitespace-pre-wrap max-w-full flex-grow select-text pr-20">
+                           {formatMarkdown(selectedMail)}
+                        </pre>
+                     </div>
+                   )}
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
