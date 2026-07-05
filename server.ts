@@ -1019,7 +1019,7 @@ async function initDb() {
     logMessage('INFO', 'PostgreSQL Ready');
   } catch (err: any) {
     logMessage('ERROR', `PG Failure: ${err.message}`);
-    process.exit(1);
+
   } finally { client.release(); }
 }
 
