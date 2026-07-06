@@ -112,11 +112,42 @@ clean_environment_wipe() {
     fi
 }
 
-case "$1" in
-    check-prereqs) check_prereqs ;;
-    install)       execute_idempotent_install ;;
-    start)         start_background_process ;;
-    stop)          graceful_shutdown_process ;;
-    uninstall)     clean_environment_wipe ;;
-    help|*)        show_help ;;
-esac
+interactive_menu() {
+    while true; do
+        show_banner
+        echo -e "Pilih menu pilihan (masukkan angka):"
+        echo -e "  [1] Periksa Kesiapan Sistem (Node.js & npm)"
+        echo -e "  [2] Instal Aplikasi (Pasang Dependensi & Build)"
+        echo -e "  [3] Jalankan Server (Latar Belakang)"
+        echo -e "  [4] Hentikan Server"
+        echo -e "  [5] Hapus Instalasi (Wipe Environment)"
+        echo -e "  [6] Keluar"
+        echo ""
+        read -p "Masukkan pilihan Anda [1-6]: " choice
+        echo ""
+        case "$choice" in
+            1) check_prereqs ;;
+            2) execute_idempotent_install ;;
+            3) start_background_process ;;
+            4) graceful_shutdown_process ;;
+            5) clean_environment_wipe ;;
+            6) echo -e "${GREEN}Keluar.${NC}"; exit 0 ;;
+            *) echo -e "${RED}[!] Pilihan tidak valid. Silakan coba lagi.${NC}" ;;
+        esac
+        echo -e "\nTekan [Enter] untuk melanjutkan..."
+        read
+    done
+}
+
+if [ -z "$1" ]; then
+    interactive_menu
+else
+    case "$1" in
+        check-prereqs) check_prereqs ;;
+        install)       execute_idempotent_install ;;
+        start)         start_background_process ;;
+        stop)          graceful_shutdown_process ;;
+        uninstall)     clean_environment_wipe ;;
+        help|*)        show_help ;;
+    esac
+fi

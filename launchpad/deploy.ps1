@@ -108,13 +108,44 @@ function Clean-Environment-Wipe {
     }
 }
 
+function Show-InteractiveMenu {
+    while ($true) {
+        Show-Banner
+        Write-Host "Pilih menu pilihan (masukkan angka):"
+        Write-Host "  [1] Periksa Kesiapan Sistem (Node.js & npm)" -ForegroundColor Green
+        Write-Host "  [2] Instal Aplikasi (Pasang Dependensi & Build)" -ForegroundColor Green
+        Write-Host "  [3] Jalankan Server (Latar Belakang)" -ForegroundColor Green
+        Write-Host "  [4] Hentikan Server" -ForegroundColor Green
+        Write-Host "  [5] Hapus Instalasi (Wipe Environment)" -ForegroundColor Green
+        Write-Host "  [6] Keluar" -ForegroundColor Green
+        Write-Host ""
+        $choice = Read-Host "Masukkan pilihan Anda [1-6]"
+        Write-Host ""
+        switch ($choice) {
+            "1" { Check-Prereqs }
+            "2" { Execute-Idempotent-Install }
+            "3" { Start-Background-Process }
+            "4" { Graceful-Shutdown-Process }
+            "5" { Clean-Environment-Wipe }
+            "6" { Write-Host "Keluar." -ForegroundColor Green; exit 0 }
+            default { Write-Host "[!] Pilihan tidak valid. Silakan coba lagi." -ForegroundColor Red }
+        }
+        Write-Host ""
+        Read-Host "Tekan [Enter] untuk melanjutkan..."
+    }
+}
+
 $command = $args[0]
 
-switch ($command) {
-    "check-prereqs" { Check-Prereqs }
-    "install"       { Execute-Idempotent-Install }
-    "start"         { Start-Background-Process }
-    "stop"          { Graceful-Shutdown-Process }
-    "uninstall"     { Clean-Environment-Wipe }
-    default         { Show-Help }
+if ([string]::IsNullOrEmpty($command)) {
+    Show-InteractiveMenu
+} else {
+    switch ($command) {
+        "check-prereqs" { Check-Prereqs }
+        "install"       { Execute-Idempotent-Install }
+        "start"         { Start-Background-Process }
+        "stop"          { Graceful-Shutdown-Process }
+        "uninstall"     { Clean-Environment-Wipe }
+        default         { Show-Help }
+    }
 }
