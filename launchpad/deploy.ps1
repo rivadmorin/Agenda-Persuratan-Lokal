@@ -74,7 +74,7 @@ function Start-Background-Process {
         Remove-Item ".server.pid" -Force
     }
 
-    $process = Start-Process -FilePath "npm" -ArgumentList "run start" -RedirectStandardOutput "server.log" -RedirectStandardError "server.log" -WindowStyle Hidden -PassThru
+    $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run start" -RedirectStandardOutput "server.log" -RedirectStandardError "server.log" -WindowStyle Hidden -PassThru
     $process.Id | Out-File ".server.pid"
     Write-Host "[✓] Server started in background. (PID: $($process.Id))" -ForegroundColor Green
 }
