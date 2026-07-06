@@ -9,3 +9,5 @@ coverage/
 data/
 .server.pid
 test-results/
+release/
+
