@@ -147,7 +147,6 @@ export default function MailDrawer({
 
   const formatMarkdown = (mail: MailRecord) => {
     let md = `# Agenda Surat: ${mail.metadata.nomorSurat || 'Tanpa Nomor'}\n\n`;
-    md += `**Tipe:** ${mail.type}\n`;
     sortedColumns.forEach(col => {
       const val = mail.metadata[col.key] || '-';
       md += `**${col.label}:** ${val}\n`;
@@ -203,20 +202,6 @@ export default function MailDrawer({
               <div className="flex-1 overflow-y-auto">
                 {mode === 'edit' ? (
                   <form className="p-6 flex flex-col gap-8 pb-32" onSubmit={handleSubmit}>
-                    {/* Tipe Surat Toggle */}
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-widest px-1">Tipe Surat</label>
-                      <md-outlined-select
-                        label="Tipe Surat"
-                        value={type}
-                        onInput={(e: any) => setType(e.target.value)}
-                        className="w-full"
-                      >
-                        <md-select-option value="Masuk">Surat Masuk</md-select-option>
-                        <md-select-option value="Keluar">Surat Keluar</md-select-option>
-                        <md-select-option value="Masuk / Keluar">Surat Masuk / Keluar</md-select-option>
-                      </md-outlined-select>
-                    </div>
 
                     {/* Metadata Fields */}
                     <div className="flex flex-col gap-6">
@@ -310,10 +295,6 @@ export default function MailDrawer({
                     <div className="flex-1 overflow-y-auto bg-[var(--md-sys-color-surface)]">
                       {previewTab === 'details' && (
                         <div className="p-6 flex flex-col gap-4">
-                           <div className="p-4 rounded-2xl bg-[var(--md-sys-color-secondary-container)] border border-[var(--md-sys-color-secondary)]/10">
-                              <span className="text-[9px] font-black text-[var(--md-sys-color-on-secondary-container)] uppercase tracking-[0.2em] opacity-70">Tipe Agenda</span>
-                              <p className="text-lg font-bold text-[var(--md-sys-color-on-secondary-container)] mt-1">{type}</p>
-                           </div>
                            {sortedColumns.map(col => (
                              <div key={col.key} className="flex flex-col gap-1 p-4 rounded-2xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50">
                                <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80">{col.label}</span>

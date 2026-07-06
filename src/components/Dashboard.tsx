@@ -110,7 +110,13 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
       .map(mail => {
         let formattedDate = '-';
         try {
-          formattedDate = new Date(mail.createdAt).toLocaleDateString('id-ID');
+          const d = new Date(mail.createdAt);
+          if (!isNaN(d.getTime())) {
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            formattedDate = `${day}/${month}/${year}`;
+          }
         } catch (e) {
           // ignore
         }
@@ -250,8 +256,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
                 onClick={() => onSelectMail(mail)}
                 className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-primary)] shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98]"
               >
-                <div className="flex justify-between items-start gap-2 mb-1.5">
-                  <span className="text-[9px] font-bold text-[var(--md-sys-color-on-primary-container)] bg-[var(--md-sys-color-primary-container)] px-2 py-0.5 rounded-md uppercase tracking-wider">{mail.type}</span>
+                <div className="flex justify-end mb-1.5">
                   <span className="text-[9px] text-[var(--md-sys-color-outline)] font-medium">{mail.formattedDate}</span>
                 </div>
                 <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{mail.metadata.perihal || mail.metadata.isi || 'Tanpa Perihal'}</p>

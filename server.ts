@@ -739,7 +739,13 @@ app.post('/api/pdf/receipt', async (req, res) => {
         let val = mail.metadata[col.key] || '-';
         if (col.type === 'date' && val !== '-') {
           try {
-            val = new Date(val).toLocaleDateString('id-ID');
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) {
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const year = d.getFullYear();
+              val = `${day}/${month}/${year}`;
+            }
           } catch {}
         }
         doc.text(String(val).substring(0, 15), x, y);
@@ -786,7 +792,21 @@ app.get('/api/excel/export', async (req, res) => {
     const db = await readDb();
     const rows = db.mails.map((m: any, i: number) => {
       const r: any = { No: i + 1 };
-      db.config.columns.forEach((c: any) => r[c.label] = m.metadata[c.key] || '');
+      db.config.columns.forEach((c: any) => {
+        let val = m.metadata[c.key] || '';
+        if (c.type === 'date' && val) {
+          try {
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) {
+              const day = String(d.getDate()).padStart(2, '0');
+              const month = String(d.getMonth() + 1).padStart(2, '0');
+              const year = d.getFullYear();
+              val = `${day}/${month}/${year}`;
+            }
+          } catch {}
+        }
+        r[c.label] = val;
+      });
       return r;
     });
     const ws = XLSX.utils.json_to_sheet(rows);
