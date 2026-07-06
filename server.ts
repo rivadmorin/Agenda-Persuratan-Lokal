@@ -1,9 +1,9 @@
-import pg from 'pg';
+import Database from 'better-sqlite3';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { createServer as createViteServer } from 'vite';
+
 import { jsPDF } from 'jspdf';
 import { PDFDocument } from 'pdf-lib';
 import JSZip from 'jszip';
@@ -14,24 +14,100 @@ import { promisify } from 'util';
 const execPromise = promisify(exec);
 
 /**
- * [CORE_TECH] DATABASE PERSISTENCE
- * Logic: Strict PostgreSQL-Only Mode.
- * Philosophy: Simple, Resource-efficient, High Stability, and Local.
+ * [CORE_TECH] DATABASE PERSISTENCE - SQLite Compatibility Wrapper
  */
-const pool = new pg.Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'mail_agenda',
-  password: process.env.DB_PASSWORD || 'postgres123',
-  port: parseInt(process.env.DB_PORT || '5432'),
-});
+class SqliteClient {
+  private db: Database.Database;
 
-const app = express();
-const PORT = 3000;
+  constructor(dbPath: string) {
+    this.db = new Database(dbPath);
+    this.db.pragma('journal_mode = WAL');
+  }
 
-// Body limit for PDF uploads
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+  async query(sql: string, params: any[] = []) {
+    let sqliteSql = sql.replace(/\$(\d+)/g, '?');
+
+    // Handle schema script execution (multiple statements)
+    if (sqliteSql.includes('CREATE TABLE')) {
+      this.db.exec(sqliteSql);
+      return { rows: [] };
+    }
+
+    // Handle cascade truncate emulation
+    if (/truncate\s+table\s+mails,\s+config,\s+users\s+cascade/i.test(sqliteSql)) {
+      this.db.prepare('DELETE FROM mails').run();
+      this.db.prepare('DELETE FROM config').run();
+      this.db.prepare('DELETE FROM users').run();
+      try {
+        this.db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('mails', 'config', 'users')").run();
+      } catch (e) {}
+      return { rows: [] };
+    }
+
+    const processedParams = params.map(p => {
+      if (p !== null && typeof p === 'object') {
+        return JSON.stringify(p);
+      }
+      return p;
+    });
+
+    const stmt = this.db.prepare(sqliteSql);
+    const isSelect = stmt.reader;
+
+    if (isSelect) {
+      const rows = stmt.all(...processedParams);
+      const processedRows = rows.map((row: any) => {
+        const newRow = { ...row };
+        
+        if ('count(*)' in newRow) {
+          newRow.count = newRow['count(*)'];
+        }
+
+        if (typeof newRow.data === 'string') {
+          try { newRow.data = JSON.parse(newRow.data); } catch (e) {}
+        }
+        if (typeof newRow.metadata === 'string') {
+          try { newRow.metadata = JSON.parse(newRow.metadata); } catch (e) {}
+        }
+
+        for (const key of ['created_at', 'updated_at', 'createdAt', 'updatedAt']) {
+          if (row[key] !== undefined && row[key] !== null) {
+            newRow[key] = new Date(row[key]).toISOString();
+          }
+        }
+        return newRow;
+      });
+      return { rows: processedRows };
+    } else {
+      const info = stmt.run(...processedParams);
+      return { rows: [], rowCount: info.changes };
+    }
+  }
+
+  async release() {
+    // No-op
+  }
+}
+
+class SqlitePool {
+  private client: SqliteClient;
+
+  constructor(dbPath: string) {
+    this.client = new SqliteClient(dbPath);
+  }
+
+  async connect() {
+    return this.client;
+  }
+
+  async query(sql: string, params: any[] = []) {
+    return this.client.query(sql, params);
+  }
+
+  on(event: string, callback: (...args: any[]) => void) {
+    // No-op
+  }
+}
 
 // Ensure Directory Structure
 const dirs = [
@@ -45,6 +121,15 @@ dirs.forEach((dir) => {
     fs.mkdirSync(dir, { recursive: true });
   }
 });
+
+const pool = new SqlitePool(path.join(process.cwd(), 'data', 'database.db'));
+
+const app = express();
+const PORT = 3000;
+
+// Body limit for PDF uploads
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 /**
  * [LOGIC_HOTSPOTS] LOGGING SYSTEM
@@ -103,7 +188,7 @@ async function readDb() {
   try {
     const configRes = await client.query('SELECT data FROM config LIMIT 1');
     const usersRes = await client.query('SELECT username, password, name, role FROM users');
-    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails');
+    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails ORDER BY created_at ASC');
     return {
       config: configRes.rows[0]?.data || defaultDbConfig,
       users: usersRes.rows,
@@ -118,6 +203,76 @@ async function readDb() {
     };
   } finally {
     client.release();
+  }
+}
+
+async function restoreDbFromJson(dbData: any) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE TABLE mails, config, users CASCADE');
+    
+    // Restore config
+    if (dbData.config) {
+      await client.query('INSERT INTO config (data) VALUES ($1)', [dbData.config]);
+    } else {
+      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
+    }
+
+    // Restore users
+    if (dbData.users && Array.isArray(dbData.users)) {
+      for (const u of dbData.users) {
+        await client.query(
+          'INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING',
+          [u.username, u.password, u.name, u.role]
+        );
+      }
+    } else {
+      await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
+    }
+
+    // Restore mails
+    if (dbData.mails && Array.isArray(dbData.mails)) {
+      for (const m of dbData.mails) {
+        await client.query(
+          'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
+          [m.id, m.metadata || {}, m.pdfPath || null, m.versionId || 1]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function generateBackupFile(includePdf: boolean, type: 'manual' | 'auto' | 'pre_restore') {
+  const db = await readDb();
+  const timestamp = Date.now();
+  const backupsDir = path.join(process.cwd(), 'data', 'backups');
+  if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+
+  if (includePdf) {
+    const filename = `backup_${type}_${timestamp}.zip`;
+    const fullPath = path.join(backupsDir, filename);
+    const zip = new JSZip();
+    zip.file('db_export.json', JSON.stringify(db, null, 2));
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      addDirectoryToZip(zip, uploadsDir, 'uploads');
+    }
+    const content = await zip.generateAsync({ type: 'nodebuffer' });
+    fs.writeFileSync(fullPath, content);
+    return { filename, sizeBytes: content.length };
+  } else {
+    const filename = `backup_${type}_${timestamp}.json`;
+    const fullPath = path.join(backupsDir, filename);
+    const content = JSON.stringify(db, null, 2);
+    fs.writeFileSync(fullPath, content, 'utf-8');
+    return { filename, sizeBytes: Buffer.byteLength(content) };
   }
 }
 
@@ -382,7 +537,8 @@ app.post('/api/mails', async (req, res) => {
     const db = await readDb();
     let pdfPath = '';
     if (pdfData && pdfName) {
-      const buffer = Buffer.from(pdfData, 'base64');
+      const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
+      const buffer = Buffer.from(cleanBase64, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
       const [year, month, day] = tTerima.split('-');
       const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
@@ -419,7 +575,8 @@ app.put('/api/mails/:id', async (req, res) => {
       }
       pdfPath = '';
     } else if (pdfData && pdfName) {
-      const buffer = Buffer.from(pdfData, 'base64');
+      const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
+      const buffer = Buffer.from(cleanBase64, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
       const [year, month, day] = tTerima.split('-');
       const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
@@ -442,6 +599,42 @@ app.put('/api/mails/:id', async (req, res) => {
     saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: existing.created_at });
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/mails/:id/upload', async (req, res) => {
+  const { id } = req.params;
+  const { pdfData } = req.body;
+  try {
+    if (!pdfData) {
+      return res.status(400).json({ success: false, message: 'Data PDF kosong' });
+    }
+    const db = await readDb();
+    const mailRes = await pool.query('SELECT * FROM mails WHERE id = $1', [id]);
+    if (mailRes.rows.length === 0) return res.status(404).send();
+    const existing = mailRes.rows[0];
+    const metadata = existing.metadata || {};
+
+    const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
+    const [year, month, day] = tTerima.split('-');
+    const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
+    const absDir = path.join(process.cwd(), relDir);
+    if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
+
+    const formattedName = getFormattedPdfName(db.config, metadata, 'uploaded_document.pdf');
+    const pdfPath = path.join(relDir, formattedName).replace(/\\/g, '/');
+    fs.writeFileSync(path.join(absDir, formattedName), buffer);
+
+    await pool.query('UPDATE mails SET pdf_path = $1, version_id = version_id + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [pdfPath, id]);
+    saveSidecarMeta({ ...existing, pdf_path: pdfPath, metadata });
+
+    res.json({ success: true, pdfPath });
+  } catch (err: any) {
+    logMessage('ERROR', `Gagal mengunggah PDF secara langsung: ${err.message}`);
+    res.status(500).json({ success: false, message: 'Gagal memproses unggahan PDF.' });
+  }
 });
 
 app.delete('/api/mails/:id', async (req, res) => {
@@ -511,18 +704,64 @@ app.post('/api/pdf/receipt', async (req, res) => {
     const db = await readDb();
     const selected = db.mails.filter((m: any) => mailIds.includes(m.id));
     if (selected.length === 0) return res.status(400).send();
+    
+    // Create PDF document
     const doc = new jsPDF();
+    doc.setFontSize(16);
     doc.text(db.config.appName.toUpperCase(), 105, 15, { align: 'center' });
+    doc.setFontSize(12);
     doc.text('TANDA TERIMA PENYERAHAN SURAT', 105, 22, { align: 'center' });
     doc.line(15, 26, 195, 26);
+    
+    // Columns to display (only where includeInReceipt !== false)
+    const activeCols = db.config.columns
+      .filter((c: any) => c.includeInReceipt !== false)
+      .sort((a: any, b: any) => a.order - b.order);
+      
+    // Write table headers
+    doc.setFontSize(9);
+    let x = 15;
     let y = 35;
-    selected.forEach((m: any, i: number) => {
-      doc.text(`${i+1}. ${m.metadata.noSurat || '-'} - ${m.metadata.perihal || '-'}`, 20, y);
-      y += 10;
+    
+    // Draw columns headers
+    activeCols.forEach((col: any) => {
+      doc.text(col.label.substring(0, 15), x, y);
+      x += 35;
     });
+    
+    doc.line(15, y + 2, 195, y + 2);
     y += 10;
+    
+    // Draw table rows
+    selected.forEach((mail: any) => {
+      x = 15;
+      activeCols.forEach((col: any) => {
+        let val = mail.metadata[col.key] || '-';
+        if (col.type === 'date' && val !== '-') {
+          try {
+            val = new Date(val).toLocaleDateString('id-ID');
+          } catch {}
+        }
+        doc.text(String(val).substring(0, 15), x, y);
+        x += 35;
+      });
+      y += 8;
+      
+      if (y > 260) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+    
+    y += 10;
+    if (y > 260) {
+      doc.addPage();
+      y = 20;
+    }
+    
     doc.text(`Diserahkan oleh: ${signerLeft || '-'}`, 20, y);
     doc.text(`Diterima oleh: ${signerRight || '-'}`, 120, y);
+    
     res.setHeader('Content-Type', 'application/pdf');
     res.send(Buffer.from(doc.output('arraybuffer')));
   } catch (err) { res.status(500).send(); }
@@ -576,17 +815,296 @@ app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformat
   } catch (err) { res.status(500).send(); }
 });
 
-// Backup
-app.get('/api/backup/export-zip', async (req, res) => {
+// Backup & Recovery APIs
+app.get('/api/backup/list', async (req, res) => {
   try {
-    const zip = new JSZip();
-    const db = await readDb();
-    zip.file('db_export.json', JSON.stringify(db, null, 2));
-    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-    if (fs.existsSync(uploadsDir)) addDirectoryToZip(zip, uploadsDir, 'uploads');
-    res.setHeader('Content-Type', 'application/zip');
-    res.send(await zip.generateAsync({ type: 'nodebuffer' }));
+    const backupsDir = path.join(process.cwd(), 'data', 'backups');
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+    
+    const files = fs.readdirSync(backupsDir);
+    const backups = files
+      .filter(f => f.startsWith('backup_') && (f.endsWith('.zip') || f.endsWith('.json')))
+      .map(f => {
+        const fullPath = path.join(backupsDir, f);
+        const stats = fs.statSync(fullPath);
+        const isZip = f.endsWith('.zip');
+        const isManual = f.includes('manual');
+        const isPreRestore = f.includes('pre_restore');
+        const isAuto = f.includes('auto');
+        
+        let label = 'Cadangan Data';
+        if (isManual) label = `Cadangan Manual (${isZip ? 'ZIP' : 'JSON'})`;
+        else if (isPreRestore) label = `Cadangan Sebelum Pemulihan (${isZip ? 'ZIP' : 'JSON'})`;
+        else if (isAuto) label = `Cadangan Otomatis (${isZip ? 'ZIP' : 'JSON'})`;
+        
+        return {
+          filename: f,
+          sizeBytes: stats.size,
+          createdAt: stats.birthtime || stats.mtime || new Date(),
+          label,
+          isAuto,
+          isManual,
+          isPreRestore,
+          isZip
+        };
+      });
+      
+    backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    res.json({ success: true, backups });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/backup/create', async (req, res) => {
+  try {
+    const includePdf = req.body.includePdf !== false;
+    const backup = await generateBackupFile(includePdf, 'manual');
+    res.json({ success: true, backup });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/backup/delete/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, error: 'Nama file tidak valid' });
+    }
+    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'File tidak ditemukan' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/backup/download/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).send('Nama file tidak valid');
+    }
+    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
+    if (fs.existsSync(fullPath)) {
+      res.download(fullPath);
+    } else {
+      res.status(404).send('File tidak ditemukan');
+    }
   } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/backup/restore-local', async (req, res) => {
+  try {
+    const { filename } = req.body;
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, message: 'Nama file tidak valid' });
+    }
+    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, message: 'File tidak ditemukan' });
+    }
+
+    // Auto backup for safety before restoration
+    await generateBackupFile(true, 'pre_restore');
+
+    if (filename.endsWith('.json')) {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const dbData = JSON.parse(content);
+      await restoreDbFromJson(dbData);
+    } else if (filename.endsWith('.zip')) {
+      const zipBuffer = fs.readFileSync(fullPath);
+      const zip = await JSZip.loadAsync(zipBuffer);
+      const dbFile = zip.file('db_export.json');
+      if (dbFile) {
+        const dbContent = await dbFile.async('text');
+        const dbData = JSON.parse(dbContent);
+        await restoreDbFromJson(dbData);
+      }
+      
+      const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+      for (const [relPath, file] of Object.entries(zip.files)) {
+        if (relPath.startsWith('uploads/') && !file.dir) {
+          const cleanRel = relPath.substring('uploads/'.length);
+          const destPath = path.join(uploadsDir, cleanRel);
+          const destDir = path.dirname(destPath);
+          if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+          fs.writeFileSync(destPath, await file.async('nodebuffer'));
+        }
+      }
+    }
+    
+    res.json({ success: true, message: 'Sistem berhasil dipulihkan dari cadangan lokal!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal memulihkan dari cadangan lokal.' });
+  }
+});
+
+app.post('/api/backup/import', async (req, res) => {
+  try {
+    await generateBackupFile(true, 'pre_restore');
+    const dbData = req.body;
+    await restoreDbFromJson(dbData);
+    res.json({ success: true, message: 'Database berhasil dipulihkan dari backup!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Gagal memulihkan database.' });
+  }
+});
+
+app.post('/api/backup/import-zip', express.raw({ type: 'application/zip', limit: '100mb' }), async (req, res) => {
+  try {
+    await generateBackupFile(true, 'pre_restore');
+    const zipBuffer = req.body;
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const dbFile = zip.file('db_export.json');
+    if (!dbFile) throw new Error('ZIP tidak valid (db_export.json tidak ditemukan)');
+    
+    const dbContent = await dbFile.async('text');
+    const dbData = JSON.parse(dbContent);
+    await restoreDbFromJson(dbData);
+
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    for (const [relPath, file] of Object.entries(zip.files)) {
+      if (relPath.startsWith('uploads/') && !file.dir) {
+        const cleanRel = relPath.substring('uploads/'.length);
+        const destPath = path.join(uploadsDir, cleanRel);
+        const destDir = path.dirname(destPath);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        fs.writeFileSync(destPath, await file.async('nodebuffer'));
+      }
+    }
+
+    res.json({ success: true, message: 'Sistem berhasil dipulihkan dari berkas ZIP cadangan!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal memulihkan dari berkas ZIP.' });
+  }
+});
+
+app.post('/api/backup/clear', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('TRUNCATE TABLE mails, config, users CASCADE');
+      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
+      await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
+      await client.query('COMMIT');
+    } catch (dbErr) {
+      await client.query('ROLLBACK');
+      throw dbErr;
+    } finally { client.release(); }
+
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    if (fs.existsSync(uploadsDir)) {
+      fs.rmSync(uploadsDir, { recursive: true, force: true });
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    res.json({ success: true, message: 'Database & attachment uploads berhasil dibersihkan!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/backup/integrity/cleanup', async (req, res) => {
+  try {
+    const db = await readDb();
+    const activePaths = new Set(db.mails.map((m: any) => m.pdfPath).filter(Boolean));
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    let deletedCount = 0;
+
+    const cleanOrphans = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stats = fs.statSync(fullPath);
+        if (stats.isDirectory()) {
+          cleanOrphans(fullPath);
+          if (fs.readdirSync(fullPath).length === 0) fs.rmdirSync(fullPath);
+        } else if (stats.isFile()) {
+          const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+          if (relPath.endsWith('.json')) {
+            const pdfPair = relPath.substring(0, relPath.length - 5);
+            if (!activePaths.has(pdfPair)) fs.unlinkSync(fullPath);
+          } else if (relPath.endsWith('.pdf')) {
+            if (!activePaths.has(relPath) && !activePaths.has(relPath.replace(/^data\//, ''))) {
+              fs.unlinkSync(fullPath);
+              deletedCount++;
+              if (fs.existsSync(fullPath + '.json')) fs.unlinkSync(fullPath + '.json');
+            }
+          }
+        }
+      }
+    };
+
+    cleanOrphans(uploadsDir);
+    res.json({ success: true, message: `Dibersihkan ${deletedCount} lampiran yatim (tidak memiliki record database).` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/backup/integrity/reconstruct', async (req, res) => {
+  try {
+    const db = await readDb();
+    const activePaths = new Set(db.mails.map((m: any) => m.pdfPath).filter(Boolean));
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    let reconstructedCount = 0;
+
+    const findAndReconstruct = async (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stats = fs.statSync(fullPath);
+        if (stats.isDirectory()) {
+          await findAndReconstruct(fullPath);
+        } else if (stats.isFile() && item.endsWith('.pdf')) {
+          const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+          const checkPath1 = relPath;
+          const checkPath2 = relPath.startsWith('data/') ? relPath.substring(5) : relPath;
+          
+          if (!activePaths.has(checkPath1) && !activePaths.has(checkPath2)) {
+            let meta: any = null;
+            const sidecar = fullPath + '.json';
+            if (fs.existsSync(sidecar)) {
+              try {
+                meta = JSON.parse(fs.readFileSync(sidecar, 'utf-8'));
+              } catch {}
+            }
+
+            const mailId = `mail_reconstructed_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            const metadata = meta?.metadata || {
+              noUrut: item.substring(0, 10).replace(/[^0-9]/g, '') || '000',
+              tanggalTerima: new Date(stats.birthtime || stats.mtime).toISOString().split('T')[0],
+              tanggalSurat: new Date(stats.birthtime || stats.mtime).toISOString().split('T')[0],
+              jenisSurat: 'Masuk',
+              noSurat: item.replace('.pdf', ''),
+              suratDari: 'Direkonstruksi dari Lampiran',
+              perihal: `Dokumen Lampiran: ${item}`,
+              catatan: 'Rekonstruksi Integritas Otomatis'
+            };
+
+            await pool.query(
+              'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
+              [mailId, metadata, checkPath2, 1]
+            );
+            reconstructedCount++;
+          }
+        }
+      }
+    };
+
+    await findAndReconstruct(uploadsDir);
+    res.json({ success: true, message: `Berhasil rekonstruksi ${reconstructedCount} agenda surat dari berkas lampiran yatim.` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 app.get('/api/backup/integrity', async (req, res) => {
@@ -602,7 +1120,7 @@ app.get('/api/backup/integrity', async (req, res) => {
 
 // Files
 app.get('/api/files/*', (req, res) => {
-  const rel = req.params[0];
+  const rel = (req.params as any)[0];
   const full = path.join(process.cwd(), rel.startsWith('data/') ? '' : 'data', rel);
   if (fs.existsSync(full)) res.sendFile(full);
   else res.status(404).send();
@@ -612,25 +1130,44 @@ app.get('/api/files/*', (req, res) => {
  * [SYSTEM_BOOTSTRAP]
  */
 async function initDb() {
-  const client = await pool.connect();
+  let client;
   try {
-    logMessage('INFO', 'Initializing PostgreSQL Schema...');
+    client = await pool.connect();
+    logMessage('INFO', 'Initializing SQLite Schema...');
     const schema = fs.readFileSync(path.join(process.cwd(), 'schema.sql'), 'utf-8');
-    await client.query(schema);
+    try {
+      await client.query(schema);
+    } catch (schemaErr: any) {
+      logMessage('WARN', `Schema execution skipped/failed: ${schemaErr.message}`);
+    }
     const configCheck = await client.query('SELECT count(*) FROM config');
     if (parseInt(configCheck.rows[0].count) === 0) await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
     const userCheck = await client.query('SELECT count(*) FROM users');
     if (parseInt(userCheck.rows[0].count) === 0) await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
-    logMessage('INFO', 'PostgreSQL Ready');
+    logMessage('INFO', 'SQLite Ready');
   } catch (err: any) {
-    logMessage('ERROR', `PG Failure: ${err.message}`);
-    process.exit(1);
-  } finally { client.release(); }
+    logMessage('ERROR', `SQLite Failure: ${err.message}`);
+  } finally {
+    if (client) client.release();
+  }
 }
 
 async function startServer() {
   await initDb();
   if (process.env.NODE_ENV !== 'production') {
+    const srcBinary = path.join(process.cwd(), 'node_modules', '@esbuild', 'linux-x64', 'bin', 'esbuild');
+    const destBinary = '/tmp/esbuild-main';
+    try {
+      if (fs.existsSync(srcBinary)) {
+        fs.copyFileSync(srcBinary, destBinary);
+        fs.chmodSync(destBinary, 0o755);
+        process.env.ESBUILD_BINARY_PATH = destBinary;
+      }
+    } catch (e: any) {
+      logMessage('WARN', `Failed to copy local esbuild binary, using global fallback: ${e.message}`);
+      process.env.ESBUILD_BINARY_PATH = '/home/toor/.local/bin/esbuild';
+    }
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {

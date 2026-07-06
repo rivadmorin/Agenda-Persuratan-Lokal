@@ -8,6 +8,10 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   onLogout: () => void;
   onlineCount: number;
+  darkMode: boolean;
+  setDarkMode: (val: boolean) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 export default function Sidebar({
@@ -16,7 +20,11 @@ export default function Sidebar({
   activeTab,
   setActiveTab,
   onLogout,
-  onlineCount
+  onlineCount,
+  darkMode,
+  setDarkMode,
+  collapsed,
+  onToggleCollapse
 }: SidebarProps) {
 
   const menuItems = [
@@ -30,21 +38,45 @@ export default function Sidebar({
   const filteredItems = menuItems.filter(item => !item.adminOnly || currentUser.role === 'admin');
 
   return (
-    <aside className="w-80 h-screen sticky top-0 flex flex-col border-r border-slate-200 bg-slate-50/80 backdrop-blur-md p-6 justify-between z-10">
-      <div className="flex flex-col gap-8">
-        <div className="flex items-center gap-4 px-2">
-          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-200">
-            <span className="material-symbols-outlined text-3xl font-fill">mail</span>
-          </div>
-          <div>
-            <h2 className="font-display font-bold text-slate-800 text-lg leading-tight tracking-tight">{appName}</h2>
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{onlineCount} ONLINE</span>
+    <aside className={`h-screen sticky top-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] justify-between z-10 transition-all duration-300 ease-in-out ${collapsed ? 'w-0 p-0 border-r-0 overflow-hidden opacity-0 pointer-events-none' : 'w-72 p-4 opacity-100'}`}>
+      <div className="flex flex-col gap-6 min-w-[256px]">
+        <div className="flex items-start justify-between gap-4 px-2">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] flex items-center justify-center border border-[var(--md-sys-color-outline-variant)] shrink-0">
+              <span className="material-symbols-outlined text-2xl font-fill">mail</span>
+            </div>
+            <div>
+              <h2 className="font-display font-bold text-[var(--md-sys-color-on-surface)] text-base leading-tight tracking-tight">{appName}</h2>
+              <div className="flex items-center gap-1.5 mt-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="text-[8px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-widest">{onlineCount} ONLINE</span>
+              </div>
             </div>
           </div>
+          <div className="flex gap-1.5 shrink-0">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-sm transition-all duration-200 active:scale-90 cursor-pointer shrink-0"
+              title={darkMode ? "Mode Terang" : "Mode Gelap"}
+              aria-label={darkMode ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+            >
+              <span className="material-symbols-outlined text-lg">
+                {darkMode ? 'light_mode' : 'dark_mode'}
+              </span>
+            </button>
+            <button
+              onClick={onToggleCollapse}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-sm transition-all duration-200 active:scale-90 cursor-pointer shrink-0"
+              title="Sembunyikan Sidebar"
+              aria-label="Sembunyikan Sidebar"
+            >
+              <span className="material-symbols-outlined text-lg">
+                menu_open
+              </span>
+            </button>
+          </div>
         </div>
-
+ 
         <nav className="flex flex-col gap-1.5">
           {filteredItems.map((item) => {
             const isActive = activeTab === item.id;
@@ -52,35 +84,36 @@ export default function Sidebar({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl text-sm font-medium transition-all text-left ${
+                className={`flex items-center gap-4 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-300 relative overflow-hidden group active:scale-[0.98] text-left ${
                   isActive
-                    ? 'bg-teal-50 text-teal-700 border-l-4 border-teal-600 shadow-sm pl-3'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-l-4 border-transparent'
+                    ? 'bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)] font-bold shadow-sm'
+                    : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-high)] hover:text-[var(--md-sys-color-on-surface)]'
                 }`}
               >
-                <span className={`material-symbols-outlined ${isActive ? 'font-fill text-teal-600' : 'text-slate-400'}`}>{item.icon}</span>
+                <span className={`material-symbols-outlined text-lg ${isActive ? 'font-fill text-[var(--md-sys-color-primary)]' : 'text-[var(--md-sys-color-outline)] group-hover:text-[var(--md-sys-color-on-surface)] transition-colors'}`}>{item.icon}</span>
                 <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
       </div>
-
-      <div className="flex flex-col gap-4 border-t border-slate-200 pt-6">
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-100 shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
+ 
+      <div className="flex flex-col gap-4 border-t border-[var(--md-sys-color-outline-variant)] pt-6">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] shadow-[0_4px_12px_rgba(0,0,0,0.02)]">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] flex items-center justify-center font-bold text-base shadow-sm shrink-0">
               {currentUser.name.charAt(0).toUpperCase()}
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-bold text-slate-800 truncate">{currentUser.name}</p>
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest mt-0.5">{currentUser.role}</p>
+              <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)] truncate">{currentUser.name}</p>
+              <p className="text-[9px] text-[var(--md-sys-color-outline)] font-medium uppercase tracking-widest mt-0.5">{currentUser.role}</p>
             </div>
           </div>
           <button 
             onClick={onLogout} 
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--md-sys-color-outline)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors shrink-0"
             title="Keluar Sesi"
+            aria-label="Keluar sesi"
           >
             <span className="material-symbols-outlined text-xl">logout</span>
           </button>

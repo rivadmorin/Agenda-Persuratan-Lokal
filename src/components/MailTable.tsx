@@ -1,182 +1,374 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { MailRecord, AppConfig } from '../types';
 
 interface MailTableProps {
   mails: MailRecord[];
   config: AppConfig;
+  onAdd: () => void;
   onEdit: (mail: MailRecord) => void;
   onDelete: (id: string) => void;
-  onAdd: () => void;
+  onViewMail: (mail: MailRecord) => void;
   onExportExcel: () => void;
   onBatchDownload: (ids: string[]) => void;
   onPrintReceipt: (ids: string[]) => void;
-  onViewPdf: (path: string) => void;
+  isBatchLoading?: boolean;
+  onRefresh: () => void;
+  onError?: (title: string, message: string) => void;
 }
 
-export default function MailTable({
-  mails,
-  config,
-  onEdit,
-  onDelete,
-  onAdd,
-  onExportExcel,
-  onBatchDownload,
-  onPrintReceipt,
-  onViewPdf
-}: MailTableProps) {
+export default function MailTable(props: MailTableProps) {
+  const {
+    mails,
+    config,
+    onAdd,
+    onEdit,
+    onDelete,
+    onViewMail,
+    onExportExcel,
+    onBatchDownload,
+    onPrintReceipt,
+    onRefresh,
+    isBatchLoading
+  } = props;
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [uploadingMailId, setUploadingMailId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const filteredMails = useMemo(() => {
-    if (!searchTerm) return mails;
-    const lowerSearch = searchTerm.toLowerCase();
-    return mails.filter(m =>
-      m.type.toLowerCase().includes(lowerSearch) ||
-      Object.values(m.metadata).some(v => String(v).toLowerCase().includes(lowerSearch))
-    );
-  }, [mails, searchTerm]);
+  const sortedColumns = React.useMemo(() => {
+    return [...config.columns].sort((a, b) => a.order - b.order);
+  }, [config.columns]);
 
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredMails.length) setSelectedIds([]);
-    else setSelectedIds(filteredMails.map(m => m.id));
-  };
+  const sortedMails = React.useMemo(() => {
+    return [...mails].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [mails]);
+
+  const filteredMails = React.useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    if (!term) return sortedMails;
+    return sortedMails.filter(mail => {
+      const searchStr = `${mail.metadata.nomorSurat || ''} ${mail.metadata.perihal || ''} ${mail.metadata.pengirim || ''} ${mail.metadata.penerima || ''}`.toLowerCase();
+      return searchStr.includes(term);
+    });
+  }, [sortedMails, searchTerm]);
+
+  // Reset to first page when search query changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const totalItems = filteredMails.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const activePage = Math.min(currentPage, totalPages);
+  const startIndex = (activePage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const displayedMails = React.useMemo(() => {
+    return filteredMails.slice(startIndex, endIndex);
+  }, [filteredMails, startIndex, endIndex]);
+
+  const allSelectedOnPage = React.useMemo(() => {
+    return displayedMails.length > 0 && displayedMails.every(m => selectedIds.includes(m.id));
+  }, [displayedMails, selectedIds]);
+
+  const someSelectedOnPage = React.useMemo(() => {
+    return displayedMails.some(m => selectedIds.includes(m.id));
+  }, [displayedMails, selectedIds]);
+
+  const isIndeterminate = someSelectedOnPage && !allSelectedOnPage;
 
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    const displayedIds = displayedMails.map(m => m.id);
+    const allSelectedOnPage = displayedIds.length > 0 && displayedIds.every(id => selectedIds.includes(id));
+    if (allSelectedOnPage) {
+      setSelectedIds(prev => prev.filter(id => !displayedIds.includes(id)));
+    } else {
+      setSelectedIds(prev => {
+        const next = [...prev];
+        displayedIds.forEach(id => {
+          if (!next.includes(id)) next.push(id);
+        });
+        return next;
+      });
+    }
+  };
+
+  const handleInlineUpload = async (mailId: string, file: File) => {
+    setUploadingMailId(mailId);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        const res = await fetch(`/api/mails/${mailId}/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdfData: base64 })
+        });
+        if (res.ok) {
+          onRefresh();
+        } else {
+          props.onError?.('Upload Gagal', 'Terjadi kesalahan saat mengunggah PDF.');
+        }
+        setUploadingMailId(null);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Upload failed', err);
+      setUploadingMailId(null);
+    }
+  };
+
+  const formatDate = (dateVal: any) => {
+    if (!dateVal) return '-';
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return String(dateVal);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full gap-6 py-4">
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-        <md-outlined-text-field
-          placeholder="Cari agenda surat..."
-          onInput={(e: any) => setSearchTerm(e.target.value)}
-          className="flex-grow max-w-md"
-          style={{ '--md-outlined-text-field-container-shape': '28px' }}
-        >
-          <span slot="leading-icon" className="material-symbols-outlined">search</span>
-        </md-outlined-text-field>
+    <div className="flex flex-col h-full gap-6 animate-premium-in">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-[300px] relative group">
+          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-outline)] transition-premium group-focus-within:text-[var(--md-sys-color-primary)]">search</span>
+          <input
+            type="text"
+            placeholder="Cari agenda surat..."
+            value={searchTerm}
+            onInput={(e: any) => setSearchTerm(e.target.value)}
+            aria-label="Cari agenda surat"
+            className="w-full h-14 pl-12 pr-4 rounded-2xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--md-sys-color-primary)] focus:ring-2 focus:ring-[var(--md-sys-color-primary)]/20 transition-premium"
+          />
+          {searchTerm && (
+            <md-icon-button
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+              onClick={() => setSearchTerm('')}
+              aria-label="Hapus pencarian"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </md-icon-button>
+          )}
+        </div>
 
         <div className="flex items-center justify-end gap-2 flex-wrap">
           {selectedIds.length > 0 && (
              <>
-               <md-filled-button onClick={() => onPrintReceipt(selectedIds)} style={{ '--md-filled-button-container-color': 'var(--md-sys-color-tertiary)' }}>
+               <md-filled-button
+                 disabled={isBatchLoading ? true : undefined}
+                 onClick={() => onPrintReceipt(selectedIds)}
+                 style={{ '--md-filled-button-container-color': 'var(--md-sys-color-tertiary)' }}
+                 className="w-full sm:w-auto"
+               >
                  <span slot="icon" className="material-symbols-outlined">receipt_long</span>
-                 Tanda Terima ({selectedIds.length})
+                 Tanda Terima
                </md-filled-button>
-               <md-outlined-button onClick={() => onBatchDownload(selectedIds)}>
+               <md-outlined-button
+                 disabled={isBatchLoading ? true : undefined}
+                 onClick={() => onBatchDownload(selectedIds)}
+                 className="w-full sm:w-auto"
+               >
                  <span slot="icon" className="material-symbols-outlined">download_for_offline</span>
                  ZIP
                </md-outlined-button>
              </>
           )}
-          <md-outlined-button onClick={onExportExcel}>
-            <span slot="icon" className="material-symbols-outlined">table_view</span>
+          <md-outlined-button onClick={onExportExcel} className="w-full sm:w-auto">
+            <span slot="icon" className="material-symbols-outlined">description</span>
             Excel
           </md-outlined-button>
-          <md-filled-button onClick={onAdd}>
+          <md-filled-button onClick={onAdd} className="w-full sm:w-auto">
             <span slot="icon" className="material-symbols-outlined">add</span>
             Tambah Surat
           </md-filled-button>
         </div>
       </div>
 
-      <div className="m3-table-container shadow-sm border border-slate-200/60 overflow-x-auto bg-white">
-        <table className="m3-table min-w-full">
-          <thead>
-            <tr>
-              <th className="w-12 px-4 py-4">
-                <md-checkbox
-                  checked={selectedIds.length > 0 && selectedIds.length === filteredMails.length}
-                  indeterminate={selectedIds.length > 0 && selectedIds.length < filteredMails.length ? true : undefined}
-                  onClick={toggleSelectAll}
-                ></md-checkbox>
-              </th>
-              {config.columns.sort((a,b) => a.order - b.order).map(col => {
-                // Hide notes/disposisi/penomoran on smaller displays
-                const isSecondary = col.key === 'catatan' || col.key === 'disposisi' || col.key === 'penomoran';
-                return (
-                  <th 
-                    key={col.key} 
-                    className={`px-4 py-4 text-xs font-bold uppercase tracking-widest text-slate-500 ${isSecondary ? 'hidden lg:table-cell' : ''}`}
-                  >
-                    {col.label}
-                  </th>
-                );
-              })}
-              <th className="px-4 py-4 text-right text-xs font-bold uppercase tracking-widest text-slate-500 w-28">AKSI</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredMails.map(mail => (
-              <tr key={mail.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-                <td className="px-4 py-4">
+      <div className="m3-table-container flex flex-col shadow-sm border border-[var(--md-sys-color-outline-variant)] flex-1 overflow-hidden bg-[var(--md-sys-color-surface-container)] rounded-3xl transition-premium">
+        {isBatchLoading && <md-linear-progress indeterminate style={{ position: 'sticky', top: 0, zIndex: 10, width: '100%' }}></md-linear-progress>}
+        <div className="flex-1 overflow-auto">
+          <table className="m3-table min-w-full">
+            <thead className="bg-[var(--md-sys-color-surface-container-high)] sticky top-0 z-10">
+              <tr>
+                <th className="px-4 py-4 w-12">
                   <md-checkbox
-                    checked={selectedIds.includes(mail.id)}
-                    onClick={() => toggleSelect(mail.id)}
+                    checked={allSelectedOnPage}
+                    indeterminate={isIndeterminate ? true : undefined}
+                    onClick={toggleSelectAll}
                   ></md-checkbox>
-                </td>
-                {config.columns.map(col => {
+                </th>
+                {sortedColumns.map(col => {
                   const isSecondary = col.key === 'catatan' || col.key === 'disposisi' || col.key === 'penomoran';
                   return (
-                    <td key={col.key} className={`px-4 py-4 text-sm text-slate-700 max-w-[200px] truncate ${isSecondary ? 'hidden lg:table-cell' : ''}`}>
-                      {col.type === 'date' && mail.metadata[col.key]
-                        ? new Date(mail.metadata[col.key]).toLocaleDateString('id-ID')
-                        : String(mail.metadata[col.key] || '-')}
-                    </td>
+                    <th 
+                      key={col.key} 
+                      className={`px-4 py-4 text-[10px] font-black uppercase tracking-[0.15em] text-[var(--md-sys-color-on-surface-variant)] ${isSecondary ? 'hidden lg:table-cell' : ''}`}
+                    >
+                      {col.label}
+                    </th>
                   );
                 })}
-                <td className="px-4 py-4 text-right w-28 relative">
-                  <div className="flex items-center justify-end gap-1">
-                    {mail.pdfPath && (
-                      <md-icon-button onClick={() => onViewPdf(mail.pdfPath!)} className="text-teal-600">
-                        <span className="material-symbols-outlined">visibility</span>
-                      </md-icon-button>
-                    )}
-                    <md-icon-button onClick={() => onEdit(mail)} className="text-slate-500">
-                      <span className="material-symbols-outlined">edit</span>
-                    </md-icon-button>
-                    
-                    <div className="inline-block relative">
-                      <md-icon-button onClick={() => setActiveMenuId(activeMenuId === mail.id ? null : mail.id)} className="text-slate-400">
-                        <span className="material-symbols-outlined">more_vert</span>
-                      </md-icon-button>
-                      
-                      {activeMenuId === mail.id && (
-                        <>
-                          <div className="fixed inset-0 z-20" onClick={() => setActiveMenuId(null)}></div>
-                          <div className="absolute right-0 mt-1 w-48 rounded-xl bg-white border border-slate-200 shadow-xl py-2 z-30 animate-in fade-in slide-in-from-top-2 duration-150">
-                            <button
-                              onClick={() => { onPrintReceipt([mail.id]); setActiveMenuId(null); }}
-                              className="w-full text-left px-4 py-2.5 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2 font-medium"
-                            >
-                              <span className="material-symbols-outlined text-sm text-slate-400">receipt_long</span>
-                              Tanda Terima
-                            </button>
-                            <button
-                              onClick={() => { onDelete(mail.id); setActiveMenuId(null); }}
-                              className="w-full text-left px-4 py-2.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-medium"
-                            >
-                              <span className="material-symbols-outlined text-sm text-rose-500">delete</span>
-                              Hapus Agenda
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </td>
+                <th className="px-4 py-4 text-[var(--md-sys-color-on-surface-variant)] text-[10px] font-black uppercase tracking-[0.15em] w-24">LAMPIRAN</th>
+                <th className="px-4 py-4 text-right text-[10px] font-black uppercase tracking-[0.15em] text-[var(--md-sys-color-on-surface-variant)] w-48 min-w-[192px] whitespace-nowrap">AKSI</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredMails.length === 0 && (
-          <div className="py-24 text-center text-slate-400">
-             <span className="material-symbols-outlined text-6xl mb-4 text-slate-300">inventory_2</span>
-             <p className="text-sm font-medium">Tidak ada data surat ditemukan.</p>
+            </thead>
+            <tbody>
+              {displayedMails.map(mail => (
+                <tr 
+                  key={mail.id} 
+                  onClick={() => onViewMail(mail)}
+                  className="border-b border-[var(--md-sys-color-outline-variant)] hover:bg-[var(--md-sys-color-surface-container-highest)] transition-premium cursor-pointer"
+                >
+                  <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                    <md-checkbox
+                      checked={selectedIds.includes(mail.id)}
+                      onClick={() => toggleSelect(mail.id)}
+                    ></md-checkbox>
+                  </td>
+                  {sortedColumns.map(col => {
+                    const isSecondary = col.key === 'catatan' || col.key === 'disposisi' || col.key === 'penomoran';
+                    return (
+                      <td key={col.key} className={`px-4 py-4 text-sm text-[var(--md-sys-color-on-surface)] max-w-[200px] truncate ${isSecondary ? 'hidden lg:table-cell' : ''}`}>
+                        {col.type === 'date'
+                          ? formatDate(mail.metadata[col.key])
+                          : String(mail.metadata[col.key] || '-')}
+                      </td>
+                    );
+                  })}
+                  <td className="px-4 py-4 text-sm" onClick={(e) => e.stopPropagation()}>
+                    {uploadingMailId === mail.id ? (
+                      <div className="flex items-center gap-2 text-[var(--md-sys-color-primary)] animate-pulse">
+                        <md-circular-progress indeterminate style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
+                        <span className="text-[10px] font-bold uppercase">Mengunggah</span>
+                      </div>
+                    ) : mail.pdfPath ? (
+                      <md-outlined-button
+                        onClick={() => onViewMail(mail)}
+                        className="flex items-center gap-1 text-[var(--md-sys-color-primary)] font-bold transition-premium"
+                      >
+                        <span slot="icon" className="material-symbols-outlined text-sm font-fill">picture_as_pdf</span>
+                        <span>PDF</span>
+                      </md-outlined-button>
+                    ) : (
+                      <label className="text-xs text-[var(--md-sys-color-primary)] font-bold cursor-pointer underline decoration-dotted transition-premium">
+                        Unggah
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleInlineUpload(mail.id, file);
+                          }}
+                        />
+                      </label>
+                    )}
+                  </td>
+                   <td className="px-4 py-2 text-right w-48 min-w-[192px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-2 action-btn-group">
+                      <md-icon-button onClick={() => onEdit(mail)} aria-label="Edit Agenda" className="btn-action-edit">
+                        <span className="material-symbols-outlined text-[20px]">edit</span>
+                      </md-icon-button>
+                      <md-icon-button
+                        onClick={mail.pdfPath ? () => window.open(`/api/files/${mail.pdfPath}`, '_blank') : undefined}
+                        disabled={mail.pdfPath ? undefined : true}
+                        aria-label={mail.pdfPath ? "Unduh PDF" : "Tidak ada PDF"}
+                        className="btn-action-download"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">{mail.pdfPath ? "download" : "download_off"}</span>
+                      </md-icon-button>
+                      <md-icon-button
+                        onClick={() => onDelete(mail.id)}
+                        aria-label="Hapus Agenda"
+                        className="btn-action-delete"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                      </md-icon-button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredMails.length === 0 && (
+            <div className="py-24 text-center text-[var(--md-sys-color-outline)] animate-premium-in">
+               <span className="material-symbols-outlined text-6xl mb-4 text-[var(--md-sys-color-primary)] opacity-20 font-fill">inventory_2</span>
+               <p className="text-sm font-medium">Tidak ada data surat ditemukan.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Dynamic Pagination Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-[var(--md-sys-color-surface-container-high)] border-t border-[var(--md-sys-color-outline-variant)] rounded-b-3xl shrink-0">
+          <div className="flex items-center gap-3 text-sm text-[var(--md-sys-color-on-surface-variant)] flex-wrap">
+            <span>Tampilkan baris:</span>
+            <div className="relative inline-flex">
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="appearance-none bg-[var(--md-sys-color-surface-container-lowest)] text-[var(--md-sys-color-on-surface)] text-sm font-bold py-1.5 pl-3 pr-8 rounded-xl border border-[var(--md-sys-color-outline-variant)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition-premium cursor-pointer"
+              >
+                {[10, 20, 30, 40, 50, 100].map(size => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-md text-[var(--md-sys-color-on-surface-variant)]">
+                arrow_drop_down
+              </span>
+            </div>
+            <span className="text-xs text-[var(--md-sys-color-outline)] font-mono">
+              (kelipatan 10)
+            </span>
           </div>
-        )}
+
+          <div className="flex items-center gap-4 flex-wrap justify-end">
+            <span className="text-sm text-[var(--md-sys-color-on-surface-variant)] font-tabular">
+              Menampilkan <span className="font-bold text-[var(--md-sys-color-on-surface)]">{totalItems === 0 ? 0 : startIndex + 1}</span>–
+              <span className="font-bold text-[var(--md-sys-color-on-surface)]">{Math.min(endIndex, totalItems)}</span> dari{' '}
+              <span className="font-bold text-[var(--md-sys-color-on-surface)]">{totalItems}</span> data
+            </span>
+
+            <div className="flex items-center gap-1">
+              <md-icon-button
+                disabled={activePage === 1 ? true : undefined}
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                aria-label="Halaman Sebelumnya"
+                className="w-10 h-10"
+              >
+                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+              </md-icon-button>
+
+              <span className="text-sm font-bold text-[var(--md-sys-color-on-surface)] px-2 font-tabular select-none min-w-[40px] text-center">
+                {activePage} / {totalPages}
+              </span>
+
+              <md-icon-button
+                disabled={activePage === totalPages ? true : undefined}
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                aria-label="Halaman Selanjutnya"
+                className="w-10 h-10"
+              >
+                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+              </md-icon-button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

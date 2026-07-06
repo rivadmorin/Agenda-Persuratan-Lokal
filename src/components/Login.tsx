@@ -72,7 +72,7 @@ export default function Login({ appName, onLoginSuccess }: LoginProps) {
           <md-filled-button
             type="submit"
             disabled={loading}
-            style={{ height: '56px', '--md-filled-button-container-shape': '16px' }}
+            style={{ height: '56px', '--md-filled-button-container-shape': '9999px' }}
           >
             {loading ? 'Memverifikasi...' : 'Masuk ke Sistem'}
           </md-filled-button>

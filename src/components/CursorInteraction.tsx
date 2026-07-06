@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+// Reading this as: Premium office workflow management, with a high-end corporate digital workspace vibe, leaning toward MD3 dynamic color tokens + fluid spring-based trail cursors and touch click ripples.
+
+import React, { useEffect, useState } from 'react';
 import { motion, useMotionValue, useSpring, AnimatePresence } from 'motion/react';
 
 interface ClickRipple {
@@ -103,8 +105,8 @@ export default function CursorInteraction() {
               width: 48,
               height: 48,
               borderRadius: '50%',
-              border: '2px solid rgba(59, 130, 246, 0.5)',
-              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              border: '2px solid color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent)',
+              backgroundColor: 'color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent)',
               pointerEvents: 'none'
             }}
           />
@@ -133,8 +135,8 @@ export default function CursorInteraction() {
                 width: 80,
                 height: 80,
                 borderRadius: '50%',
-                border: '1.5px solid rgba(59, 130, 246, 0.4)',
-                background: 'radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%)',
+                border: '1.5px solid color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent)',
+                background: 'radial-gradient(circle, color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent) 0%, transparent 70%)',
                 pointerEvents: 'none',
               }}
             />
@@ -150,7 +152,7 @@ export default function CursorInteraction() {
                 width: 30,
                 height: 30,
                 borderRadius: '50%',
-                backgroundColor: 'rgba(59, 130, 246, 0.25)',
+                backgroundColor: 'color-mix(in srgb, var(--md-sys-color-primary) 25%, transparent)',
                 pointerEvents: 'none',
                 filter: 'blur(4px)'
               }}
@@ -170,15 +172,18 @@ export default function CursorInteraction() {
         animate={{
           width: isHovered ? 44 : 26,
           height: isHovered ? 44 : 26,
-          backgroundColor: isHovered ? 'rgba(59, 130, 246, 0.08)' : 'rgba(59, 130, 246, 0.03)',
-          borderColor: isHovered ? 'rgba(59, 130, 246, 0.45)' : 'rgba(148, 163, 184, 0.25)',
+          backgroundColor: isHovered ? 'color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent)' : 'color-mix(in srgb, var(--md-sys-color-primary) 3%, transparent)',
+          borderColor: isHovered ? 'color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent)' : 'color-mix(in srgb, var(--md-sys-color-outline) 25%, transparent)',
           borderWidth: isHovered ? '2px' : '1px'
         }}
         transition={{ type: 'spring', damping: 20, stiffness: 220 }}
         className="fixed rounded-full border pointer-events-none flex items-center justify-center transition-colors duration-150"
       >
         {/* Inner dynamic ring */}
-        <div className={`w-1 h-1 rounded-full bg-blue-500/30 transition-all duration-150 ${isHovered ? 'scale-[3]' : ''}`} />
+        <div 
+          className={`w-1 h-1 rounded-full transition-all duration-150 ${isHovered ? 'scale-[3]' : ''}`} 
+          style={{ backgroundColor: 'color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent)' }}
+        />
       </motion.div>
 
       {/* Precise Pointer Dot */}
@@ -188,13 +193,14 @@ export default function CursorInteraction() {
           y: mouseY,
           translateX: '-50%',
           translateY: '-50%',
+          boxShadow: '0 0 10px color-mix(in srgb, var(--md-sys-color-primary) 60%, transparent)'
         }}
         animate={{
           scale: isHovered ? 0.5 : 1,
-          backgroundColor: isHovered ? '#2563eb' : '#3b82f6',
+          backgroundColor: 'var(--md-sys-color-primary)',
         }}
         transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-        className="fixed w-2 h-2 rounded-full pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.6)]"
+        className="fixed w-2 h-2 rounded-full pointer-events-none"
       />
     </div>
   );
