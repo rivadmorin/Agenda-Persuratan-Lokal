@@ -24,3 +24,13 @@ Format:
 - **Learning:** Dedicated start scripts should encapsulate environment variables and service dependencies (like Docker) to ensure portability.
 - **Action/Rule:** Always provide a `start-local.sh` that handles environment defaults and background service checks.
 - **Verify Command:** `./launchpad/start-local.sh` (offline mode)
+## 06-07-2026 - [Unification of Database Environment Variables]
+- **Tags:** #nomad #config #environment
+- **Level:** 🟢 INFO
+- **Scope:** [src/db/index.ts](file:///src/db/index.ts)
+- **Notify Agents:** @Orchestrator
+- **Symptom:** Inconsistent environment variable usage (`SQL_` vs `DB_`) between `server.ts` and `src/db/index.ts`.
+- **Root Cause:** Multiple contributors or legacy patterns created overlapping configuration keys.
+- **Learning:** Standardizing on a fallback pattern (`SQL_VAR || DB_VAR || DEFAULT`) ensures compatibility across different deployment scripts (Docker vs. local bash).
+- **Action/Rule:** Always use the fallback pattern for environment variables to support both legacy and new naming conventions.
+- **Verify Command:** `grep -E "SQL_|DB_" src/db/index.ts`

@@ -6,10 +6,11 @@ const { Pool } = pkg;
 
 export const createPool = () => {
   return new Pool({
-    host: process.env.SQL_HOST,
-    user: process.env.SQL_USER,
-    password: process.env.SQL_PASSWORD,
-    database: process.env.SQL_DB_NAME,
+    user: process.env.SQL_USER || process.env.DB_USER || 'postgres',
+    host: process.env.SQL_HOST || process.env.DB_HOST || 'localhost',
+    database: process.env.SQL_DB_NAME || process.env.DB_NAME || 'mail_agenda',
+    password: process.env.SQL_PASSWORD || process.env.DB_PASSWORD || 'postgres123',
+    port: parseInt(process.env.SQL_PORT || process.env.DB_PORT || '5432'),
     connectionTimeoutMillis: 15000,
   });
 };

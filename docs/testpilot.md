@@ -36,3 +36,13 @@ Format:
 - **Learning:** Always run `pnpm install` after a pull to ensure test runners like Vitest are available and dependencies are up to date.
 - **Action/Rule:** Verified 20/20 tests passed. Core search logic and Sidebar component are stable.
 - **Verify Command:** `pnpm test`
+## 06-07-2026 - [Regression Verification Successful]
+- **Tags:** #testpilot #regression #vitest
+- **Level:** 🟢 INFO
+- **Scope:** [src/utils/search.test.ts](file:///src/utils/search.test.ts), [src/components/Sidebar.test.tsx](file:///src/components/Sidebar.test.tsx)
+- **Notify Agents:** @Orchestrator
+- **Symptom:** Need to ensure that environment restoration and configuration unification did not break core functionality.
+- **Root Cause:** Routine stability check.
+- **Learning:** Existing tests for search logic and UI components remain stable post-dependency restoration. The transition to unified DB environment variables did not affect the frontend logic verified by these tests.
+- **Action/Rule:** Successfully verified 20/20 tests passed.
+- **Verify Command:** `pnpm test`
