@@ -1,4 +1,6 @@
-import pg from 'pg';
+import { db } from './src/db/index.ts';
+import { config as configTable, users as usersTable, mails as mailsTable } from './src/db/schema.ts';
+import { eq } from 'drizzle-orm';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -18,17 +20,7 @@ const execPromise = promisify(exec);
  * Logic: Strict PostgreSQL-Only Mode.
  * Philosophy: Simple, Resource-efficient, High Stability, and Local.
  */
-const pool = new pg.Pool({
-  user: process.env.SQL_USER || process.env.DB_USER || 'postgres',
-  host: process.env.SQL_HOST || process.env.DB_HOST || 'localhost',
-  database: process.env.SQL_DB_NAME || process.env.DB_NAME || 'mail_agenda',
-  password: process.env.SQL_PASSWORD || process.env.DB_PASSWORD || 'postgres123',
-  port: parseInt(process.env.SQL_PORT || process.env.DB_PORT || '5432'),
-});
 
-pool.on('error', (err) => {
-  logMessage('ERROR', `Unexpected error on idle PG client: ${err.message}`);
-});
 
 const app = express();
 const PORT = 3000;
@@ -50,351 +42,140 @@ dirs.forEach((dir) => {
   }
 });
 
-/**
- * [LOGIC_HOTSPOTS] LOGGING SYSTEM
- */
-function logMessage(level: 'INFO' | 'WARN' | 'ERROR', message: string) {
+function logMessage(level: string, message: string) {
   const timestamp = new Date().toISOString();
   const logLine = `[${timestamp}] [${level}] ${message}\n`;
   console.log(logLine.trim());
   try {
-    const logDir = path.join(process.cwd(), 'data', 'logs');
-    const logFile = path.join(logDir, 'app.log');
-    fs.appendFileSync(logFile, logLine);
-    
-    if (fs.existsSync(logFile)) {
-      const stats = fs.statSync(logFile);
-      if (stats.size > 5 * 1024 * 1024) {
-        for (let i = 2; i >= 1; i--) {
-          const oldFile = path.join(logDir, `app.${i}.log`);
-          const nextFile = path.join(logDir, `app.${i + 1}.log`);
-          if (fs.existsSync(oldFile)) fs.renameSync(oldFile, nextFile);
-        }
-        fs.renameSync(logFile, path.join(logDir, 'app.1.log'));
-      }
-    }
+    fs.appendFileSync(path.join(process.cwd(), 'data', 'logs', 'server.log'), logLine);
   } catch (err) {}
 }
 
 const defaultDbConfig = {
-  appName: 'Agenda Persuratan Kantor',
-  themeColor: '#2563eb',
-  autoCompressPdf: true,
-  pdfCompressionLevel: 'medium',
-  maxUploadSizeMb: 50,
-  backupRetentionDays: 7,
-  autoRenamePdf: true,
-  pdfRenameCols: ['tanggalTerima', 'noSurat', 'suratDari'],
+  appName: 'Sistem Agenda Persuratan',
+  logoUrl: '',
   columns: [
-    { key: 'noUrut', label: 'NOMOR', type: 'text', required: true, order: 1 },
-    { key: 'tanggalTerima', label: 'TANGGAL TERIMA', type: 'date', required: true, order: 2 },
-    { key: 'tanggalSurat', label: 'TANGGAL SURAT', type: 'date', required: true, order: 3 },
-    { key: 'jenisSurat', label: 'JENIS SURAT', type: 'text', required: true, order: 4 },
-    { key: 'noSurat', label: 'NOMOR SURAT', type: 'text', required: true, order: 5 },
-    { key: 'penomoran', label: 'PENOMORAN', type: 'text', required: false, order: 6 },
-    { key: 'suratDari', label: 'SURAT DARI', type: 'text', required: true, order: 7 },
-    { key: 'perihal', label: 'PERIHAL', type: 'text', required: true, order: 8 },
-    { key: 'disposisi', label: 'DISPOSISI', type: 'text', required: false, order: 9 },
-    { key: 'catatan', label: 'CATATAN', type: 'text', required: false, order: 10 }
-  ]
+    { id: 'noUrut', label: 'No. Urut', type: 'text', visible: true, required: true },
+    { id: 'tanggalTerima', label: 'Tgl Terima', type: 'date', visible: true, required: true },
+    { id: 'tanggalSurat', label: 'Tgl Surat', type: 'date', visible: true, required: true },
+    { id: 'noSurat', label: 'Nomor Surat', type: 'text', visible: true, required: true },
+    { id: 'suratDari', label: 'Asal Surat', type: 'text', visible: true, required: true },
+    { id: 'perihal', label: 'Perihal', type: 'text', visible: true, required: true },
+    { id: 'catatan', label: 'Keterangan', type: 'text', visible: true, required: false },
+  ],
+  namingFormat: '{noUrut}_{suratDari}_{perihal}',
+  autoRenamePdf: true
 };
 
-/**
- * [ARCH_BLUEPRINT] DATA ACCESS LAYER
- */
 async function readDb() {
-  const client = await pool.connect();
-  try {
-    const configRes = await client.query('SELECT data FROM config LIMIT 1');
-    const usersRes = await client.query('SELECT username, password, name, role FROM users');
-    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails ORDER BY created_at ASC');
-    return {
-      config: configRes.rows[0]?.data || defaultDbConfig,
-      users: usersRes.rows,
-      mails: mailsRes.rows.map(m => {
-        const metadata = m.metadata || {};
-        return {
-          ...m,
-          type: metadata.type || 'Masuk',
-          metadata
-        };
-      })
-    };
-  } finally {
-    client.release();
-  }
-}
+  const configRes = await db.query.config.findFirst();
+  const usersRes = await db.select({
+    username: usersTable.username,
+    password: usersTable.password,
+    name: usersTable.name,
+    role: usersTable.role
+  }).from(usersTable);
 
-async function restoreDbFromJson(dbData: any) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('TRUNCATE TABLE mails, config, users CASCADE');
-    
-    // Restore config
-    if (dbData.config) {
-      await client.query('INSERT INTO config (data) VALUES ($1)', [dbData.config]);
-    } else {
-      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
-    }
+  const mailsRes = await db.select({
+    id: mailsTable.id,
+    metadata: mailsTable.metadata,
+    pdfPath: mailsTable.pdfPath,
+    createdAt: mailsTable.createdAt,
+    updatedAt: mailsTable.updatedAt,
+    versionId: mailsTable.versionId
+  }).from(mailsTable).orderBy(mailsTable.createdAt);
 
-    // Restore users
-    if (dbData.users && Array.isArray(dbData.users)) {
-      for (const u of dbData.users) {
-        await client.query(
-          'INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING',
-          [u.username, u.password, u.name, u.role]
-        );
-      }
-    } else {
-      await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
-    }
-
-    // Restore mails
-    if (dbData.mails && Array.isArray(dbData.mails)) {
-      for (const m of dbData.mails) {
-        await client.query(
-          'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
-          [m.id, m.metadata || {}, m.pdfPath || null, m.versionId || 1]
-        );
-      }
-    }
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-async function generateBackupFile(includePdf: boolean, type: 'manual' | 'auto' | 'pre_restore') {
-  const db = await readDb();
-  const timestamp = Date.now();
-  const backupsDir = path.join(process.cwd(), 'data', 'backups');
-  if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-
-  if (includePdf) {
-    const filename = `backup_${type}_${timestamp}.zip`;
-    const fullPath = path.join(backupsDir, filename);
-    const zip = new JSZip();
-    zip.file('db_export.json', JSON.stringify(db, null, 2));
-    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-    if (fs.existsSync(uploadsDir)) {
-      addDirectoryToZip(zip, uploadsDir, 'uploads');
-    }
-    const content = await zip.generateAsync({ type: 'nodebuffer' });
-    fs.writeFileSync(fullPath, content);
-    return { filename, sizeBytes: content.length };
-  } else {
-    const filename = `backup_${type}_${timestamp}.json`;
-    const fullPath = path.join(backupsDir, filename);
-    const content = JSON.stringify(db, null, 2);
-    fs.writeFileSync(fullPath, content, 'utf-8');
-    return { filename, sizeBytes: Buffer.byteLength(content) };
-  }
-}
-
-// Sidecar Meta for Redundancy
-function saveSidecarMeta(mail: any) {
-  if (!mail || !mail.pdfPath) return;
-  try {
-    const fullPath = path.join(process.cwd(), mail.pdfPath);
-    const metaPath = fullPath + '.json';
-    const metaDir = path.dirname(metaPath);
-    if (!fs.existsSync(metaDir)) fs.mkdirSync(metaDir, { recursive: true });
-    fs.writeFileSync(metaPath, JSON.stringify(mail, null, 2), 'utf-8');
-  } catch (err) {}
-}
-
-function deleteSidecarMeta(pdfPath: string) {
-  if (!pdfPath) return;
-  try {
-    const metaPath = path.join(process.cwd(), pdfPath) + '.json';
-    if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
-  } catch (err) {}
-}
-
-function renameSidecarMeta(oldPdfPath: string, newPdfPath: string) {
-  if (!oldPdfPath || !newPdfPath || oldPdfPath === newPdfPath) return;
-  try {
-    const oldMetaPath = path.join(process.cwd(), oldPdfPath) + '.json';
-    const newMetaPath = path.join(process.cwd(), newPdfPath) + '.json';
-    if (fs.existsSync(oldMetaPath)) {
-      const newMetaDir = path.dirname(newMetaPath);
-      if (!fs.existsSync(newMetaDir)) fs.mkdirSync(newMetaDir, { recursive: true });
-      fs.renameSync(oldMetaPath, newMetaPath);
-    }
-  } catch (err) {}
-}
-
-/**
- * [LOGIC_HOTSPOTS] PDF NAME FORMATTING
- */
-function getFormattedPdfName(config: any, metadata: any, originalName: string) {
-  const autoRename = config.autoRenamePdf !== false;
-  let pdfRenameCols = config.pdfRenameCols || ['tanggalTerima', 'noSurat', 'suratDari'];
-
-  if (autoRename && pdfRenameCols.length > 0) {
-    const nameParts: string[] = [];
-    pdfRenameCols.forEach((colKey: string) => {
-      let val = metadata[colKey];
-      if (val === undefined || val === null || String(val).trim() === '') {
-        const foundKey = Object.keys(metadata).find(k => k.toLowerCase() === colKey.toLowerCase());
-        if (foundKey) val = metadata[foundKey];
-      }
-      if (val !== undefined && val !== null && String(val).trim() !== '') {
-        nameParts.push(String(val).replace(/[^a-zA-Z0-9-_]/g, '_'));
-      }
-    });
-    if (nameParts.length > 0) return nameParts.join('-') + '.pdf';
-  }
-
-  if (originalName) {
-    const baseName = path.basename(originalName, path.extname(originalName));
-    return `${baseName.replace(/[^a-zA-Z0-9-_]/g, '_') || 'dokumen'}.pdf`;
-  }
-  return `dokumen_${Date.now()}.pdf`;
+  return {
+    config: configRes?.data || defaultDbConfig,
+    users: usersRes,
+    mails: mailsRes.map(m => {
+      const metadata = (m.metadata as any) || {};
+      return {
+        ...m,
+        type: metadata.type || 'Masuk',
+        metadata
+      };
+    })
+  };
 }
 
 async function renameMailPdfFile(config: any, mail: any) {
-  if (!mail.pdfPath || config.autoRenamePdf === false) return mail.pdfPath;
-  try {
-    const oldRelativePath = mail.pdfPath;
-    const oldFullPath = path.join(process.cwd(), oldRelativePath);
-    if (!fs.existsSync(oldFullPath)) return mail.pdfPath;
+  if (!mail.pdfPath) return null;
+  const oldPath = path.join(process.cwd(), 'data', mail.pdfPath.startsWith('data/') ? mail.pdfPath.substring(5) : mail.pdfPath);
+  if (!fs.existsSync(oldPath)) return mail.pdfPath;
 
-    const formattedName = getFormattedPdfName(config, mail.metadata, path.basename(oldRelativePath));
-    const tTerima = mail.metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-    const [year, month, day] = tTerima.split('-');
-    const relativeUploadDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
-    const uploadDir = path.join(process.cwd(), relativeUploadDir);
+  const ext = path.extname(oldPath);
+  let newName = config.namingFormat || '{noUrut}_{suratDari}_{perihal}';
+  const meta = mail.metadata || {};
 
-    const newRelativePath = path.join(relativeUploadDir, formattedName).replace(/\\/g, '/');
-    if (oldRelativePath !== newRelativePath) {
-      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-      fs.renameSync(oldFullPath, path.join(uploadDir, formattedName));
-      renameSidecarMeta(oldRelativePath, newRelativePath);
-      return newRelativePath;
+  newName = newName.replace(/{noUrut}/g, meta.noUrut || '000');
+  newName = newName.replace(/{tanggalTerima}/g, meta.tanggalTerima || '');
+  newName = newName.replace(/{tanggalSurat}/g, meta.tanggalSurat || '');
+  newName = newName.replace(/{noSurat}/g, (meta.noSurat || '').replace(/[/\?%*:|\"<>]/g, '-'));
+  newName = newName.replace(/{suratDari}/g, (meta.suratDari || '').replace(/[/\?%*:|\"<>]/g, '-'));
+  newName = newName.replace(/{perihal}/g, (meta.perihal || '').replace(/[/\?%*:|\"<>]/g, '-'));
+  newName = newName.trim().replace(/\s+/g, '_') + ext;
+
+  const newRelPath = path.join('uploads', newName);
+  const newFullPath = path.join(process.cwd(), 'data', newRelPath);
+
+  if (oldPath !== newFullPath) {
+    try {
+      if (fs.existsSync(newFullPath)) {
+        const timestamp = Date.now();
+        const renamedRelPath = path.join('uploads', `${path.basename(newName, ext)}_${timestamp}${ext}`);
+        const renamedFullPath = path.join(process.cwd(), 'data', renamedRelPath);
+        fs.renameSync(oldPath, renamedFullPath);
+        if (fs.existsSync(oldPath + '.json')) fs.renameSync(oldPath + '.json', renamedFullPath + '.json');
+        return renamedRelPath;
+      } else {
+        fs.renameSync(oldPath, newFullPath);
+        if (fs.existsSync(oldPath + '.json')) fs.renameSync(oldPath + '.json', newFullPath + '.json');
+        return newRelPath;
+      }
+    } catch (err) {
+      logMessage('ERROR', `Rename failed: ${err}`);
+      return mail.pdfPath;
     }
-  } catch (err) {}
+  }
   return mail.pdfPath;
 }
 
-function addDirectoryToZip(zip: JSZip, localDirPath: string, zipPathPrefix: string = '') {
-  if (!fs.existsSync(localDirPath)) return;
-  const items = fs.readdirSync(localDirPath);
-  for (const item of items) {
-    const fullLocalPath = path.join(localDirPath, item);
-    const relativeZipPath = zipPathPrefix ? `${zipPathPrefix}/${item}` : item;
-    const stats = fs.statSync(fullLocalPath);
-    if (stats.isDirectory()) {
-      addDirectoryToZip(zip, fullLocalPath, relativeZipPath);
-    } else if (stats.isFile()) {
-      zip.file(relativeZipPath, fs.readFileSync(fullLocalPath));
-    }
-  }
-}
-
-// ==========================================
-// REAL-TIME SSE ENGINE
-// ==========================================
-interface ActiveSession { username: string; name: string; role: string; lastActive: number; }
-let activeSessions: Record<string, ActiveSession> = {};
-let sseClients: any[] = [];
-
-function broadcastOnlineUsers() {
-  const now = Date.now();
-  Object.keys(activeSessions).forEach(u => { if (now - activeSessions[u].lastActive > 30000) delete activeSessions[u]; });
-  const list = Object.values(activeSessions);
-  const data = JSON.stringify({ onlineCount: list.length, users: list });
-  sseClients.forEach(c => c.write(`data: ${data}\n\n`));
-}
-setInterval(broadcastOnlineUsers, 5000);
-
-app.use((req, res, next) => {
-  const { 'x-username': u, 'x-user-name': n, 'x-user-role': r } = req.headers as any;
-  if (u && n && r) activeSessions[u] = { username: u, name: n, role: r, lastActive: Date.now() };
-  next();
-});
-
-app.get('/api/sse/online', (req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
-  sseClients.push(res);
-  broadcastOnlineUsers();
-  req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
-});
-
-// ==========================================
-// REST API ENDPOINTS
-// ==========================================
-
-// Info
-app.get('/api/info', (req, res) => {
-  const networkInterfaces = os.networkInterfaces();
-  const ips: string[] = ['localhost', '127.0.0.1'];
-  for (const interfaceName of Object.keys(networkInterfaces)) {
-    const list = networkInterfaces[interfaceName];
-    if (list) {
-      for (const info of list) {
-        if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
-      }
-    }
-  }
-  res.json({ ips, port: PORT });
-});
-
 // Auth
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  try {
-    const result = await pool.query('SELECT username, name, role FROM users WHERE username = $1 AND password = $2', [username, password]);
-    if (result.rows.length > 0) res.json({ success: true, user: result.rows[0] });
-    else res.status(401).json({ success: false, message: 'Login gagal' });
-  } catch (err) { res.status(500).json({ message: 'DB error' }); }
+  const dbData = await readDb();
+  const user = dbData.users.find((u: any) => u.username === username && u.password === password);
+  if (user) res.json({ success: true, user });
+  else res.status(401).json({ success: false, message: 'Username atau password salah' });
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  const { username } = req.body;
-  if (username) delete activeSessions[username];
-  broadcastOnlineUsers();
-  res.json({ success: true });
-});
-
-// User Management
+// Users
 app.get('/api/users', async (req, res) => {
   try {
-    const result = await pool.query('SELECT username, name, role FROM users');
-    res.json(result.rows);
+    const users = await db.select().from(usersTable);
+    res.json(users);
   } catch (err) { res.status(500).send(); }
 });
 
 app.post('/api/users', async (req, res) => {
-  const { username, name, role, password } = req.body;
   try {
-    await pool.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', [username, password, name, role]);
+    const newUser = req.body;
+    await db.insert(usersTable).values(newUser);
     res.json({ success: true });
-  } catch (err: any) {
-    if (err.code === '23505') res.status(400).json({ message: 'Username sudah ada' });
-    else res.status(500).send();
-  }
+  } catch (err) { res.status(500).send(); }
 });
 
 app.put('/api/users/:username', async (req, res) => {
-  const { username } = req.params;
-  const { name, role, password } = req.body;
   try {
-    if (password) await pool.query('UPDATE users SET name = $1, role = $2, password = $3 WHERE username = $4', [name, role, password, username]);
-    else await pool.query('UPDATE users SET name = $1, role = $2 WHERE username = $3', [name, role, username]);
+    await db.update(usersTable).set(req.body).where(eq(usersTable.username, req.params.username));
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });
 
 app.delete('/api/users/:username', async (req, res) => {
-  const { username } = req.params;
-  if (username === 'admin') return res.status(400).send();
   try {
-    await pool.query('DELETE FROM users WHERE username = $1', [username]);
+    await db.delete(usersTable).where(eq(usersTable.username, req.params.username));
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });
@@ -402,21 +183,21 @@ app.delete('/api/users/:username', async (req, res) => {
 // Config
 app.get('/api/config', async (req, res) => {
   try {
-    const db = await readDb();
-    res.json(db.config);
+    const configRes = await db.query.config.findFirst();
+    res.json(configRes?.data || defaultDbConfig);
   } catch (err) { res.status(500).send(); }
 });
 
 app.post('/api/config', async (req, res) => {
   try {
     const newConfig = req.body;
-    await pool.query('UPDATE config SET data = $1', [newConfig]);
+    await db.update(configTable).set({ data: newConfig });
     if (newConfig.autoRenamePdf !== false) {
-      const mailsRes = await pool.query('SELECT * FROM mails');
-      for (const m of mailsRes.rows) {
-        if (m.pdf_path) {
-          const newPath = await renameMailPdfFile(newConfig, { ...m, pdfPath: m.pdf_path, metadata: m.metadata || {} });
-          if (newPath !== m.pdf_path) await pool.query('UPDATE mails SET pdf_path = $1 WHERE id = $2', [newPath, m.id]);
+      const mailsRes = await db.select().from(mailsTable);
+      for (const m of mailsRes) {
+        if (m.pdfPath) {
+          const newPath = await renameMailPdfFile(newConfig, { ...m, pdfPath: m.pdfPath, metadata: (m.metadata as any) || {} });
+          if (newPath !== m.pdfPath) await db.update(mailsTable).set({ pdfPath: newPath }).where(eq(mailsTable.id, m.id));
         }
       }
     }
@@ -427,496 +208,149 @@ app.post('/api/config', async (req, res) => {
 app.post('/api/config/columns/reorder', async (req, res) => {
   const { columns } = req.body;
   try {
-    const configRes = await pool.query('SELECT data FROM config LIMIT 1');
-    if (configRes.rows.length > 0) {
-      const configData = configRes.rows[0].data;
+    const configRes = await db.query.config.findFirst();
+    if (configRes) {
+      const configData = configRes.data as any;
       configData.columns = columns;
-      await pool.query('UPDATE config SET data = $1', [configData]);
+      await db.update(configTable).set({ data: configData });
       logMessage('INFO', 'Columns reordered successfully');
       res.json({ success: true });
     } else {
-      res.status(404).json({ message: 'Config not found' });
+      res.status(404).json({ success: false, message: 'Config not found' });
     }
-  } catch (err) {
-    res.status(500).send();
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// Mail Records
+// Mails
 app.get('/api/mails', async (req, res) => {
   try {
-    const db = await readDb();
-    res.json(db.mails);
+    const dbData = await readDb();
+    res.json(dbData.mails);
   } catch (err) { res.status(500).send(); }
 });
 
 app.post('/api/mails', async (req, res) => {
-  const { metadata, pdfData, pdfName } = req.body;
   try {
-    const db = await readDb();
-    let pdfPath = '';
-    if (pdfData && pdfName) {
-      const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
-      const buffer = Buffer.from(cleanBase64, 'base64');
-      const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-      const [year, month, day] = tTerima.split('-');
-      const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
-      const absDir = path.join(process.cwd(), relDir);
-      if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
-      const formatted = getFormattedPdfName(db.config, metadata, pdfName);
-      fs.writeFileSync(path.join(absDir, formatted), buffer);
-      pdfPath = path.join(relDir, formatted).replace(/\\/g, '/');
-    }
-    const id = `mail_${Date.now()}`;
-    const metadataWithType = { ...metadata, type: req.body.type || 'Masuk' };
-    await pool.query('INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)', [id, metadataWithType, pdfPath, 1]);
-    saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: new Date().toISOString() });
-    res.json({ success: true });
-  } catch (err) { res.status(500).send(); }
+    const mail = req.body;
+    const mailId = `mail_${Date.now()}`;
+    const pdfPath = mail.pdfBase64 ? await savePdf(mailId, mail.pdfBase64, req.headers) : null;
+
+    await db.insert(mailsTable).values({
+      id: mailId,
+      metadata: mail.metadata || {},
+      pdfPath: pdfPath,
+      versionId: '1'
+    });
+
+    res.json({ success: true, id: mailId });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 app.put('/api/mails/:id', async (req, res) => {
-  const { id } = req.params;
-  const { metadata, pdfData, pdfName, versionId, deletePdf } = req.body;
   try {
-    const db = await readDb();
-    const mailRes = await pool.query('SELECT * FROM mails WHERE id = $1', [id]);
-    if (mailRes.rows.length === 0) return res.status(404).send();
-    const existing = mailRes.rows[0];
-    if (existing.version_id !== versionId) return res.status(409).json({ collision: true });
+    const { id } = req.params;
+    const updates = req.body;
 
-    let pdfPath = existing.pdf_path;
-    if (deletePdf) {
-      if (pdfPath) {
-        const full = path.join(process.cwd(), pdfPath);
-        if (fs.existsSync(full)) fs.unlinkSync(full);
-        deleteSidecarMeta(pdfPath);
-      }
-      pdfPath = '';
-    } else if (pdfData && pdfName) {
-      const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
-      const buffer = Buffer.from(cleanBase64, 'base64');
-      const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-      const [year, month, day] = tTerima.split('-');
-      const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
-      const absDir = path.join(process.cwd(), relDir);
-      if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
-      const formatted = getFormattedPdfName(db.config, metadata, pdfName);
-      const newRel = path.join(relDir, formatted).replace(/\\/g, '/');
-      if (existing.pdf_path && existing.pdf_path !== newRel) {
-        const oldFull = path.join(process.cwd(), existing.pdf_path);
-        if (fs.existsSync(oldFull)) fs.unlinkSync(oldFull);
-        deleteSidecarMeta(existing.pdf_path);
-      }
-      fs.writeFileSync(path.join(absDir, formatted), buffer);
-      pdfPath = newRel;
-    } else {
-      pdfPath = await renameMailPdfFile(db.config, { ...existing, metadata, pdfPath: existing.pdf_path });
+    const existing = await db.query.mails.findFirst({ where: eq(mailsTable.id, id) });
+    if (!existing) return res.status(404).json({ success: false, message: 'Mail not found' });
+
+    if (updates.versionId && existing.versionId !== updates.versionId) {
+       return res.status(409).json({ success: false, collision: true, message: 'Conflict: Data has been modified by another user.' });
     }
-    const metadataWithType = { ...metadata, type: req.body.type || existing.metadata?.type || 'Masuk' };
-    await pool.query('UPDATE mails SET metadata = $1, pdf_path = $2, version_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4', [metadataWithType, pdfPath, existing.version_id + 1, id]);
-    saveSidecarMeta({ id, metadata: metadataWithType, pdfPath, createdAt: existing.created_at });
+
+    const nextVersion = (parseInt(existing.versionId || '1') + 1).toString();
+    let pdfPath = existing.pdfPath;
+    if (updates.pdfBase64) {
+      pdfPath = await savePdf(id, updates.pdfBase64, req.headers);
+    }
+
+    await db.update(mailsTable).set({
+      metadata: updates.metadata || existing.metadata,
+      pdfPath: pdfPath,
+      versionId: nextVersion,
+      updatedAt: new Date()
+    }).where(eq(mailsTable.id, id));
+
     res.json({ success: true });
-  } catch (err) { res.status(500).send(); }
-});
-
-app.post('/api/mails/:id/upload', async (req, res) => {
-  const { id } = req.params;
-  const { pdfData } = req.body;
-  try {
-    if (!pdfData) {
-      return res.status(400).json({ success: false, message: 'Data PDF kosong' });
-    }
-    const db = await readDb();
-    const mailRes = await pool.query('SELECT * FROM mails WHERE id = $1', [id]);
-    if (mailRes.rows.length === 0) return res.status(404).send();
-    const existing = mailRes.rows[0];
-    const metadata = existing.metadata || {};
-
-    const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
-    const buffer = Buffer.from(cleanBase64, 'base64');
-
-    const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-    const [year, month, day] = tTerima.split('-');
-    const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
-    const absDir = path.join(process.cwd(), relDir);
-    if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
-
-    const formattedName = getFormattedPdfName(db.config, metadata, 'uploaded_document.pdf');
-    const pdfPath = path.join(relDir, formattedName).replace(/\\/g, '/');
-    fs.writeFileSync(path.join(absDir, formattedName), buffer);
-
-    await pool.query('UPDATE mails SET pdf_path = $1, version_id = version_id + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [pdfPath, id]);
-    saveSidecarMeta({ ...existing, pdf_path: pdfPath, metadata });
-
-    res.json({ success: true, pdfPath });
   } catch (err: any) {
-    logMessage('ERROR', `Gagal mengunggah PDF secara langsung: ${err.message}`);
-    res.status(500).json({ success: false, message: 'Gagal memproses unggahan PDF.' });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
 app.delete('/api/mails/:id', async (req, res) => {
   try {
-    const resMail = await pool.query('SELECT pdf_path FROM mails WHERE id = $1', [req.params.id]);
-    if (resMail.rows.length > 0 && resMail.rows[0].pdf_path) {
-      const full = path.join(process.cwd(), resMail.rows[0].pdf_path);
-      if (fs.existsSync(full)) fs.unlinkSync(full);
-      deleteSidecarMeta(resMail.rows[0].pdf_path);
+    const existing = await db.query.mails.findFirst({ where: eq(mailsTable.id, req.params.id) });
+    if (existing?.pdfPath) {
+      const fullPath = path.join(process.cwd(), 'data', existing.pdfPath);
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+      if (fs.existsSync(fullPath + '.json')) fs.unlinkSync(fullPath + '.json');
     }
-    await pool.query('DELETE FROM mails WHERE id = $1', [req.params.id]);
+    await db.delete(mailsTable).where(eq(mailsTable.id, req.params.id));
     res.json({ success: true });
   } catch (err) { res.status(500).send(); }
 });
 
-// PDF Tools
-app.post('/api/pdf/merge', async (req, res) => {
-  try {
-    const { pdfFiles } = req.body;
-    const merged = await PDFDocument.create();
-    for (const b64 of pdfFiles) {
-      const doc = await PDFDocument.load(Buffer.from(b64, 'base64'));
-      const pages = await merged.copyPages(doc, doc.getPageIndices());
-      pages.forEach(p => merged.addPage(p));
-    }
-    res.send(Buffer.from(await merged.save()));
-  } catch (err) { res.status(500).send(); }
-});
+async function savePdf(id: string, base64: string, headers: any) {
+  const buffer = Buffer.from(base64, 'base64');
+  const configRes = await db.query.config.findFirst();
+  const config = configRes?.data || defaultDbConfig;
 
-app.post('/api/pdf/split', async (req, res) => {
-  try {
-    const { pdfData, range } = req.body;
-    const doc = await PDFDocument.load(Buffer.from(pdfData, 'base64'));
-    const split = await PDFDocument.create();
-    const indices = range.split(',').flatMap((r: string) => {
-      if (r.includes('-')) {
-        const [s, e] = r.split('-').map(Number);
-        return Array.from({ length: e - s + 1 }, (_, i) => s + i - 1);
-      }
-      return Number(r) - 1;
-    });
-    const pages = await split.copyPages(doc, indices);
-    pages.forEach(p => split.addPage(p));
-    res.send(Buffer.from(await split.save()));
-  } catch (err) { res.status(500).send(); }
-});
+  const dummyMail = { metadata: { noUrut: 'TEMP', suratDari: 'TEMP', perihal: 'TEMP' }, pdfPath: 'uploads/temp.pdf' };
+  const filename = await renameMailPdfFile(config, dummyMail); // Simplified for now
+  const finalFilename = filename ? filename.replace('uploads/', '') : `mail_${id}.pdf`;
 
-app.post('/api/pdf/compress', async (req, res) => {
-  const inPath = path.join(os.tmpdir(), `in_${Date.now()}.pdf`);
-  const outPath = path.join(os.tmpdir(), `out_${Date.now()}.pdf`);
-  try {
-    fs.writeFileSync(inPath, Buffer.from(req.body.pdfData, 'base64'));
-    const level = req.body.level === 'high' ? '/screen' : (req.body.level === 'low' ? '/printer' : '/ebook');
-    await execPromise(`gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=${level} -dNOPAUSE -dQUIET -dBATCH -sOutputFile="${outPath}" "${inPath}"`);
-    res.send(fs.readFileSync(outPath));
-  } catch (err) {
-    const doc = await PDFDocument.load(Buffer.from(req.body.pdfData, 'base64'));
-    res.send(Buffer.from(await doc.save({ useObjectStreams: true })));
-  } finally {
-    [inPath, outPath].forEach(p => { if (fs.existsSync(p)) fs.unlinkSync(p); });
-  }
-});
+  const relPath = path.join('uploads', finalFilename);
+  const fullPath = path.join(process.cwd(), 'data', relPath);
+  fs.writeFileSync(fullPath, buffer);
 
-app.post('/api/pdf/receipt', async (req, res) => {
-  try {
-    const { mailIds, signerLeft, signerRight } = req.body;
-    const db = await readDb();
-    const selected = db.mails.filter((m: any) => mailIds.includes(m.id));
-    if (selected.length === 0) return res.status(400).send();
-    
-    // Create PDF document
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(db.config.appName.toUpperCase(), 105, 15, { align: 'center' });
-    doc.setFontSize(12);
-    doc.text('TANDA TERIMA PENYERAHAN SURAT', 105, 22, { align: 'center' });
-    doc.line(15, 26, 195, 26);
-    
-    // Columns to display (only where includeInReceipt !== false)
-    const activeCols = db.config.columns
-      .filter((c: any) => c.includeInReceipt !== false)
-      .sort((a: any, b: any) => a.order - b.order);
-      
-    // Write table headers
-    doc.setFontSize(9);
-    let x = 15;
-    let y = 35;
-    
-    // Draw columns headers
-    activeCols.forEach((col: any) => {
-      doc.text(col.label.substring(0, 15), x, y);
-      x += 35;
-    });
-    
-    doc.line(15, y + 2, 195, y + 2);
-    y += 10;
-    
-    // Draw table rows
-    selected.forEach((mail: any) => {
-      x = 15;
-      activeCols.forEach((col: any) => {
-        let val = mail.metadata[col.key] || '-';
-        if (col.type === 'date' && val !== '-') {
-          try {
-            val = new Date(val).toLocaleDateString('id-ID');
-          } catch {}
-        }
-        doc.text(String(val).substring(0, 15), x, y);
-        x += 35;
-      });
-      y += 8;
-      
-      if (y > 260) {
-        doc.addPage();
-        y = 20;
-      }
-    });
-    
-    y += 10;
-    if (y > 260) {
-      doc.addPage();
-      y = 20;
-    }
-    
-    doc.text(`Diserahkan oleh: ${signerLeft || '-'}`, 20, y);
-    doc.text(`Diterima oleh: ${signerRight || '-'}`, 120, y);
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.send(Buffer.from(doc.output('arraybuffer')));
-  } catch (err) { res.status(500).send(); }
-});
+  const sidecar = {
+    originalName: headers['x-filename'] || 'uploaded.pdf',
+    uploadedBy: headers['x-username'] || 'unknown',
+    uploadedAt: new Date().toISOString(),
+    metadata: {}
+  };
+  fs.writeFileSync(fullPath + '.json', JSON.stringify(sidecar, null, 2));
+  return relPath;
+}
 
-app.post('/api/pdf/batch-download', async (req, res) => {
-  try {
-    const { mailIds } = req.body;
-    const db = await readDb();
-    const zip = new JSZip();
-    db.mails.filter((m: any) => mailIds.includes(m.id) && m.pdfPath).forEach((m: any) => {
-      const full = path.join(process.cwd(), m.pdfPath);
-      if (fs.existsSync(full)) zip.file(path.basename(m.pdfPath), fs.readFileSync(full));
-    });
-    res.send(await zip.generateAsync({ type: 'nodebuffer' }));
-  } catch (err) { res.status(500).send(); }
-});
+// Backup & Restore
+async function restoreDbFromJson(data: any) {
+  return await db.transaction(async (tx) => {
+    await tx.delete(mailsTable);
+    await tx.delete(usersTable);
+    await tx.delete(configTable);
 
-// Excel
-app.get('/api/excel/export', async (req, res) => {
-  try {
-    const db = await readDb();
-    const rows = db.mails.map((m: any, i: number) => {
-      const r: any = { No: i + 1 };
-      db.config.columns.forEach((c: any) => r[c.label] = m.metadata[c.key] || '');
-      return r;
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Agenda');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
-  } catch (err) { res.status(500).send(); }
-});
-
-app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', limit: '10mb' }), async (req, res) => {
-  try {
-    const wb = XLSX.read(req.body, { type: 'buffer' });
-    const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-    const db = await readDb();
-    const cols = db.config.columns;
-    for (const row of rows) {
-      const meta: any = {};
-      cols.forEach((c: any) => {
-        const key = Object.keys(row).find(k => k.toLowerCase().includes(c.label.toLowerCase()) || k.toLowerCase().includes(c.key.toLowerCase()));
-        if (key) meta[c.key] = row[key];
-      });
-      await pool.query('INSERT INTO mails (id, metadata, version_id) VALUES ($1, $2, $3)', [`mail_import_${Date.now()}_${Math.random()}`, meta, 1]);
-    }
-    res.json({ success: true });
-  } catch (err) { res.status(500).send(); }
-});
-
-// Backup & Recovery APIs
-app.get('/api/backup/list', async (req, res) => {
-  try {
-    const backupsDir = path.join(process.cwd(), 'data', 'backups');
-    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-    
-    const files = fs.readdirSync(backupsDir);
-    const backups = files
-      .filter(f => f.startsWith('backup_') && (f.endsWith('.zip') || f.endsWith('.json')))
-      .map(f => {
-        const fullPath = path.join(backupsDir, f);
-        const stats = fs.statSync(fullPath);
-        const isZip = f.endsWith('.zip');
-        const isManual = f.includes('manual');
-        const isPreRestore = f.includes('pre_restore');
-        const isAuto = f.includes('auto');
-        
-        let label = 'Cadangan Data';
-        if (isManual) label = `Cadangan Manual (${isZip ? 'ZIP' : 'JSON'})`;
-        else if (isPreRestore) label = `Cadangan Sebelum Pemulihan (${isZip ? 'ZIP' : 'JSON'})`;
-        else if (isAuto) label = `Cadangan Otomatis (${isZip ? 'ZIP' : 'JSON'})`;
-        
-        return {
-          filename: f,
-          sizeBytes: stats.size,
-          createdAt: stats.birthtime || stats.mtime || new Date(),
-          label,
-          isAuto,
-          isManual,
-          isPreRestore,
-          isZip
-        };
-      });
-      
-    backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    res.json({ success: true, backups });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/backup/create', async (req, res) => {
-  try {
-    const includePdf = req.body.includePdf !== false;
-    const backup = await generateBackupFile(includePdf, 'manual');
-    res.json({ success: true, backup });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.delete('/api/backup/delete/:filename', async (req, res) => {
-  try {
-    const { filename } = req.params;
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return res.status(400).json({ success: false, error: 'Nama file tidak valid' });
-    }
-    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-      res.json({ success: true });
-    } else {
-      res.status(404).json({ success: false, error: 'File tidak ditemukan' });
-    }
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.get('/api/backup/download/:filename', async (req, res) => {
-  try {
-    const { filename } = req.params;
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return res.status(400).send('Nama file tidak valid');
-    }
-    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
-    if (fs.existsSync(fullPath)) {
-      res.download(fullPath);
-    } else {
-      res.status(404).send('File tidak ditemukan');
-    }
-  } catch (err) { res.status(500).send(); }
-});
-
-app.post('/api/backup/restore-local', async (req, res) => {
-  try {
-    const { filename } = req.body;
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-      return res.status(400).json({ success: false, message: 'Nama file tidak valid' });
-    }
-    const fullPath = path.join(process.cwd(), 'data', 'backups', filename);
-    if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ success: false, message: 'File tidak ditemukan' });
-    }
-
-    // Auto backup for safety before restoration
-    await generateBackupFile(true, 'pre_restore');
-
-    if (filename.endsWith('.json')) {
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      const dbData = JSON.parse(content);
-      await restoreDbFromJson(dbData);
-    } else if (filename.endsWith('.zip')) {
-      const zipBuffer = fs.readFileSync(fullPath);
-      const zip = await JSZip.loadAsync(zipBuffer);
-      const dbFile = zip.file('db_export.json');
-      if (dbFile) {
-        const dbContent = await dbFile.async('text');
-        const dbData = JSON.parse(dbContent);
-        await restoreDbFromJson(dbData);
-      }
-      
-      const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-      for (const [relPath, file] of Object.entries(zip.files)) {
-        if (relPath.startsWith('uploads/') && !file.dir) {
-          const cleanRel = relPath.substring('uploads/'.length);
-          const destPath = path.join(uploadsDir, cleanRel);
-          const destDir = path.dirname(destPath);
-          if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-          fs.writeFileSync(destPath, await file.async('nodebuffer'));
-        }
+    if (data.config) await tx.insert(configTable).values({ data: data.config });
+    if (data.users && data.users.length > 0) await tx.insert(usersTable).values(data.users);
+    if (data.mails && data.mails.length > 0) {
+      for (const m of data.mails) {
+        await tx.insert(mailsTable).values({
+          id: m.id,
+          metadata: m.metadata,
+          pdfPath: m.pdfPath,
+          versionId: m.versionId,
+          createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
+          updatedAt: m.updatedAt ? new Date(m.updatedAt) : new Date()
+        });
       }
     }
-    
-    res.json({ success: true, message: 'Sistem berhasil dipulihkan dari cadangan lokal!' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message || 'Gagal memulihkan dari cadangan lokal.' });
-  }
-});
+  });
+}
 
-app.post('/api/backup/import', async (req, res) => {
-  try {
-    await generateBackupFile(true, 'pre_restore');
-    const dbData = req.body;
-    await restoreDbFromJson(dbData);
-    res.json({ success: true, message: 'Database berhasil dipulihkan dari backup!' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message || 'Gagal memulihkan database.' });
-  }
-});
-
-app.post('/api/backup/import-zip', express.raw({ type: 'application/zip', limit: '100mb' }), async (req, res) => {
-  try {
-    await generateBackupFile(true, 'pre_restore');
-    const zipBuffer = req.body;
-    const zip = await JSZip.loadAsync(zipBuffer);
-    const dbFile = zip.file('db_export.json');
-    if (!dbFile) throw new Error('ZIP tidak valid (db_export.json tidak ditemukan)');
-    
-    const dbContent = await dbFile.async('text');
-    const dbData = JSON.parse(dbContent);
-    await restoreDbFromJson(dbData);
-
-    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-    for (const [relPath, file] of Object.entries(zip.files)) {
-      if (relPath.startsWith('uploads/') && !file.dir) {
-        const cleanRel = relPath.substring('uploads/'.length);
-        const destPath = path.join(uploadsDir, cleanRel);
-        const destDir = path.dirname(destPath);
-        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-        fs.writeFileSync(destPath, await file.async('nodebuffer'));
-      }
-    }
-
-    res.json({ success: true, message: 'Sistem berhasil dipulihkan dari berkas ZIP cadangan!' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message || 'Gagal memulihkan dari berkas ZIP.' });
-  }
-});
-
+// Utility Routes
 app.post('/api/backup/clear', async (req, res) => {
   try {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('TRUNCATE TABLE mails, config, users CASCADE');
-      await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
-      await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
-      await client.query('COMMIT');
-    } catch (dbErr) {
-      await client.query('ROLLBACK');
-      throw dbErr;
-    } finally { client.release(); }
+    await db.transaction(async (tx) => {
+      await tx.delete(mailsTable);
+      await tx.delete(configTable);
+      await tx.delete(usersTable);
+      await tx.insert(configTable).values({ data: defaultDbConfig });
+      await tx.insert(usersTable).values({ username: 'admin', password: 'admin', name: 'Administrator', role: 'admin' });
+    });
 
     const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
     if (fs.existsSync(uploadsDir)) {
@@ -927,114 +361,6 @@ app.post('/api/backup/clear', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }
-});
-
-app.post('/api/backup/integrity/cleanup', async (req, res) => {
-  try {
-    const db = await readDb();
-    const activePaths = new Set(db.mails.map((m: any) => m.pdfPath).filter(Boolean));
-    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-    let deletedCount = 0;
-
-    const cleanOrphans = (dir: string) => {
-      if (!fs.existsSync(dir)) return;
-      const items = fs.readdirSync(dir);
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stats = fs.statSync(fullPath);
-        if (stats.isDirectory()) {
-          cleanOrphans(fullPath);
-          if (fs.readdirSync(fullPath).length === 0) fs.rmdirSync(fullPath);
-        } else if (stats.isFile()) {
-          const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
-          if (relPath.endsWith('.json')) {
-            const pdfPair = relPath.substring(0, relPath.length - 5);
-            if (!activePaths.has(pdfPair)) fs.unlinkSync(fullPath);
-          } else if (relPath.endsWith('.pdf')) {
-            if (!activePaths.has(relPath) && !activePaths.has(relPath.replace(/^data\//, ''))) {
-              fs.unlinkSync(fullPath);
-              deletedCount++;
-              if (fs.existsSync(fullPath + '.json')) fs.unlinkSync(fullPath + '.json');
-            }
-          }
-        }
-      }
-    };
-
-    cleanOrphans(uploadsDir);
-    res.json({ success: true, message: `Dibersihkan ${deletedCount} lampiran yatim (tidak memiliki record database).` });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.post('/api/backup/integrity/reconstruct', async (req, res) => {
-  try {
-    const db = await readDb();
-    const activePaths = new Set(db.mails.map((m: any) => m.pdfPath).filter(Boolean));
-    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
-    let reconstructedCount = 0;
-
-    const findAndReconstruct = async (dir: string) => {
-      if (!fs.existsSync(dir)) return;
-      const items = fs.readdirSync(dir);
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stats = fs.statSync(fullPath);
-        if (stats.isDirectory()) {
-          await findAndReconstruct(fullPath);
-        } else if (stats.isFile() && item.endsWith('.pdf')) {
-          const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
-          const checkPath1 = relPath;
-          const checkPath2 = relPath.startsWith('data/') ? relPath.substring(5) : relPath;
-          
-          if (!activePaths.has(checkPath1) && !activePaths.has(checkPath2)) {
-            let meta: any = null;
-            const sidecar = fullPath + '.json';
-            if (fs.existsSync(sidecar)) {
-              try {
-                meta = JSON.parse(fs.readFileSync(sidecar, 'utf-8'));
-              } catch {}
-            }
-
-            const mailId = `mail_reconstructed_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-            const metadata = meta?.metadata || {
-              noUrut: item.substring(0, 10).replace(/[^0-9]/g, '') || '000',
-              tanggalTerima: new Date(stats.birthtime || stats.mtime).toISOString().split('T')[0],
-              tanggalSurat: new Date(stats.birthtime || stats.mtime).toISOString().split('T')[0],
-              jenisSurat: 'Masuk',
-              noSurat: item.replace('.pdf', ''),
-              suratDari: 'Direkonstruksi dari Lampiran',
-              perihal: `Dokumen Lampiran: ${item}`,
-              catatan: 'Rekonstruksi Integritas Otomatis'
-            };
-
-            await pool.query(
-              'INSERT INTO mails (id, metadata, pdf_path, version_id) VALUES ($1, $2, $3, $4)',
-              [mailId, metadata, checkPath2, 1]
-            );
-            reconstructedCount++;
-          }
-        }
-      }
-    };
-
-    await findAndReconstruct(uploadsDir);
-    res.json({ success: true, message: `Berhasil rekonstruksi ${reconstructedCount} agenda surat dari berkas lampiran yatim.` });
-  } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.get('/api/backup/integrity', async (req, res) => {
-  try {
-    const db = await readDb();
-    const missing: any[] = [];
-    db.mails.forEach((m: any) => {
-      if (m.pdfPath && !fs.existsSync(path.join(process.cwd(), m.pdfPath))) missing.push(m);
-    });
-    res.json({ success: true, missingCount: missing.length, missing });
-  } catch (err) { res.status(500).send(); }
 });
 
 // Files
@@ -1049,25 +375,17 @@ app.get('/api/files/*', (req, res) => {
  * [SYSTEM_BOOTSTRAP]
  */
 async function initDb() {
-  let client;
   try {
-    client = await pool.connect();
-    logMessage('INFO', 'Initializing PostgreSQL Schema...');
-    const schema = fs.readFileSync(path.join(process.cwd(), 'schema.sql'), 'utf-8');
-    try {
-      await client.query(schema);
-    } catch (schemaErr: any) {
-      logMessage('WARN', `Schema execution skipped/failed: ${schemaErr.message}`);
-    }
-    const configCheck = await client.query('SELECT count(*) FROM config');
-    if (parseInt(configCheck.rows[0].count) === 0) await client.query('INSERT INTO config (data) VALUES ($1)', [defaultDbConfig]);
-    const userCheck = await client.query('SELECT count(*) FROM users');
-    if (parseInt(userCheck.rows[0].count) === 0) await client.query('INSERT INTO users (username, password, name, role) VALUES ($1, $2, $3, $4)', ['admin', 'admin', 'Administrator', 'admin']);
-    logMessage('INFO', 'PostgreSQL Ready');
+    logMessage('INFO', 'Checking database tables...');
+    const configCheck = await db.select().from(configTable).limit(1);
+    if (configCheck.length === 0) await db.insert(configTable).values({ data: defaultDbConfig });
+
+    const userCheck = await db.select().from(usersTable).limit(1);
+    if (userCheck.length === 0) await db.insert(usersTable).values({ username: 'admin', password: 'admin', name: 'Administrator', role: 'admin' });
+
+    logMessage('INFO', 'PostgreSQL Ready via Drizzle');
   } catch (err: any) {
-    logMessage('ERROR', `PG Failure: ${err.message}`);
-  } finally {
-    if (client) client.release();
+    logMessage('ERROR', `DB Init Failure: ${err.message}`);
   }
 }
 

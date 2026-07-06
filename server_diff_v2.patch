@@ -1,0 +1,29 @@
+<<<<<<< SEARCH
+app.get('/api/config', async (req, res) => {
+  try {
+    const db = await readDb();
+    res.json(db.config);
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    await pool.query('UPDATE config SET data = ', [newConfig]);
+    if (newConfig.autoRenamePdf !== false) {
+      const mailsRes = await pool.query('SELECT * FROM mails');
+=======
+app.get('/api/config', async (req, res) => {
+  try {
+    const configRes = await db.query.config.findFirst();
+    res.json(configRes?.data || defaultDbConfig);
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    await db.update(configTable).set({ data: newConfig });
+    if (newConfig.autoRenamePdf !== false) {
+      const mailsRes = await db.select().from(mailsTable);
+>>>>>>> REPLACE

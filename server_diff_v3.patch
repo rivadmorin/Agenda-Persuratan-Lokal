@@ -1,0 +1,85 @@
+<<<<<<< SEARCH
+app.get('/api/config', async (req, res) => {
+  try {
+    const db = await readDb();
+    res.json(db.config);
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    await pool.query('UPDATE config SET data = ', [newConfig]);
+    if (newConfig.autoRenamePdf !== false) {
+      const mailsRes = await pool.query('SELECT * FROM mails');
+      for (const m of mailsRes.rows) {
+        if (m.pdf_path) {
+          const newPath = await renameMailPdfFile(newConfig, { ...m, pdfPath: m.pdf_path, metadata: m.metadata || {} });
+          if (newPath !== m.pdf_path) await pool.query('UPDATE mails SET pdf_path =  WHERE id = ', [newPath, m.id]);
+        }
+      }
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config/columns/reorder', async (req, res) => {
+  const { columns } = req.body;
+  try {
+    const configRes = await pool.query('SELECT data FROM config LIMIT 1');
+    if (configRes.rows.length > 0) {
+      const configData = configRes.rows[0].data;
+      configData.columns = columns;
+      await pool.query('UPDATE config SET data = ', [configData]);
+      logMessage('INFO', 'Columns reordered successfully');
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, message: 'Config not found' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+=======
+app.get('/api/config', async (req, res) => {
+  try {
+    const configRes = await db.query.config.findFirst();
+    res.json(configRes?.data || defaultDbConfig);
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    await db.update(configTable).set({ data: newConfig });
+    if (newConfig.autoRenamePdf !== false) {
+      const mailsRes = await db.select().from(mailsTable);
+      for (const m of mailsRes) {
+        if (m.pdfPath) {
+          const newPath = await renameMailPdfFile(newConfig, { ...m, pdfPath: m.pdfPath, metadata: (m.metadata as any) || {} });
+          if (newPath !== m.pdfPath) await db.update(mailsTable).set({ pdfPath: newPath }).where(eq(mailsTable.id, m.id));
+        }
+      }
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config/columns/reorder', async (req, res) => {
+  const { columns } = req.body;
+  try {
+    const configRes = await db.query.config.findFirst();
+    if (configRes) {
+      const configData = configRes.data as any;
+      configData.columns = columns;
+      await db.update(configTable).set({ data: configData });
+      logMessage('INFO', 'Columns reordered successfully');
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, message: 'Config not found' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+>>>>>>> REPLACE

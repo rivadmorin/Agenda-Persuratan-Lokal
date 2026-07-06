@@ -1,0 +1,87 @@
+<<<<<<< SEARCH
+async function readDb() {
+  const client = await pool.connect();
+  try {
+    const configRes = await client.query('SELECT data FROM config LIMIT 1');
+    const usersRes = await client.query('SELECT username, password, name, role FROM users');
+    const mailsRes = await client.query('SELECT id, metadata, pdf_path as "pdfPath", created_at as "createdAt", updated_at as "updatedAt", version_id as "versionId" FROM mails ORDER BY created_at ASC');
+    return {
+      config: configRes.rows[0]?.data || defaultDbConfig,
+      users: usersRes.rows,
+      mails: mailsRes.rows.map(m => {
+        const metadata = m.metadata || {};
+        return {
+          ...m,
+          type: metadata.type || 'Masuk',
+          metadata
+        };
+      })
+    };
+  } finally {
+    client.release();
+  }
+}
+=======
+async function readDb() {
+  const configRes = await db.query.config.findFirst();
+  const usersRes = await db.select({
+    username: usersTable.username,
+    password: usersTable.password,
+    name: usersTable.name,
+    role: usersTable.role
+  }).from(usersTable);
+
+  const mailsRes = await db.select({
+    id: mailsTable.id,
+    metadata: mailsTable.metadata,
+    pdfPath: mailsTable.pdfPath,
+    createdAt: mailsTable.createdAt,
+    updatedAt: mailsTable.updatedAt,
+    versionId: mailsTable.versionId
+  }).from(mailsTable).orderBy(mailsTable.createdAt);
+
+  return {
+    config: configRes?.data || defaultDbConfig,
+    users: usersRes,
+    mails: mailsRes.map(m => {
+      const metadata = (m.metadata as any) || {};
+      return {
+        ...m,
+        type: metadata.type || 'Masuk',
+        metadata
+      };
+    })
+  };
+}
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+// Config
+app.get('/api/config', async (req, res) => {
+  try {
+    const db = await readDb();
+    res.json(db.config);
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    await pool.query('UPDATE config SET data = ', [newConfig]);
+    if (newConfig.autoRenamePdf !== false) {
+      const mailsRes = await pool.query('SELECT * FROM mails');
+=======
+// Config
+app.get('/api/config', async (req, res) => {
+  try {
+    const configRes = await db.query.config.findFirst();
+    res.json(configRes?.data || defaultDbConfig);
+  } catch (err) { res.status(500).send(); }
+});
+
+app.post('/api/config', async (req, res) => {
+  try {
+    const newConfig = req.body;
+    await db.update(configTable).set({ data: newConfig });
+    if (newConfig.autoRenamePdf !== false) {
+      const mailsRes = await db.select().from(mailsTable);
+>>>>>>> REPLACE
