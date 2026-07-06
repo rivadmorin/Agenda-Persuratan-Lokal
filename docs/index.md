@@ -7,7 +7,7 @@ This index connects all critical learnings and memories across different special
 - [Bolt ⚡](bolt.md) - Performance optimization insights.
 - [Bug Hunter 🐛](bughunter.md) - Stability and bug-fixing insights.
 - [Builder 🏗️](builder.md) - Feature implementation and extension logs.
-- [Design 🎨 (Palette)](palette.md) - UI/UX and accessibility learnings.
+- [Palette 🎨](palette.md) - UI/UX and accessibility learnings.
 - [Genesis 🌱](genesis.md) - Bootstrap and workspace orchestration logs.
 - [Inspector 🧐](inspector.md) - Code hygiene, readability, and documentation standards.
 - [Launchpad 🚀](launchpad.md) - Environment automation and orchestration scripts.

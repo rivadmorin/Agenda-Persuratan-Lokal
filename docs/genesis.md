@@ -24,3 +24,14 @@ Format:
 - **Learning:** Always verify the full directory tree for agent memory before starting complex orchestration tasks.
 - **Action/Rule:** Genesis must ensure `docs/draft/` and `docs/staged/` exist whenever the `docs/` folder is audited.
 - **Verify Command:** `ls -d docs/draft docs/staged`
+
+## 05-07-2026 - Post-Pull Memory Audit
+- **Tags:** #audit #git-sync
+- **Level:** 🟢 INFO
+- **Scope:** [docs/index.md](file:///docs/index.md)
+- **Notify Agents:** @Orchestrator
+- **Symptom:** Workspace successfully synced with main. Verified existence of all memory files.
+- **Root Cause:** Routine post-pull verification.
+- **Learning:** Manual index fixes applied to align with Specialist Routing Table naming (Palette 🎨).
+- **Action/Rule:** Always run Genesis audit after a major pull or merge.
+- **Verify Command:** `cat docs/index.md`
