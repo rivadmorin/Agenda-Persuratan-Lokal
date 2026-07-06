@@ -36,3 +36,13 @@ Format:
 - **Learning:** Existing utility functions like `fuzzyMatch` are well-documented with JSDoc. Linting (`tsc --noEmit`) passes cleanly.
 - **Action/Rule:** Verified no "TODO" or "console.log" clutter in core src files.
 - **Verify Command:** `pnpm lint`
+## 06-07-2026 - [Final Hygiene and Linting Verification]
+- **Tags:** #inspector #lint #hygiene
+- **Level:** 🟢 INFO
+- **Scope:** [src/](file:///src/)
+- **Notify Agents:** @Orchestrator
+- **Symptom:** Need to ensure the codebase remains clean after configuration changes and dependency restoration.
+- **Root Cause:** Routine hygiene check.
+- **Learning:** Standardizing environment variables and restoring the environment allows the linter (`tsc --noEmit`) to run correctly and verify type safety across the project.
+- **Action/Rule:** Verified that the project passes linting without errors.
+- **Verify Command:** `pnpm lint`

@@ -35,3 +35,13 @@ Format:
 - **Learning:** Manual index fixes applied to align with Specialist Routing Table naming (Palette 🎨).
 - **Action/Rule:** Always run Genesis audit after a major pull or merge.
 - **Verify Command:** `cat docs/index.md`
+## 06-07-2026 - [Restoration of Node Modules]
+- **Tags:** #environment #pnpm #genesis
+- **Level:** 🟢 INFO
+- **Scope:** [package.json](file:///package.json)
+- **Notify Agents:** @Orchestrator
+- **Symptom:** Workspace was missing `node_modules`, causing build and lint tools to be unavailable.
+- **Root Cause:** Environment starts fresh without pre-installed dependencies.
+- **Learning:** Restoring dependencies via `pnpm install` is a mandatory first step for any plan requiring tooling execution.
+- **Action/Rule:** Always verify `node_modules` existence; run `pnpm install` if missing.
+- **Verify Command:** `ls -d node_modules`
