@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import QRCode from 'qrcode';
 
 import { jsPDF } from 'jspdf';
 import { PDFDocument } from 'pdf-lib';
@@ -22,6 +23,7 @@ class SqliteClient {
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
+    this.db.pragma('busy_timeout = 5000');
   }
 
   async query(sql: string, params: any[] = []) {
@@ -446,6 +448,71 @@ app.get('/api/info', (req, res) => {
     }
   }
   res.json({ ips, port: PORT });
+});
+
+// Network Info (Detailed & Tailscale compatible)
+app.get('/api/network-info', async (req, res) => {
+  const networkInterfaces = os.networkInterfaces();
+  const interfaces: { name: string; address: string; type: 'wifi' | 'ethernet' | 'tailscale' | 'other' }[] = [];
+
+  for (const interfaceName of Object.keys(networkInterfaces)) {
+    const list = networkInterfaces[interfaceName];
+    if (list) {
+      for (const info of list) {
+        if (info.family === 'IPv4' && !info.internal) {
+          const ip = info.address;
+          let type: 'wifi' | 'ethernet' | 'tailscale' | 'other' = 'other';
+          const nameLower = interfaceName.toLowerCase();
+
+          if (nameLower.includes('tailscale') || ip.startsWith('100.')) {
+            type = 'tailscale';
+          } else if (nameLower.includes('wlan') || nameLower.includes('wifi') || nameLower.includes('wireless')) {
+            type = 'wifi';
+          } else if (nameLower.includes('eth') || nameLower.includes('en') || nameLower.includes('ethernet')) {
+            type = 'ethernet';
+          }
+
+          interfaces.push({ name: interfaceName, address: ip, type });
+        }
+      }
+    }
+  }
+
+  // Attempt to fetch Public IP with a short timeout
+  let publicIp = null;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
+    const fetchRes = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (fetchRes.ok) {
+      const data = await fetchRes.json();
+      publicIp = data.ip;
+    }
+  } catch (e) {
+    // offline or DNS error
+  }
+
+  res.json({
+    interfaces,
+    publicIp,
+    port: PORT,
+    hasActiveNetwork: interfaces.length > 0
+  });
+});
+
+// Offline Local QR Code Generator
+app.get('/api/network-info/qr', async (req, res) => {
+  try {
+    const url = req.query.url;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).send('URL query parameter is required');
+    }
+    res.setHeader('Content-Type', 'image/png');
+    await QRCode.toFileStream(res, url);
+  } catch (err) {
+    res.status(500).send('Failed to generate QR code');
+  }
 });
 
 // Auth

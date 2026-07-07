@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#005faf" />
+      <stop offset="100%" stop-color="#002d5f" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.15" />
+    </filter>
+  </defs>
+  <!-- Background Circle with modern styling -->
+  <circle cx="256" cy="256" r="240" fill="url(#blueGrad)" />
+  <!-- Inner White Bezel Envelope -->
+  <g filter="url(#shadow)">
+    <rect x="112" y="152" width="288" height="208" rx="24" fill="#ffffff" />
+    <!-- Envelope flaps -->
+    <path d="M112 176 L242.7 274 C250.6 280 261.4 280 269.3 274 L400 176" stroke="#005faf" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+    <path d="M112 336 L200 250" stroke="#005faf" stroke-width="10" stroke-linecap="round" fill="none" />
+    <path d="M400 336 L312 250" stroke="#005faf" stroke-width="10" stroke-linecap="round" fill="none" />
+  </g>
+</svg>

@@ -44,6 +44,11 @@ import '@material/web/progress/circular-progress.js';
 // Labs (Beta) Components
 import '@material/web/labs/navigationdrawer/navigation-drawer.js';
 
+import { registerSW } from 'virtual:pwa-register';
+
+// Register service worker automatically
+registerSW({ immediate: true });
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

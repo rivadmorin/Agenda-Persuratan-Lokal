@@ -11,6 +11,7 @@ import ConfirmModal from './components/ConfirmModal';
 import ReceiptModal from './components/ReceiptModal';
 import ImportModal from './components/ImportModal';
 import CursorInteraction from './components/CursorInteraction';
+import PwaUpdateToast from './components/PwaUpdateToast';
 import { MailRecord, AppConfig, User } from './types';
 import { generateM3Theme } from './utils/theme';
 
@@ -38,6 +39,28 @@ export default function App() {
       generateM3Theme(config.themeColor, config.themeBgColor, config.themeDarkBgColor, config.themeColorScheme);
     }
   }, [darkMode, config?.themeColor, config?.themeBgColor, config?.themeDarkBgColor]);
+
+  // Server connectivity state
+  const [isServerOffline, setIsServerOffline] = useState(false);
+
+  useEffect(() => {
+    const checkServer = async () => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 3000);
+      try {
+        const res = await fetch('/api/network-info', { signal: controller.signal });
+        clearTimeout(id);
+        setIsServerOffline(!res.ok);
+      } catch (err) {
+        clearTimeout(id);
+        setIsServerOffline(true);
+      }
+    };
+
+    checkServer();
+    const interval = setInterval(checkServer, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Drawer states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -386,13 +409,14 @@ export default function App() {
                 <span className="material-symbols-outlined text-lg">menu</span>
               </button>
             )}
-            <div className="max-w-7xl mx-auto h-full">
+            <div className="max-w-[1600px] mx-auto h-full px-4 md:px-8">
               {activeTab === 'dashboard' && (
                 <Dashboard
                   mails={mails}
                   config={config}
                   onNavigateToTab={setActiveTab}
                   onSelectMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
+                  isOffline={isServerOffline}
                 />
               )}
 
@@ -443,6 +467,7 @@ export default function App() {
             onSave={handleSaveMail}
             mode={drawerMode}
             onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
+            isOffline={isServerOffline}
           />
 
           <ReceiptModal
@@ -488,6 +513,7 @@ export default function App() {
       )}
 
       <CursorInteraction />
+      <PwaUpdateToast />
     </>
   );
 }

@@ -43,6 +43,7 @@ interface MailDrawerProps {
   onSave: (data: any) => Promise<void> | void;
   mode: 'edit' | 'view';
   onError?: (title: string, message: string) => void;
+  isOffline?: boolean;
 }
 
 export default function MailDrawer({
@@ -54,7 +55,8 @@ export default function MailDrawer({
   mailToEdit,
   onSave,
   mode,
-  onError
+  onError,
+  isOffline = false
 }: MailDrawerProps) {
   const [type, setType] = useState('Masuk');
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -62,12 +64,25 @@ export default function MailDrawer({
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [deletedPdf, setDeletedPdf] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [previewTab, setPreviewTab] = useState<'details' | 'pdf' | 'markdown'>('details');
+  const [previewTab, setPreviewTab] = useState<'details' | 'markdown' | 'qr' | 'pdf'>('details');
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnimationComplete, setIsAnimationComplete] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State for PWA multi-IP network and QR download
+  const [networkInfo, setNetworkInfo] = useState<{
+    interfaces: Array<{ name: string; address: string; type: 'local' | 'tailscale' | 'public' | 'unknown'; active: boolean }>;
+    activeType: 'local' | 'tailscale' | 'public';
+  } | null>(null);
+  const [selectedInterface, setSelectedInterface] = useState<{ name: string; address: string; type: 'local' | 'tailscale' | 'public' | 'unknown'; active: boolean } | null>(null);
+  const [qrKey, setQrKey] = useState(0);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const [showCopiedSnackbar, setShowCopiedSnackbar] = useState(false);
+  const [isQrSectionOpen, setIsQrSectionOpen] = useState(true);
+  const [isQrZoomed, setIsQrZoomed] = useState(false);
 
   const activeSenders = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -112,6 +127,25 @@ export default function MailDrawer({
     if (isOpen) {
       setIsSaving(false);
       setIsExpanded(false);
+
+      // Fetch network interfaces for dynamic host IP
+      fetch('/api/network-info')
+        .then(res => {
+          if (!res.ok) throw new Error('HTTP error ' + res.status);
+          return res.json();
+        })
+        .then(data => {
+          setNetworkInfo(data);
+          // Default to first active local interface, or first active overall
+          const activeLocal = data.interfaces.find((i: any) => i.active && i.type === 'local');
+          const fallback = data.interfaces.find((i: any) => i.active) || data.interfaces[0] || null;
+          setSelectedInterface(activeLocal || fallback);
+          setQrError(null);
+        })
+        .catch(err => {
+          console.error('[MailDrawer] Gagal memuat info jaringan:', err);
+          setQrError('Gagal mendeteksi koneksi jaringan host.');
+        });
       if (mailToEdit) {
         setType(mailToEdit.type || 'Masuk');
         const formattedMeta = { ...(mailToEdit.metadata || {}) };
@@ -168,6 +202,21 @@ export default function MailDrawer({
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, [isOpen, mailToEdit]);
+
+  const handleReloadQr = () => {
+    setQrLoading(true);
+    setQrError(null);
+    setQrKey(prev => prev + 1);
+    setTimeout(() => {
+      setQrLoading(false);
+    }, 600);
+  };
+
+  const handleCopyLink = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setShowCopiedSnackbar(true);
+    setTimeout(() => setShowCopiedSnackbar(false), 2000);
+  };
 
   const handleInputChange = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));
@@ -449,13 +498,23 @@ export default function MailDrawer({
 
                       {!pdfSource ? (
                         <div
-                          onClick={() => fileInputRef.current?.click()}
-                          className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl p-10 text-center cursor-pointer hover:bg-[var(--md-sys-color-primary-container)]/10 transition-all flex flex-col items-center justify-center gap-3 group"
+                          onClick={isOffline ? undefined : () => fileInputRef.current?.click()}
+                          className={`border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl p-10 text-center flex flex-col items-center justify-center gap-3 transition-all ${
+                            isOffline
+                              ? 'opacity-50 cursor-not-allowed bg-[var(--md-sys-color-surface-container-low)]'
+                              : 'cursor-pointer hover:bg-[var(--md-sys-color-primary-container)]/10 group'
+                          }`}
                         >
-                          <span className="material-symbols-outlined text-4xl text-[var(--md-sys-color-primary)] group-hover:scale-110 transition-transform">upload_file</span>
+                          <span className="material-symbols-outlined text-4xl text-[var(--md-sys-color-primary)] group-hover:scale-110 transition-transform">
+                            {isOffline ? 'cloud_off' : 'upload_file'}
+                          </span>
                           <div className="flex flex-col gap-1">
-                            <span className="text-sm font-bold">Pilih PDF atau Seret ke sini</span>
-                            <span className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest">MAKS 50MB</span>
+                            <span className="text-sm font-bold">
+                              {isOffline ? 'Pengunggahan PDF dinonaktifkan saat offline' : 'Pilih PDF atau Seret ke sini'}
+                            </span>
+                            <span className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest">
+                              {isOffline ? 'Koneksi Host Terputus' : 'MAKS 50MB'}
+                            </span>
                           </div>
                         </div>
                       ) : (
@@ -471,13 +530,15 @@ export default function MailDrawer({
                               </p>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => { setPdfFile(null); setPdfBase64(null); setDeletedPdf(true); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 text-[var(--md-sys-color-error)] transition-all cursor-pointer"
-                          >
-                            <span className="material-symbols-outlined text-lg">delete</span>
-                          </button>
+                          {!isOffline && (
+                            <button
+                              type="button"
+                              onClick={() => { setPdfFile(null); setPdfBase64(null); setDeletedPdf(true); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                              className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 text-[var(--md-sys-color-error)] transition-all cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-lg">delete</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -512,6 +573,22 @@ export default function MailDrawer({
                         <span className="material-symbols-outlined text-lg">description</span>
                         Markdown
                         {previewTab === 'markdown' && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => pdfSource && setPreviewTab('qr')}
+                        disabled={!pdfSource}
+                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer ${
+                          previewTab === 'qr'
+                            ? 'text-[var(--md-sys-color-primary)]'
+                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">qr_code_2</span>
+                        Unduh QR
+                        {previewTab === 'qr' && (
                           <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
                         )}
                       </button>
@@ -571,13 +648,152 @@ export default function MailDrawer({
                         </div>
                       )}
 
-                      {previewTab === 'pdf' && pdfSource && (
-                        <div className="h-full min-h-[500px] flex items-center justify-center">
-                          {isAnimationComplete ? (
-                            <iframe src={pdfSource} className="w-full h-full border-none animate-premium-in" title="PDF Preview" />
-                          ) : (
-                            <md-circular-progress indeterminate></md-circular-progress>
+                      {previewTab === 'qr' && pdfSource && (
+                        <div className="flex flex-col items-center justify-center p-8 gap-8 h-full min-h-[550px] max-w-md mx-auto text-center animate-premium-in">
+                          {/* Header section with icon */}
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-12 h-12 rounded-full bg-[var(--md-sys-color-primary)]/10 flex items-center justify-center mb-1">
+                              <span className="material-symbols-outlined text-2xl text-[var(--md-sys-color-primary)] font-fill">
+                                qr_code_2
+                              </span>
+                            </div>
+                            <h3 className="text-lg font-black text-[var(--md-sys-color-on-surface)] tracking-tight">
+                              Bagikan Akses / Unduh via QR Code
+                            </h3>
+                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed max-w-[340px]">
+                              Pindai kode QR dengan kamera ponsel untuk mengunduh atau membaca langsung dokumen PDF ini di HP Android/iOS Anda.
+                            </p>
+                          </div>
+
+                          {/* QR Code Container */}
+                          <div 
+                            onDoubleClick={() => setIsQrZoomed(true)}
+                            title="Double click untuk memperbesar"
+                            className="bg-white p-4 rounded-[2rem] border border-[var(--md-sys-color-outline-variant)]/60 flex items-center justify-center w-48 h-48 relative overflow-hidden shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all group/qr"
+                          >
+                            {mailToEdit?.pdfPath ? (
+                              <>
+                                {qrError ? (
+                                  <div className="flex flex-col items-center justify-center text-center p-3 text-[var(--md-sys-color-error)] select-none">
+                                    <span className="material-symbols-outlined text-3xl mb-1">error</span>
+                                    <span className="text-[10px] font-bold leading-normal">{qrError}</span>
+                                  </div>
+                                ) : selectedInterface ? (
+                                  <div className="relative w-full h-full flex flex-col items-center justify-center">
+                                    <img
+                                      src={`/api/network-info/qr?url=${encodeURIComponent(`http://${selectedInterface.address}:3000/api/files/${mailToEdit.pdfPath}`)}&t=${qrKey}`}
+                                      alt="QR Code Berkas PDF"
+                                      className={`w-full h-full object-contain transition-opacity duration-300 ${qrLoading ? 'opacity-0' : 'opacity-100'}`}
+                                      onError={() => setQrError('QR gagal dimuat')}
+                                    />
+                                    <span className="absolute bottom-0 text-[7px] font-black text-[var(--md-sys-color-outline)] uppercase tracking-widest leading-none select-none opacity-0 group-hover/qr:opacity-100 transition-opacity bg-white/90 py-1 px-2 rounded-full shadow-sm">
+                                      Klik 2x Zoom
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center text-center p-3 text-[var(--md-sys-color-outline)] select-none">
+                                    <span className="material-symbols-outlined text-3xl mb-1 animate-pulse">cloud_off</span>
+                                    <span className="text-[10px] font-bold leading-normal">Koneksi tidak tersedia</span>
+                                  </div>
+                                )}
+
+                                {/* Loading Progress Spinner */}
+                                {qrLoading && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+                                    <md-circular-progress indeterminate className="scale-75"></md-circular-progress>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center text-center p-4 text-[var(--md-sys-color-outline)] select-none">
+                                <span className="material-symbols-outlined text-3xl mb-2 font-fill">lock</span>
+                                <span className="text-[10px] font-bold leading-normal">
+                                  Simpan agenda untuk mengaktifkan QR Code.
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Network Interface Switcher */}
+                          {networkInfo && (
+                            <div className="flex flex-col gap-2 w-full">
+                              <span className="text-[10px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-wider">
+                                Pilih Jaringan Akses:
+                              </span>
+                              <div className="flex p-0.5 bg-[var(--md-sys-color-surface-container-high)] dark:bg-[var(--md-sys-color-surface-container-highest)] rounded-full border border-[var(--md-sys-color-outline-variant)]/60 w-full">
+                                {(['local', 'tailscale', 'public'] as const).map((type) => {
+                                  const label = type === 'local' ? 'Lokal' : type === 'tailscale' ? 'Tailscale' : 'IP Publik';
+                                  const isSelected = selectedInterface?.type === type;
+                                  const targetIf = networkInfo.interfaces.find(i => i.type === type);
+                                  const disabled = !targetIf || !targetIf.active;
+                                  
+                                  return (
+                                    <button
+                                      key={type}
+                                      type="button"
+                                      disabled={disabled}
+                                      onClick={() => setSelectedInterface(targetIf || null)}
+                                      className={`flex-1 py-1.5 text-[10px] font-black rounded-full transition-all duration-300 relative cursor-pointer ${
+                                        disabled 
+                                          ? 'opacity-35 cursor-not-allowed text-[var(--md-sys-color-outline)]' 
+                                          : isSelected
+                                            ? 'bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow-sm'
+                                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                                      }`}
+                                      title={disabled ? `${label} Tidak Aktif` : `Gunakan ${label}`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           )}
+
+                          {/* Link and Refresh Row */}
+                          {mailToEdit?.pdfPath && selectedInterface && (
+                            <div className="flex flex-col gap-3 w-full">
+                              <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] py-2 px-4 rounded-xl flex items-center justify-between gap-3 overflow-hidden shadow-sm w-full">
+                                <span className="text-[10px] font-mono font-bold text-[var(--md-sys-color-primary)] truncate flex-1 text-left select-none">
+                                  {`http://${selectedInterface.address}:3000/api/files/${mailToEdit.pdfPath}`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyLink(`http://${selectedInterface.address}:3000/api/files/${mailToEdit.pdfPath}`)}
+                                  className="w-8 h-8 rounded-lg hover:bg-[var(--md-sys-color-primary)]/10 text-[var(--md-sys-color-primary)] flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-all"
+                                  title="Salin Alamat Unduh"
+                                >
+                                  <span className="material-symbols-outlined text-lg">content_copy</span>
+                                </button>
+                              </div>
+                              
+                              <button
+                                type="button"
+                                onClick={handleReloadQr}
+                                disabled={qrLoading}
+                                className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:underline flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 py-2 px-4 rounded-xl hover:bg-[var(--md-sys-color-primary)]/5 transition-all self-center"
+                              >
+                                <span className={`material-symbols-outlined text-sm ${qrLoading ? 'animate-spin' : ''}`}>
+                                  refresh
+                                </span>
+                                Perbarui QR Code
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {previewTab === 'pdf' && pdfSource && (
+                        <div className="p-6 h-full pb-32 flex flex-col min-h-[500px] animate-premium-in">
+                          <div className="flex-1 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[32px] p-2 overflow-hidden h-full flex flex-col min-h-[500px]">
+                            <div className="w-full h-full bg-[var(--md-sys-color-surface)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] rounded-[24px] overflow-hidden flex items-center justify-center relative flex-1">
+                              {isAnimationComplete ? (
+                                <iframe src={pdfSource} className="w-full h-full border-none animate-premium-in" title="PDF Preview" />
+                              ) : (
+                                <md-circular-progress indeterminate></md-circular-progress>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -628,6 +844,77 @@ export default function MailDrawer({
           </motion.div>
         </>
       )}
+
+      {/* Zoomed QR Code Modal */}
+      <AnimatePresence>
+        {isQrZoomed && selectedInterface && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2600] bg-black/60 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setIsQrZoomed(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+              className="bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-8 max-w-sm w-full flex flex-col items-center gap-6 shadow-2xl relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setIsQrZoomed(false)}
+                className="absolute top-6 right-6 w-10 h-10 rounded-full bg-[var(--md-sys-color-surface-container-highest)] border border-[var(--md-sys-color-outline-variant)]/60 flex items-center justify-center cursor-pointer hover:bg-[var(--md-sys-color-error)]/10 hover:text-[var(--md-sys-color-error)] transition-all active:scale-90"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+
+              <div className="text-center flex flex-col gap-2 mt-4">
+                <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)]">
+                  Pindai QR Code
+                </h3>
+                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">
+                  Unduh berkas PDF ini secara langsung ke ponsel Anda.
+                </p>
+              </div>
+
+              {/* Large QR Box */}
+              <div className="bg-white p-4 rounded-[2rem] w-60 h-60 border border-[var(--md-sys-color-outline-variant)]/60 flex items-center justify-center overflow-hidden shadow-sm">
+                <img
+                  src={`/api/network-info/qr?url=${encodeURIComponent(`http://${selectedInterface.address}:3000/api/files/${mailToEdit?.pdfPath}`)}&t=${qrKey}`}
+                  alt="Enlarged QR Code"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+
+              <div className="w-full bg-[var(--md-sys-color-surface-container-highest)] border border-[var(--md-sys-color-outline-variant)]/40 p-4 rounded-2xl text-center">
+                <p className="text-xs font-mono font-bold text-[var(--md-sys-color-primary)] truncate selection:bg-transparent">
+                  {`http://${selectedInterface.address}:3000/api/files/${mailToEdit?.pdfPath}`}
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Copied Success Snackbar */}
+      <AnimatePresence>
+        {showCopiedSnackbar && (
+          <motion.div
+            initial={{ y: 30, opacity: 0, x: '-50%' }}
+            animate={{ y: 0, opacity: 1, x: '-50%' }}
+            exit={{ y: 30, opacity: 0, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[2500] px-5 py-2.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 rounded-full shadow-lg border border-neutral-800 dark:border-neutral-200 flex items-center gap-2.5 text-xs font-bold select-none"
+          >
+            <span className="material-symbols-outlined text-sm text-emerald-500 font-fill">check_circle</span>
+            Alamat unduh berkas disalin ke papan klip!
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
   );
 }
