@@ -34,6 +34,7 @@ const WEIGHT_DEFAULT_FIELD = 1.0;
  */
 export function fuzzyMatch(text: string, query: string): FuzzyResult {
   if (!query) return { matches: true, score: 0 };
+  if (query.length > text.length) return { matches: false, score: 0 };
   const t = text.toLowerCase();
   const q = query.toLowerCase();
 
@@ -98,7 +99,7 @@ export function getMailSearchScore(mail: { type: string; metadata: Record<string
       const res = fuzzyMatch(valStr, query);
       if (res.matches) {
         // Boost critical fields like nomorSurat or perihal
-        const isCriticalField = ['nomorSurat', 'perihal', 'pengirim', 'penerima'].includes(key);
+        const isCriticalField = ['nomorSurat', 'noSurat', 'perihal', 'pengirim', 'suratDari', 'penerima', 'tujuan', 'noUrut', 'penomoran'].includes(key);
         scores.push(res.score * (isCriticalField ? WEIGHT_CRITICAL_FIELD : WEIGHT_DEFAULT_FIELD));
       }
     }

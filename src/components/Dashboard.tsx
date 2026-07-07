@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { MailRecord, AppConfig } from '../types';
 
@@ -17,6 +17,11 @@ const colorClasses: Record<string, { bg: string; text: string; border: string }>
     bg: 'bg-[var(--md-sys-color-tertiary-container)]', 
     text: 'text-[var(--md-sys-color-on-tertiary-container)]', 
     border: 'border-[var(--md-sys-color-outline-variant)]' 
+  },
+  rose: { 
+    bg: 'bg-[var(--md-sys-color-error-container)]', 
+    text: 'text-[var(--md-sys-color-on-error-container)]', 
+    border: 'border-[var(--md-sys-color-outline-variant)]' 
   }
 };
 
@@ -29,6 +34,30 @@ interface DashboardProps {
 
 export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: DashboardProps) {
   const [timeRange, setTimeRange] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formattedDay = useMemo(() => {
+    return currentTime.toLocaleDateString('id-ID', { weekday: 'long' });
+  }, [currentTime]);
+
+  const formattedDate = useMemo(() => {
+    return currentTime.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  }, [currentTime]);
+
+  const formattedTime = useMemo(() => {
+    const pad = (num: number) => String(num).padStart(2, '0');
+    const hours = pad(currentTime.getHours());
+    const minutes = pad(currentTime.getMinutes());
+    const seconds = pad(currentTime.getSeconds());
+    return `${hours}:${minutes}:${seconds}`;
+  }, [currentTime]);
 
   const stats = useMemo(() => {
     const total = mails.length;
@@ -44,6 +73,43 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
 
   const chartData = useMemo(() => {
     const groups: Record<string, number> = {};
+    const today = new Date();
+
+    // Pre-populate with default ranges for visual continuity
+    if (timeRange === 'daily') {
+      // Last 7 days
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(today.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        groups[key] = 0;
+      }
+    } else if (timeRange === 'weekly') {
+      // Last 6 weeks
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(today.getDate() - i * 7);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+        const key = monday.toISOString().split('T')[0];
+        groups[key] = 0;
+      }
+    } else if (timeRange === 'monthly') {
+      // Last 6 months
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        groups[key] = 0;
+      }
+    } else {
+      // Last 3 years
+      for (let i = 2; i >= 0; i--) {
+        const key = `${today.getFullYear() - i}`;
+        groups[key] = 0;
+      }
+    }
+
     // Sort all mails chronologically ascending using fast string comparison instead of expensive Date object constructions
     const sortedMails = [...mails].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     
@@ -134,12 +200,13 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
         <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Statistik surat masuk dan log aktivitas sistem terbaru.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Reading this as: Premium document archival dashboard for administrative personnel, featuring structural Material 3 design tokens, clean geometric layouts with concentric double-bezel curves, and responsive spring-based hover feedback. */}
         {[
           { label: 'Total Agenda', value: stats.total, sub: `${stats.recentCount} dalam 7 hari terakhir`, icon: 'inbox', color: 'teal', tab: 'mails' },
           { label: 'Dengan Lampiran', value: stats.withPdf, sub: `${stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% memiliki PDF`, icon: 'picture_as_pdf', color: 'indigo', tab: 'mails' },
           { label: 'Efisiensi Arsip', value: '100%', sub: 'Penyimpanan lokal terstruktur', icon: 'bolt', color: 'amber', tab: 'dashboard' },
+          { label: 'Waktu & Tanggal', value: formattedTime, sub: `${formattedDay}, ${formattedDate}`, icon: 'schedule', color: 'rose', tab: 'dashboard' },
         ].map((stat, i) => {
           const colors = colorClasses[stat.color] || { bg: 'bg-[var(--md-sys-color-surface-container)]', text: 'text-[var(--md-sys-color-on-surface)]', border: 'border-[var(--md-sys-color-outline-variant)]' };
           
@@ -250,19 +317,41 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
         <div className="bg-[var(--md-sys-color-surface-container-low)] p-8 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] flex flex-col">
           <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)] mb-6">Aktivitas Terbaru</h3>
           <div className="flex flex-col gap-4 overflow-y-auto max-h-[280px] pr-1">
-            {recentActivities.map(mail => (
-              <div
-                key={mail.id}
-                onClick={() => onSelectMail(mail)}
-                className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-primary)] shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.98]"
-              >
-                <div className="flex justify-end mb-1.5">
-                  <span className="text-[9px] text-[var(--md-sys-color-outline)] font-medium">{mail.formattedDate}</span>
+            {recentActivities.map(mail => {
+              const isOut = mail.metadata.type === 'Keluar' || mail.metadata.jenisSurat?.toLowerCase().includes('keluar');
+              const iconName = mail.pdfPath ? 'picture_as_pdf' : (isOut ? 'send' : 'mail');
+              const iconColorClass = mail.pdfPath 
+                ? 'bg-rose-100/80 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' 
+                : (isOut 
+                    ? 'bg-teal-100/80 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' 
+                    : 'bg-indigo-100/80 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
+                  );
+
+              return (
+                <div
+                  key={mail.id}
+                  onClick={() => onSelectMail(mail)}
+                  className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] hover:border-[var(--md-sys-color-primary)] shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-premium active:scale-[0.98] flex items-center gap-4 group"
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border border-[var(--md-sys-color-outline-variant)] ${iconColorClass}`}>
+                    <span className="material-symbols-outlined text-xl font-fill">
+                      {iconName}
+                    </span>
+                  </div>
+                  <div className="overflow-hidden flex-1">
+                    <div className="flex justify-between items-center gap-2 mb-1">
+                      <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate group-hover:text-[var(--md-sys-color-primary)] transition-colors">
+                        {mail.metadata.perihal || mail.metadata.isi || 'Tanpa Perihal'}
+                      </p>
+                      <span className="text-[9px] text-[var(--md-sys-color-outline)] font-medium shrink-0">{mail.formattedDate}</span>
+                    </div>
+                    <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] truncate">
+                      {isOut ? `Penerima: ${mail.metadata.penerima || mail.metadata.tujuan || '-'}` : `Dari: ${mail.metadata.pengirim || '-'}`}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{mail.metadata.perihal || mail.metadata.isi || 'Tanpa Perihal'}</p>
-                <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] mt-1 truncate">Dari: {mail.metadata.pengirim || '-'}</p>
-              </div>
-            ))}
+              );
+            })}
             {mails.length === 0 && (
               <div className="flex-1 flex flex-col items-center justify-center text-center py-10 text-[var(--md-sys-color-outline)] opacity-60 italic text-xs">
                 <span className="material-symbols-outlined text-4xl mb-2">history</span>

@@ -34,7 +34,7 @@ export default function App() {
     }
     localStorage.setItem('darkMode', String(darkMode));
     if (config?.themeColor) {
-      generateM3Theme(config.themeColor, config.themeBgColor, config.themeDarkBgColor);
+      generateM3Theme(config.themeColor, config.themeBgColor, config.themeDarkBgColor, config.themeColorScheme);
     }
   }, [darkMode, config?.themeColor, config?.themeBgColor, config?.themeDarkBgColor]);
 
@@ -92,7 +92,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setConfig(data);
-        if (data.themeColor) generateM3Theme(data.themeColor, data.themeBgColor, data.themeDarkBgColor);
+        if (data.themeColor) generateM3Theme(data.themeColor, data.themeBgColor, data.themeDarkBgColor, data.themeColorScheme);
         setConnectionError(false);
       } else {
         setConnectionError(true);

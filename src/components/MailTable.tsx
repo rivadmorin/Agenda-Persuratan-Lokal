@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MailRecord, AppConfig } from '../types';
+import { getMailSearchScore } from '../utils/search';
 
 interface MailTableProps {
   mails: MailRecord[];
@@ -31,10 +32,18 @@ export default function MailTable(props: MailTableProps) {
     isBatchLoading
   } = props;
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploadingMailId, setUploadingMailId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 150);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   const sortedColumns = React.useMemo(() => {
     return [...config.columns].sort((a, b) => a.order - b.order);
@@ -45,18 +54,24 @@ export default function MailTable(props: MailTableProps) {
   }, [mails]);
 
   const filteredMails = React.useMemo(() => {
-    const term = searchTerm.toLowerCase();
-    if (!term) return sortedMails;
-    return sortedMails.filter(mail => {
-      const searchStr = `${mail.metadata.nomorSurat || ''} ${mail.metadata.perihal || ''} ${mail.metadata.pengirim || ''} ${mail.metadata.penerima || ''}`.toLowerCase();
-      return searchStr.includes(term);
-    });
-  }, [sortedMails, searchTerm]);
+    if (!debouncedSearchTerm) return sortedMails;
+    const scoredMails = sortedMails
+      .map(mail => ({
+        mail,
+        result: getMailSearchScore(mail, debouncedSearchTerm)
+      }))
+      .filter(item => item.result.matches);
+
+    // Sort by fuzzy match score descending
+    return scoredMails
+      .sort((a, b) => b.result.score - a.result.score)
+      .map(item => item.mail);
+  }, [sortedMails, debouncedSearchTerm]);
 
   // Reset to first page when search query changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [debouncedSearchTerm]);
 
   const totalItems = filteredMails.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -126,6 +141,9 @@ export default function MailTable(props: MailTableProps) {
 
   const formatDate = (dateVal: any) => {
     if (!dateVal) return '-';
+    if (typeof dateVal === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateVal)) {
+      return dateVal;
+    }
     try {
       const d = new Date(dateVal);
       if (isNaN(d.getTime())) return String(dateVal);
@@ -154,7 +172,7 @@ export default function MailTable(props: MailTableProps) {
           {searchTerm && (
             <md-icon-button
               className="absolute right-2 top-1/2 -translate-y-1/2"
-              onClick={() => setSearchTerm('')}
+              onClick={() => { setSearchTerm(''); setDebouncedSearchTerm(''); }}
               aria-label="Hapus pencarian"
             >
               <span className="material-symbols-outlined">close</span>

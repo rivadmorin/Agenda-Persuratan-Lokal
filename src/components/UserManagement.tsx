@@ -127,10 +127,13 @@ export default function UserManagement() {
           <h1 className="text-3xl font-display font-bold text-[var(--md-sys-color-on-surface)] tracking-tight">Manajemen Pengguna</h1>
           <p className="text-[var(--md-sys-color-on-surface-variant)] text-sm">Kelola akun operator dan administrator.</p>
         </div>
-        <md-filled-button onClick={() => setUserDialog({ isOpen: true, userToEdit: null })}>
-          <span slot="icon" className="material-symbols-outlined">person_add</span>
+        <button
+          onClick={() => setUserDialog({ isOpen: true, userToEdit: null })}
+          className="px-6 py-3 rounded-full text-sm font-bold bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] hover:shadow-md hover:brightness-110 active:scale-95 transition-premium cursor-pointer flex items-center gap-2"
+        >
+          <span className="material-symbols-outlined text-lg">person_add</span>
           Tambah User
-        </md-filled-button>
+        </button>
       </div>
 
       <div className="bg-[var(--md-sys-color-surface-container)] rounded-[32px] overflow-hidden border border-[var(--md-sys-color-outline-variant)] shadow-sm">
@@ -153,20 +156,21 @@ export default function UserManagement() {
                 </div>
                 <div slot="supporting-text" className="tracking-wide text-xs text-[var(--md-sys-color-on-surface-variant)]">@{user.username}</div>
                 <div slot="end" className="flex items-center gap-1">
-                   <md-icon-button
-                     onClick={() => setUserDialog({ isOpen: true, userToEdit: user })}
-                     aria-label={`Ubah pengguna ${user.name}`}
-                   >
-                     <span className="material-symbols-outlined text-[var(--md-sys-color-primary)]">edit</span>
-                   </md-icon-button>
-                   <md-icon-button
-                     onClick={() => setConfirmModal({ isOpen: true, username: user.username })}
-                     disabled={user.username === 'admin' ? true : undefined}
-                     aria-label={`Hapus pengguna ${user.name}`}
-                     style={{ '--md-icon-button-icon-color': 'var(--md-sys-color-error)' }}
-                   >
-                     <span className="material-symbols-outlined">delete</span>
-                   </md-icon-button>
+                    <button
+                      onClick={() => setUserDialog({ isOpen: true, userToEdit: user })}
+                      className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[var(--md-sys-color-primary)]/10 text-[var(--md-sys-color-primary)] transition-premium cursor-pointer active:scale-90"
+                      aria-label={`Ubah pengguna ${user.name}`}
+                    >
+                      <span className="material-symbols-outlined text-lg">edit</span>
+                    </button>
+                    <button
+                      onClick={() => setConfirmModal({ isOpen: true, username: user.username })}
+                      disabled={user.username === 'admin'}
+                      className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-[var(--md-sys-color-error)]/10 text-[var(--md-sys-color-error)] disabled:opacity-35 disabled:cursor-not-allowed transition-premium cursor-pointer active:scale-90"
+                      aria-label={`Hapus pengguna ${user.name}`}
+                    >
+                      <span className="material-symbols-outlined text-lg">delete</span>
+                    </button>
                 </div>
               </md-list-item>
               <md-divider></md-divider>

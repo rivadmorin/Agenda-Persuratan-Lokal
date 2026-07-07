@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 
 interface LoginProps {
@@ -13,8 +13,8 @@ export default function Login({ appName, onLoginSuccess }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setLoading(true);
     try {
       const response = await fetch('/api/auth/login', {
@@ -31,6 +31,52 @@ export default function Login({ appName, onLoginSuccess }: LoginProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      try {
+        const path = e.composedPath();
+        const textField = path.find(
+          (el: any) => el.tagName && el.tagName.toLowerCase() === 'md-filled-text-field'
+        ) as any;
+        if (!textField) return;
+
+        (window as any).lastTextFieldLabel = textField.label;
+
+        const fields = Array.from(document.querySelectorAll('md-filled-text-field')) as any[];
+        const userField = fields.find(f => f.label === 'Username');
+        const pwdField = fields.find(f => f.label === 'Password');
+
+        if (textField.label === 'Username') {
+          if (e.key === 'Tab' && !e.shiftKey) {
+            e.preventDefault();
+            pwdField?.focus();
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            pwdField?.focus();
+          }
+        } else if (textField.label === 'Password') {
+          if (e.key === 'Tab' && e.shiftKey) {
+            e.preventDefault();
+            userField?.focus();
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const form = textField.closest('form');
+            if (form) {
+              form.requestSubmit();
+            }
+          }
+        }
+      } catch (err: any) {
+        (window as any).lastError = err.message;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--md-sys-color-surface)]">

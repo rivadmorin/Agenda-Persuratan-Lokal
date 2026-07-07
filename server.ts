@@ -338,6 +338,28 @@ function getFormattedPdfName(config: any, metadata: any, originalName: string) {
   return `dokumen_${Date.now()}.pdf`;
 }
 
+function parseDateParts(dateStr: string) {
+  const fallback = new Date().toISOString().split('T')[0].split('-');
+  if (!dateStr || typeof dateStr !== 'string') {
+    return { year: fallback[0], month: fallback[1], day: fallback[2] };
+  }
+  if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    return {
+      day: parts[0] || fallback[2],
+      month: parts[1] || fallback[1],
+      year: parts[2] || fallback[0]
+    };
+  } else {
+    const parts = dateStr.split('-');
+    return {
+      year: parts[0] || fallback[0],
+      month: parts[1] || fallback[1],
+      day: parts[2] || fallback[2]
+    };
+  }
+}
+
 async function renameMailPdfFile(config: any, mail: any) {
   if (!mail.pdfPath || config.autoRenamePdf === false) return mail.pdfPath;
   try {
@@ -347,7 +369,7 @@ async function renameMailPdfFile(config: any, mail: any) {
 
     const formattedName = getFormattedPdfName(config, mail.metadata, path.basename(oldRelativePath));
     const tTerima = mail.metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-    const [year, month, day] = tTerima.split('-');
+    const { year, month, day } = parseDateParts(tTerima);
     const relativeUploadDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
     const uploadDir = path.join(process.cwd(), relativeUploadDir);
 
@@ -540,7 +562,7 @@ app.post('/api/mails', async (req, res) => {
       const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
       const buffer = Buffer.from(cleanBase64, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-      const [year, month, day] = tTerima.split('-');
+      const { year, month, day } = parseDateParts(tTerima);
       const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
       const absDir = path.join(process.cwd(), relDir);
       if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
@@ -578,7 +600,7 @@ app.put('/api/mails/:id', async (req, res) => {
       const cleanBase64 = pdfData.includes(';base64,') ? pdfData.split(';base64,')[1] : pdfData;
       const buffer = Buffer.from(cleanBase64, 'base64');
       const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-      const [year, month, day] = tTerima.split('-');
+      const { year, month, day } = parseDateParts(tTerima);
       const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
       const absDir = path.join(process.cwd(), relDir);
       if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
@@ -618,7 +640,7 @@ app.post('/api/mails/:id/upload', async (req, res) => {
     const buffer = Buffer.from(cleanBase64, 'base64');
 
     const tTerima = metadata.tanggalTerima || new Date().toISOString().split('T')[0];
-    const [year, month, day] = tTerima.split('-');
+    const { year, month, day } = parseDateParts(tTerima);
     const relDir = path.join('data', 'uploads', year, month, day).replace(/\\/g, '/');
     const absDir = path.join(process.cwd(), relDir);
     if (!fs.existsSync(absDir)) fs.mkdirSync(absDir, { recursive: true });
@@ -860,7 +882,7 @@ app.get('/api/backup/list', async (req, res) => {
         return {
           filename: f,
           sizeBytes: stats.size,
-          createdAt: stats.birthtime || stats.mtime || new Date(),
+          createdAt: stats.birthtime && stats.birthtime.getTime() > 0 ? stats.birthtime : (stats.mtime || new Date()),
           label,
           isAuto,
           isManual,

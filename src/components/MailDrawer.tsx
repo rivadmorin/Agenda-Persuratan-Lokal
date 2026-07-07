@@ -31,21 +31,47 @@ export default function MailDrawer({
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnimationComplete, setIsAnimationComplete] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize form when opening / changing mailToEdit
   useEffect(() => {
     if (isOpen) {
       setIsSaving(false);
+      setIsExpanded(false);
       if (mailToEdit) {
         setType(mailToEdit.type || 'Masuk');
-        setFormData(mailToEdit.metadata || {});
+        const formattedMeta = { ...(mailToEdit.metadata || {}) };
+        columns.forEach(col => {
+          if (col.type === 'date' && formattedMeta[col.key]) {
+            const dateStr = formattedMeta[col.key];
+            if (dateStr.includes('-')) {
+              const parts = dateStr.split('-');
+              if (parts.length === 3) {
+                formattedMeta[col.key] = `${parts[2]}/${parts[1]}/${parts[0]}`; // Convert YYYY-MM-DD to DD/MM/YYYY
+              }
+            }
+          }
+        });
+        setFormData(formattedMeta);
         setPdfFile(null);
         setPdfBase64(null);
         setDeletedPdf(false);
       } else {
         setType('Masuk');
-        setFormData({});
+        const defaultData: Record<string, string> = {};
+        const today = new Date();
+        const day = String(today.getDate()).padStart(2, '0');
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const year = today.getFullYear();
+        const todayStr = `${day}/${month}/${year}`;
+        
+        columns.forEach(col => {
+          if (col.type === 'date') {
+            defaultData[col.key] = todayStr;
+          }
+        });
+        setFormData(defaultData);
         setPdfFile(null);
         setPdfBase64(null);
         setDeletedPdf(false);
@@ -56,7 +82,7 @@ export default function MailDrawer({
     // Manage iframe rendering delay
     let timeoutId: ReturnType<typeof setTimeout>;
     if (isOpen) {
-      timeoutId = setTimeout(() => setIsAnimationComplete(true), 400);
+      timeoutId = setTimeout(() => setIsAnimationComplete(true), 200);
     } else {
       setIsAnimationComplete(false);
     }
@@ -102,8 +128,22 @@ export default function MailDrawer({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     columns.forEach(col => {
-      if (col.required && !formData[col.key]) {
+      const val = formData[col.key];
+      if (col.required && !val) {
         newErrors[col.key] = `${col.label} wajib diisi.`;
+      } else if (col.type === 'date' && val) {
+        // Validate DD/MM/YYYY format
+        const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+        if (!datePattern.test(val)) {
+          newErrors[col.key] = `${col.label} harus berformat DD/MM/YYYY (contoh: 06/07/2026).`;
+        } else {
+          // Check if it is a valid date
+          const [day, month, year] = val.split('/').map(Number);
+          const d = new Date(year, month - 1, day);
+          if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
+            newErrors[col.key] = `${col.label} bukan tanggal yang valid.`;
+          }
+        }
       }
     });
     setErrors(newErrors);
@@ -120,6 +160,7 @@ export default function MailDrawer({
         type,
         metadata: formData,
         pdfData: pdfBase64 || undefined,
+        pdfName: pdfFile ? pdfFile.name : undefined,
         deletePdf: deletedPdf,
       });
     } finally {
@@ -129,6 +170,9 @@ export default function MailDrawer({
 
   const formatDate = (dateVal: any) => {
     if (!dateVal) return '-';
+    if (typeof dateVal === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(dateVal)) {
+      return dateVal;
+    }
     try {
       const d = new Date(dateVal);
       if (isNaN(d.getTime())) return String(dateVal);
@@ -146,10 +190,13 @@ export default function MailDrawer({
   }, [columns]);
 
   const formatMarkdown = (mail: MailRecord) => {
-    let md = `# Agenda Surat: ${mail.metadata.nomorSurat || 'Tanpa Nomor'}\n\n`;
+    const noSurat = mail.metadata.noSurat || mail.metadata.nomorSurat || 'Tanpa Nomor';
+    let md = `# Agenda Surat: ${noSurat}\n\n`;
     sortedColumns.forEach(col => {
       const val = mail.metadata[col.key] || '-';
-      md += `**${col.label}:** ${val}\n`;
+      const isDateKey = col.key.toLowerCase().includes('tanggal') || col.key.toLowerCase().includes('date') || col.type === 'date';
+      const displayVal = isDateKey ? formatDate(val) : val;
+      md += `*${col.label.toUpperCase()}:* ${displayVal}\n`;
     });
     return md;
   };
@@ -174,9 +221,11 @@ export default function MailDrawer({
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={`fixed top-0 right-0 h-full bg-[var(--md-sys-color-surface)] shadow-2xl z-[101] border-l border-[var(--md-sys-color-outline-variant)] flex flex-col transition-all duration-400 ease-premium ${
-               mode === 'view' ? 'w-full max-w-[550px]' : 'w-full max-w-[600px]'
+            transition={{ type: 'tween', ease: 'easeOut', duration: 0.2 }}
+            className={`fixed top-0 right-0 h-full bg-[var(--md-sys-color-surface)] shadow-2xl z-[101] border-l border-[var(--md-sys-color-outline-variant)] flex flex-col transition-[width,max-width] duration-300 ease-in-out ${
+               isExpanded 
+                 ? 'w-full max-w-[1000px] lg:max-w-[90vw]' 
+                 : (mode === 'view' ? 'w-full max-w-[550px]' : 'w-full max-w-[600px]')
             }`}
           >
             {/* Header */}
@@ -192,9 +241,14 @@ export default function MailDrawer({
                   </p>
                 )}
               </div>
-              <md-icon-button onClick={onClose} aria-label="Tutup panel">
-                <span className="material-symbols-outlined">close</span>
-              </md-icon-button>
+              <div className="flex items-center gap-1">
+                <md-icon-button onClick={() => setIsExpanded(!isExpanded)} aria-label={isExpanded ? 'Perkecil panel' : 'Perbesar panel'}>
+                  <span className="material-symbols-outlined">{isExpanded ? 'fullscreen_exit' : 'fullscreen'}</span>
+                </md-icon-button>
+                <md-icon-button onClick={onClose} aria-label="Tutup panel">
+                  <span className="material-symbols-outlined">close</span>
+                </md-icon-button>
+              </div>
             </div>
 
             {/* Content Area */}
@@ -216,15 +270,18 @@ export default function MailDrawer({
                               error={!!errors[col.key] ? true : undefined}
                               errorText={errors[col.key]}
                               rows={3}
+                              style={{ '--md-outlined-text-field-container-shape': '12px' }}
                             ></md-outlined-text-field>
                           ) : (
                             <md-outlined-text-field
-                              type={col.type === 'date' ? 'date' : 'text'}
+                              type="text"
+                              placeholder={col.type === 'date' ? 'DD/MM/YYYY' : undefined}
                               label={col.label + (col.required ? ' **' : '')}
                               value={formData[col.key] || ''}
                               onInput={(e: any) => handleInputChange(col.key, e.target.value)}
                               error={!!errors[col.key] ? true : undefined}
                               errorText={errors[col.key]}
+                              style={{ '--md-outlined-text-field-container-shape': '12px' }}
                             ></md-outlined-text-field>
                           )}
                         </div>
@@ -236,23 +293,30 @@ export default function MailDrawer({
                       <div className="flex items-center justify-between">
                          <label className="text-[10px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-widest px-1">Berkas Lampiran PDF</label>
                          {pdfSource && (
-                           <md-text-button onClick={() => window.open(pdfSource, '_blank')}>
-                             <span slot="icon" className="material-symbols-outlined">visibility</span>
+                           <button
+                             type="button"
+                             onClick={() => window.open(pdfSource, '_blank')}
+                             className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:bg-[var(--md-sys-color-primary)]/10 px-3 py-2 rounded-full flex items-center gap-1 cursor-pointer transition-all"
+                           >
+                             <span className="material-symbols-outlined text-sm">visibility</span>
                              Lihat PDF
-                           </md-text-button>
+                           </button>
                          )}
                       </div>
 
                       <input type="file" accept="application/pdf" ref={fileInputRef} onChange={handleFileChange} className="hidden" id="pdf-drawer-input" />
 
                       {!pdfSource ? (
-                        <label htmlFor="pdf-drawer-input" className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl p-10 text-center cursor-pointer hover:bg-[var(--md-sys-color-primary-container)]/10 transition-all flex flex-col items-center justify-center gap-3 group">
+                        <div
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-2xl p-10 text-center cursor-pointer hover:bg-[var(--md-sys-color-primary-container)]/10 transition-all flex flex-col items-center justify-center gap-3 group"
+                        >
                           <span className="material-symbols-outlined text-4xl text-[var(--md-sys-color-primary)] group-hover:scale-110 transition-transform">upload_file</span>
                           <div className="flex flex-col gap-1">
                             <span className="text-sm font-bold">Pilih PDF atau Seret ke sini</span>
                             <span className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest">MAKS 50MB</span>
                           </div>
-                        </label>
+                        </div>
                       ) : (
                         <div className="p-4 bg-[var(--md-sys-color-surface-container-high)] rounded-2xl flex items-center justify-between border border-[var(--md-sys-color-outline-variant)] shadow-sm">
                           <div className="flex items-center gap-4 overflow-hidden">
@@ -266,35 +330,71 @@ export default function MailDrawer({
                               </p>
                             </div>
                           </div>
-                          <md-icon-button onClick={() => { setPdfFile(null); setPdfBase64(null); setDeletedPdf(true); if (fileInputRef.current) fileInputRef.current.value = ''; }}>
-                            <span className="material-symbols-outlined text-[var(--md-sys-color-error)]">delete</span>
-                          </md-icon-button>
+                          <button
+                            type="button"
+                            onClick={() => { setPdfFile(null); setPdfBase64(null); setDeletedPdf(true); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                            className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-black/5 text-[var(--md-sys-color-error)] transition-all cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-lg">delete</span>
+                          </button>
                         </div>
                       )}
                     </div>
                   </form>
                 ) : (
                   <div className="flex flex-col h-full overflow-hidden">
-                    <div className="border-b border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
-                      <md-tabs active-tab-index={previewTab === 'details' ? 0 : (previewTab === 'markdown' ? 1 : 2)} className="w-full">
-                        <md-primary-tab onClick={() => setPreviewTab('details')}>
-                          <md-icon slot="icon">info</md-icon>
-                          Rincian
-                        </md-primary-tab>
-                        <md-primary-tab onClick={() => setPreviewTab('markdown')}>
-                          <md-icon slot="icon">description</md-icon>
-                          Markdown
-                        </md-primary-tab>
-                        <md-primary-tab onClick={() => setPreviewTab('pdf')} disabled={!pdfSource ? true : undefined}>
-                          <md-icon slot="icon">picture_as_pdf</md-icon>
-                          Preview PDF
-                        </md-primary-tab>
-                      </md-tabs>
+                    <div className="flex border-b border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewTab('details')}
+                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative cursor-pointer ${
+                          previewTab === 'details'
+                            ? 'text-[var(--md-sys-color-primary)]'
+                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">info</span>
+                        Rincian
+                        {previewTab === 'details' && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewTab('markdown')}
+                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative cursor-pointer ${
+                          previewTab === 'markdown'
+                            ? 'text-[var(--md-sys-color-primary)]'
+                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">description</span>
+                        Markdown
+                        {previewTab === 'markdown' && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => pdfSource && setPreviewTab('pdf')}
+                        disabled={!pdfSource}
+                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer ${
+                          previewTab === 'pdf'
+                            ? 'text-[var(--md-sys-color-primary)]'
+                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
+                        Preview PDF
+                        {previewTab === 'pdf' && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                        )}
+                      </button>
                     </div>
 
                     <div className="flex-1 overflow-y-auto bg-[var(--md-sys-color-surface)]">
                       {previewTab === 'details' && (
-                        <div className="p-6 flex flex-col gap-4">
+                        <div className="p-6 flex flex-col gap-4 pb-32">
                            {sortedColumns.map(col => (
                              <div key={col.key} className="flex flex-col gap-1 p-4 rounded-2xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50">
                                <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80">{col.label}</span>
@@ -309,10 +409,11 @@ export default function MailDrawer({
                       )}
 
                       {previewTab === 'markdown' && mailToEdit && (
-                        <div className="p-6">
+                        <div className="p-6 pb-32">
                            <div className="relative p-6 bg-[var(--md-sys-color-surface-container-lowest)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl shadow-inner">
-                              <md-icon-button
-                                className="absolute right-3 top-3 bg-[var(--md-sys-color-surface)] shadow-sm"
+                              <button
+                                type="button"
+                                className="absolute right-3 top-3 w-10 h-10 rounded-full flex items-center justify-center bg-[var(--md-sys-color-surface)] hover:bg-black/5 border border-[var(--md-sys-color-outline-variant)] shadow-sm cursor-pointer transition-all"
                                 aria-label="Salin Markdown"
                                 onClick={() => {
                                   navigator.clipboard.writeText(formatMarkdown(mailToEdit));
@@ -320,8 +421,8 @@ export default function MailDrawer({
                                   setTimeout(() => setCopied(false), 2000);
                                 }}
                               >
-                                <span className="material-symbols-outlined">{copied ? 'done' : 'content_copy'}</span>
-                              </md-icon-button>
+                                <span className="material-symbols-outlined text-lg">{copied ? 'done' : 'content_copy'}</span>
+                              </button>
                               <pre className="font-mono text-xs whitespace-pre-wrap select-text pr-12 leading-relaxed text-[var(--md-sys-color-on-surface-variant)]">
                                 {formatMarkdown(mailToEdit)}
                               </pre>
@@ -346,26 +447,41 @@ export default function MailDrawer({
 
             {/* Footer Actions */}
             <div className="absolute bottom-0 right-0 left-0 p-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-end gap-3 z-10 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-               <md-text-button onClick={onClose}>Batal</md-text-button>
+               <button
+                 type="button"
+                 onClick={onClose}
+                 className="px-6 h-10 text-sm font-bold text-[var(--md-sys-color-primary)] rounded-full hover:bg-[var(--md-sys-color-primary)]/10 active:scale-95 transition-all cursor-pointer"
+               >
+                 Batal
+               </button>
                {mode === 'edit' ? (
-                 <md-filled-button onClick={handleSubmit} disabled={isSaving ? true : undefined}>
+                 <button
+                   type="button"
+                   onClick={handleSubmit}
+                   disabled={isSaving}
+                   className="px-6 h-10 text-sm font-bold bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-full hover:shadow-md active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                 >
                     {isSaving ? (
                       <>
-                        <md-circular-progress indeterminate slot="icon" style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
+                        <md-circular-progress indeterminate style={{ '--md-circular-progress-size': '18px' }}></md-circular-progress>
                         Menyimpan...
                       </>
                     ) : (
                       <>
-                        <span slot="icon" className="material-symbols-outlined">save</span>
+                        <span className="material-symbols-outlined text-sm">save</span>
                         {mailToEdit ? 'Simpan Perubahan' : 'Tambah Agenda'}
                       </>
                     )}
-                 </md-filled-button>
+                 </button>
                ) : (
-                 <md-filled-button onClick={() => onSave({ isSwitchToEdit: true })}>
-                    <span slot="icon" className="material-symbols-outlined">edit</span>
+                 <button
+                   type="button"
+                   onClick={() => onSave({ isSwitchToEdit: true })}
+                   className="px-6 h-10 text-sm font-bold bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-full hover:shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                 >
+                    <span className="material-symbols-outlined text-sm">edit</span>
                     Edit Data
-                 </md-filled-button>
+                 </button>
                )}
             </div>
           </motion.div>

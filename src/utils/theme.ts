@@ -1,8 +1,45 @@
-import { argbFromHex, themeFromSourceColor, hexFromArgb } from "@material/material-color-utilities";
+import { argbFromHex, Scheme, CorePalette, TonalPalette, hexFromArgb, Hct } from "@material/material-color-utilities";
 
-export function generateM3Theme(seedColor: string, customBg?: string, customDarkBg?: string) {
-  const theme = themeFromSourceColor(argbFromHex(seedColor));
+export interface ColorSchemeOption {
+  id: string;
+  chroma: number;
+  tone: number;
+}
+
+export const colorSchemes: ColorSchemeOption[] = [
+  { id: 'vibrant', chroma: 48, tone: 40 },
+  { id: 'pastel', chroma: 24, tone: 52 },
+  { id: 'muted', chroma: 14, tone: 42 },
+  { id: 'deep', chroma: 68, tone: 34 },
+  { id: 'neon', chroma: 88, tone: 48 },
+  { id: 'monochrome', chroma: 0, tone: 40 }
+];
+
+export function generateM3Theme(seedColor: string, customBg?: string, customDarkBg?: string, schemeId?: string) {
+  const argb = argbFromHex(seedColor);
+  const corePalette = CorePalette.of(argb);
   
+  if (schemeId) {
+    const schemeOption = colorSchemes.find(s => s.id === schemeId);
+    if (schemeOption) {
+      const chroma = schemeOption.chroma;
+      const hct = Hct.fromInt(argb);
+      const hue = hct.hue;
+      
+      corePalette.a1 = TonalPalette.fromHueAndChroma(hue, chroma);
+      corePalette.a2 = TonalPalette.fromHueAndChroma(hue, Math.max(4, chroma / 3));
+      corePalette.a3 = TonalPalette.fromHueAndChroma(hue + 60, Math.max(4, chroma / 2));
+      
+      if (chroma === 0) {
+        corePalette.n1 = TonalPalette.fromHueAndChroma(hue, 0);
+        corePalette.n2 = TonalPalette.fromHueAndChroma(hue, 0);
+      }
+    }
+  }
+
+  const lightScheme = Scheme.lightFromCorePalette(corePalette);
+  const darkScheme = Scheme.darkFromCorePalette(corePalette);
+
   const getCssVars = (scheme: any) => {
     return `
       --md-sys-color-primary: ${hexFromArgb(scheme.primary)};
@@ -33,24 +70,24 @@ export function generateM3Theme(seedColor: string, customBg?: string, customDark
   };
 
   const lightSurfaceContainer = `
-    --md-sys-color-surface-container-lowest: ${hexFromArgb(theme.palettes.neutral.tone(100))};
-    --md-sys-color-surface-container-low: ${hexFromArgb(theme.palettes.neutral.tone(96))};
-    --md-sys-color-surface-container: ${hexFromArgb(theme.palettes.neutral.tone(94))};
-    --md-sys-color-surface-container-high: ${hexFromArgb(theme.palettes.neutral.tone(92))};
-    --md-sys-color-surface-container-highest: ${hexFromArgb(theme.palettes.neutral.tone(90))};
+    --md-sys-color-surface-container-lowest: ${hexFromArgb(corePalette.n1.tone(100))};
+    --md-sys-color-surface-container-low: ${hexFromArgb(corePalette.n1.tone(96))};
+    --md-sys-color-surface-container: ${hexFromArgb(corePalette.n1.tone(94))};
+    --md-sys-color-surface-container-high: ${hexFromArgb(corePalette.n1.tone(92))};
+    --md-sys-color-surface-container-highest: ${hexFromArgb(corePalette.n1.tone(90))};
   `;
 
   const darkSurfaceContainer = `
-    --md-sys-color-surface-container-lowest: ${hexFromArgb(theme.palettes.neutral.tone(4))};
-    --md-sys-color-surface-container-low: ${hexFromArgb(theme.palettes.neutral.tone(10))};
-    --md-sys-color-surface-container: ${hexFromArgb(theme.palettes.neutral.tone(12))};
-    --md-sys-color-surface-container-high: ${hexFromArgb(theme.palettes.neutral.tone(17))};
-    --md-sys-color-surface-container-highest: ${hexFromArgb(theme.palettes.neutral.tone(22))};
+    --md-sys-color-surface-container-lowest: ${hexFromArgb(corePalette.n1.tone(4))};
+    --md-sys-color-surface-container-low: ${hexFromArgb(corePalette.n1.tone(10))};
+    --md-sys-color-surface-container: ${hexFromArgb(corePalette.n1.tone(12))};
+    --md-sys-color-surface-container-high: ${hexFromArgb(corePalette.n1.tone(17))};
+    --md-sys-color-surface-container-highest: ${hexFromArgb(corePalette.n1.tone(22))};
   `;
 
   const cssContent = `
     :root {
-      ${getCssVars(theme.schemes.light)}
+      ${getCssVars(lightScheme)}
       ${lightSurfaceContainer}
       ${customBg ? `
         --md-sys-color-background: ${customBg};
@@ -63,7 +100,7 @@ export function generateM3Theme(seedColor: string, customBg?: string, customDark
       ` : ''}
     }
     .dark {
-      ${getCssVars(theme.schemes.dark)}
+      ${getCssVars(darkScheme)}
       ${darkSurfaceContainer}
       --md-sys-color-background: ${customDarkBg || '#090e1a'};
       ${customDarkBg ? `

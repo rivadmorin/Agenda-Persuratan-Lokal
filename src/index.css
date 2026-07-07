@@ -260,6 +260,7 @@ md-elevated-button {
   --md-elevated-button-with-icon-trailing-space: 24px !important;
 
   min-width: 160px !important;
+  padding: 0 24px !important;
 }
 
 md-text-button {

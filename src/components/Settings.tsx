@@ -154,7 +154,7 @@ export default function Settings({
     const newHct = Hct.from(h, scheme.chroma, scheme.tone);
     const newHex = hexFromArgb(newHct.toInt());
     setThemeColor(newHex);
-    generateM3Theme(newHex, currentBg || themeBgColor, currentDarkBg || themeDarkBgColor);
+    generateM3Theme(newHex, currentBg || themeBgColor, currentDarkBg || themeDarkBgColor, schemeId);
   };
 
   const handlePresetClick = (hex: string, h: number) => {
@@ -164,7 +164,7 @@ export default function Settings({
     const newHct = Hct.from(h, scheme.chroma, scheme.tone);
     const newHex = hexFromArgb(newHct.toInt());
     setThemeColor(newHex);
-    generateM3Theme(newHex, themeBgColor, themeDarkBgColor);
+    generateM3Theme(newHex, themeBgColor, themeDarkBgColor, colorScheme);
   };
 
   const handleHueChange = (h: number) => {
@@ -181,17 +181,17 @@ export default function Settings({
     setThemeColor(hex);
     const hct = getHctFromHex(hex);
     setHue(hct.hue);
-    generateM3Theme(hex, themeBgColor, themeDarkBgColor);
+    generateM3Theme(hex, themeBgColor, themeDarkBgColor, colorScheme);
   };
 
   const handleBgColorChange = (hex: string) => {
     setThemeBgColor(hex);
-    generateM3Theme(themeColor, hex, themeDarkBgColor);
+    generateM3Theme(themeColor, hex, themeDarkBgColor, colorScheme);
   };
 
   const handleDarkBgColorChange = (hex: string) => {
     setThemeDarkBgColor(hex);
-    generateM3Theme(themeColor, themeBgColor, hex);
+    generateM3Theme(themeColor, themeBgColor, hex, colorScheme);
   };
 
   useEffect(() => {
@@ -440,7 +440,7 @@ export default function Settings({
 
     onSaveConfig(updatedConfig);
     if (themeColor) {
-      generateM3Theme(themeColor, themeBgColor, themeDarkBgColor);
+      generateM3Theme(themeColor, themeBgColor, themeDarkBgColor, colorScheme);
     }
     showNotification('Pengaturan sistem berhasil disimpan.');
   };
@@ -1000,7 +1000,19 @@ export default function Settings({
               <div className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl transition-premium">
                 <div>
                   <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)] font-display">Penamaan Berkas PDF Otomatis</p>
-                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">Format: [Nilai Kolom1]-[Nilai Kolom2].pdf</p>
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">
+                    Format:{' '}
+                    <span className="font-semibold text-[var(--md-sys-color-primary)] font-mono">
+                      {pdfRenameCols.length > 0 ? (
+                        pdfRenameCols.map(key => {
+                          const col = columns.find(c => c.key === key);
+                          return `[${col ? col.label : key}]`;
+                        }).join('-') + '.pdf'
+                      ) : (
+                        '[Pilih Kolom].pdf'
+                      )}
+                    </span>
+                  </p>
                 </div>
                 <md-checkbox
                   checked={autoRenamePdf}
@@ -1298,7 +1310,7 @@ export default function Settings({
               </p>
 
               {/* Reorderable columns list */}
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <div className="flex-1 overflow-y-auto max-h-[400px] space-y-2 pr-1">
                 {columns.map((col, idx) => (
                   <div
                     key={col.key}
