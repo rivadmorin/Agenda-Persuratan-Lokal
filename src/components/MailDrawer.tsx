@@ -2,10 +2,43 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MailRecord, ColumnDefinition } from '../types';
 
+function getNextNoUrut(mails: MailRecord[]): string {
+  if (mails.length === 0) return '001';
+
+  let latestVal = '';
+  let maxNum = -1;
+
+  mails.forEach(m => {
+    const val = m.metadata.noUrut;
+    if (val) {
+      const match = val.match(/(\d+)/g);
+      if (match) {
+        const lastNumGroup = match[match.length - 1];
+        const num = parseInt(lastNumGroup, 10);
+        if (num > maxNum) {
+          maxNum = num;
+          latestVal = val;
+        }
+      }
+    }
+  });
+
+  if (maxNum === -1 || !latestVal) return '001';
+
+  // Increment bagian angka terakhir
+  return latestVal.replace(/(\d+)(?!.*\d)/, (digitsStr) => {
+    const length = digitsStr.length;
+    const nextNum = parseInt(digitsStr, 10) + 1;
+    return String(nextNum).padStart(length, '0');
+  });
+}
+
 interface MailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   columns: ColumnDefinition[];
+  mails: MailRecord[];
+  penomoranSuggestions?: string[];
   mailToEdit: MailRecord | null;
   onSave: (data: any) => Promise<void> | void;
   mode: 'edit' | 'view';
@@ -16,6 +49,8 @@ export default function MailDrawer({
   isOpen,
   onClose,
   columns,
+  mails,
+  penomoranSuggestions = ['ROJEMENGAR 1', 'ROJEMENGAR 2', 'ROJEMENGAR 3', 'WAAS 1', 'WAAS 2', 'WAAS 3'],
   mailToEdit,
   onSave,
   mode,
@@ -33,6 +68,44 @@ export default function MailDrawer({
   const [isAnimationComplete, setIsAnimationComplete] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const activeSenders = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    mails.forEach(m => {
+      const sender = m.metadata.suratDari;
+      if (sender && typeof sender === 'string') {
+        const trimmed = sender.trim();
+        if (trimmed && trimmed !== '-') {
+          counts[trimmed] = (counts[trimmed] || 0) + 1;
+        }
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(entry => entry[0]);
+  }, [mails]);
+
+  const handleInputKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'Enter') {
+      if (e.ctrlKey || e.metaKey) {
+        return;
+      }
+      e.preventDefault();
+      const formElements = e.currentTarget.closest('form')?.querySelectorAll('md-outlined-text-field, input, textarea');
+      if (formElements) {
+        const nextElement = formElements[index + 1] as HTMLElement;
+        if (nextElement) {
+          nextElement.focus();
+        } else {
+          const submitBtn = e.currentTarget.closest('form')?.querySelector('md-filled-button[type="submit"]') as HTMLElement;
+          if (submitBtn) {
+            submitBtn.focus();
+          }
+        }
+      }
+    }
+  };
 
   // Initialize form when opening / changing mailToEdit
   useEffect(() => {
@@ -71,6 +144,10 @@ export default function MailDrawer({
             defaultData[col.key] = todayStr;
           }
         });
+
+        // Set otomatis noUrut dengan nomor berikutnya
+        defaultData['noUrut'] = getNextNoUrut(mails);
+
         setFormData(defaultData);
         setPdfFile(null);
         setPdfBase64(null);
@@ -259,7 +336,7 @@ export default function MailDrawer({
 
                     {/* Metadata Fields */}
                     <div className="flex flex-col gap-6">
-                      {sortedColumns.map(col => (
+                      {sortedColumns.map((col, index) => (
                         <div key={col.key} className="flex flex-col gap-1">
                           {(col.type as any) === 'textarea' ? (
                             <md-outlined-text-field
@@ -267,25 +344,89 @@ export default function MailDrawer({
                               label={col.label + (col.required ? ' **' : '')}
                               value={formData[col.key] || ''}
                               onInput={(e: any) => handleInputChange(col.key, e.target.value)}
+                              onKeyDown={(e: any) => handleInputKeyDown(e, index)}
                               error={!!errors[col.key] ? true : undefined}
                               errorText={errors[col.key]}
                               rows={3}
                               style={{ '--md-outlined-text-field-container-shape': '12px' }}
                             ></md-outlined-text-field>
                           ) : (
-                            <md-outlined-text-field
-                              type="text"
-                              placeholder={col.type === 'date' ? 'DD/MM/YYYY' : undefined}
-                              label={col.label + (col.required ? ' **' : '')}
-                              value={formData[col.key] || ''}
-                              onInput={(e: any) => handleInputChange(col.key, e.target.value)}
-                              error={!!errors[col.key] ? true : undefined}
-                              errorText={errors[col.key]}
-                              style={{ '--md-outlined-text-field-container-shape': '12px' }}
-                            ></md-outlined-text-field>
+                            <div className="relative flex flex-col w-full gap-1.5">
+                              <div className="relative flex items-center w-full">
+                                <md-outlined-text-field
+                                  type="text"
+                                  autofocus={index === 0 && !mailToEdit ? true : undefined}
+                                  placeholder={col.type === 'date' ? 'DD/MM/YYYY' : undefined}
+                                  label={col.label + (col.required ? ' **' : '')}
+                                  value={formData[col.key] || ''}
+                                  onInput={(e: any) => handleInputChange(col.key, e.target.value)}
+                                  onKeyDown={(e: any) => handleInputKeyDown(e, index)}
+                                  error={!!errors[col.key] ? true : undefined}
+                                  errorText={errors[col.key]}
+                                  style={{ '--md-outlined-text-field-container-shape': '12px', width: '100%' }}
+                                  className="w-full"
+                                ></md-outlined-text-field>
+                                {col.type === 'date' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      const day = String(today.getDate()).padStart(2, '0');
+                                      const month = String(today.getMonth() + 1).padStart(2, '0');
+                                      const year = today.getFullYear();
+                                      handleInputChange(col.key, `${day}/${month}/${year}`);
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-wider text-[var(--md-sys-color-primary)] hover:bg-[var(--md-sys-color-primary)]/10 active:scale-95 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all z-10"
+                                    title="Isi dengan tanggal hari ini"
+                                  >
+                                    Hari Ini
+                                  </button>
+                                )}
+                              </div>
+
+                              {col.key === 'suratDari' && activeSenders.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1 px-1">
+                                  <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--md-sys-color-on-surface-variant)] self-center mr-1">Instansi Teraktif:</span>
+                                  {activeSenders.map(sender => (
+                                    <button
+                                      key={sender}
+                                      type="button"
+                                      onClick={() => handleInputChange('suratDari', sender)}
+                                      className="text-[10px] font-medium bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-on-primary)] active:scale-95 px-2.5 py-1 rounded-full cursor-pointer transition-all border border-[var(--md-sys-color-outline-variant)]/60"
+                                    >
+                                      {sender}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {col.key === 'penomoran' && penomoranSuggestions.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1 px-1">
+                                  <span className="text-[9px] uppercase tracking-wider font-bold text-[var(--md-sys-color-on-surface-variant)] self-center mr-1">Saran Penomoran:</span>
+                                  {penomoranSuggestions.map(sug => (
+                                    <button
+                                      key={sug}
+                                      type="button"
+                                      onClick={() => handleInputChange('penomoran', sug)}
+                                      className="text-[10px] font-medium bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-on-primary)] active:scale-95 px-2.5 py-1 rounded-full cursor-pointer transition-all border border-[var(--md-sys-color-outline-variant)]/60 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+                                    >
+                                      {sug}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       ))}
+                    </div>
+
+                    {/* Keyboard Shortcuts Tip Banner */}
+                    <div className="flex items-center gap-2.5 p-3 bg-[var(--md-sys-color-primary)]/5 border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl text-[10.5px] text-[var(--md-sys-color-on-surface-variant)] mt-2">
+                      <span className="material-symbols-outlined text-sm text-[var(--md-sys-color-primary)] font-fill">lightbulb</span>
+                      <span>
+                        <strong>Tips Pintasan:</strong> Tekan <kbd className="px-1.5 py-0.5 bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] rounded text-[9.5px] font-mono">Enter</kbd> untuk berpindah ke kolom berikutnya, dan <kbd className="px-1.5 py-0.5 bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] rounded text-[9.5px] font-mono">Ctrl + Enter</kbd> untuk langsung menyimpan.
+                      </span>
                     </div>
 
                     {/* PDF Upload Section */}

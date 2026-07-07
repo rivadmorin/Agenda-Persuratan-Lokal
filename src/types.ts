@@ -81,6 +81,8 @@ export interface AppConfig {
   autoRenamePdf?: boolean;
   /** Ordered list of metadata keys used to construct the custom filename */
   pdfRenameCols?: string[];
+  /** Suggestions list for the penomoran (classification) field */
+  penomoranSuggestions?: string[];
 }
 
 /**

@@ -88,6 +88,13 @@ export default function Settings({
   const [autoRenamePdf, setAutoRenamePdf] = useState(config.autoRenamePdf !== false);
   const [pdfRenameCols, setPdfRenameCols] = useState<string[]>(config.pdfRenameCols || ['noSurat']);
 
+  // Penomoran suggestions states
+  const [penomoranSuggestions, setPenomoranSuggestions] = useState<string[]>(
+    config.penomoranSuggestions || ['ROJEMENGAR 1', 'ROJEMENGAR 2', 'ROJEMENGAR 3', 'WAAS 1', 'WAAS 2', 'WAAS 3']
+  );
+  const [newSuggestion, setNewSuggestion] = useState('');
+  const [suggestionError, setSuggestionError] = useState('');
+
   // Columns & Profiles State
   const [columns, setColumns] = useState<ColumnDefinition[]>(
     [...(config.columns || [])].sort((a, b) => a.order - b.order)
@@ -126,6 +133,55 @@ export default function Settings({
   const [backupsLoading, setBackupsLoading] = useState(false);
   const [includePdfBackup, setIncludePdfBackup] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Database Stats State
+  const [dbStats, setDbStats] = useState<{
+    totalMails: number;
+    totalPdfs: number;
+    totalSizeMb: number;
+    lastBackup: string;
+    integrityStatus: 'ok' | 'warning' | 'unchecked';
+  }>({
+    totalMails: 0,
+    totalPdfs: 0,
+    totalSizeMb: 0,
+    lastBackup: '-',
+    integrityStatus: 'unchecked'
+  });
+
+  // Specific per-action loading states
+  const [activeLoading, setActiveLoading] = useState<Record<string, boolean>>({});
+
+  // Dialog State
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    actionType: string;
+    extraData?: any;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    actionType: '',
+    isDanger: false
+  });
+
+  const [alertDialog, setAlertDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'error' | 'success';
+    showProgress?: boolean;
+    countdown?: number;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
 
   // HCT Theme states
   const getHctFromHex = (hex: string) => {
@@ -207,6 +263,9 @@ export default function Settings({
     setBackupRetentionDays(config.backupRetentionDays || 7);
     setAutoRenamePdf(config.autoRenamePdf !== false);
     setPdfRenameCols(config.pdfRenameCols || ['noSurat']);
+    setPenomoranSuggestions(config.penomoranSuggestions || ['ROJEMENGAR 1', 'ROJEMENGAR 2', 'ROJEMENGAR 3', 'WAAS 1', 'WAAS 2', 'WAAS 3']);
+    setNewSuggestion('');
+    setSuggestionError('');
     setColumns([...(config.columns || [])].sort((a, b) => a.order - b.order));
     setColumnProfiles(config.columnProfiles || []);
     setActiveProfileId(config.activeProfileId || '');
@@ -217,6 +276,7 @@ export default function Settings({
       setHue(config.themeHue);
     }
     fetchBackups();
+    fetchDbStats();
   }, [config]);
 
   const showNotification = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -240,121 +300,345 @@ export default function Settings({
     }
   };
 
-  const handleCreateBackup = async () => {
-    setBackupsLoading(true);
+  const fetchDbStats = async () => {
     try {
-      const res = await fetch('/api/backup/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ includePdf: includePdfBackup })
-      });
+      const res = await fetch('/api/backup/stats');
       if (res.ok) {
-        showNotification('File cadangan baru berhasil dibuat di server.');
-        fetchBackups();
-      } else {
-        showNotification('Gagal membuat file cadangan.', 'error');
+        const data = await res.json();
+        setDbStats(prev => ({
+          ...prev,
+          totalMails: data.totalMails,
+          totalPdfs: data.totalPdfs,
+          totalSizeMb: data.totalSizeMb,
+          lastBackup: data.lastBackup
+        }));
       }
     } catch (err) {
-      console.error(err);
-      showNotification('Gagal membuat file cadangan.', 'error');
-    } finally {
-      setBackupsLoading(false);
+      console.error('Failed to fetch DB stats', err);
     }
   };
 
-  const handleDeleteBackup = async (filename: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus berkas cadangan ini secara permanen dari server?')) return;
-    try {
-      const res = await fetch(`/api/backup/delete/${filename}`, { method: 'DELETE' });
-      if (res.ok) {
-        showNotification('Berkas cadangan berhasil dihapus.');
-        fetchBackups();
-      }
-    } catch (err) {
-      console.error(err);
-      showNotification('Gagal menghapus berkas cadangan.', 'error');
+  const triggerAction = (actionType: string, extraData?: any) => {
+    let title = '';
+    let message = '';
+    let isDanger = false;
+
+    if (actionType === 'createBackup') {
+      title = 'Buat Cadangan Baru';
+      message = `Apakah Anda yakin ingin membuat berkas cadangan database sekarang? ${includePdfBackup ? '(Mencakup seluruh file PDF lampiran)' : '(Hanya data teks)'}`;
+    } else if (actionType === 'exportData') {
+      title = 'Ekspor File Data';
+      message = 'Apakah Anda yakin ingin mengekspor seluruh data persuratan saat ini ke berkas ZIP lokal?';
+    } else if (actionType === 'checkIntegrity') {
+      title = 'Periksa Integritas';
+      message = 'Jalankan pemeriksaan integritas database dan verifikasi berkas PDF di server?';
+    } else if (actionType === 'cleanupOrphans') {
+      title = 'Bersihkan File Yatim';
+      message = 'PENTING: Seluruh berkas PDF di folder uploads yang tidak memiliki record di database akan dihapus dari server secara permanen. Anda yakin?';
+      isDanger = true;
+    } else if (actionType === 'reconstructMetadata') {
+      title = 'Rekonstruksi Metadata';
+      message = 'Sistem akan memindai folder uploads dan memulihkan record surat berdasarkan berkas PDF yatim yang ditemukan. Anda yakin?';
+    } else if (actionType === 'clearSystem') {
+      title = 'HAPUS SELURUH DATA SISTEM';
+      message = 'PERINGATAN KERAS: Semua agenda surat, berkas PDF lampiran akan dihapus secara permanen, dan kredensial admin akan di-reset. Tindakan ini TIDAK DAPAT DIBATALKAN. Anda yakin?';
+      isDanger = true;
+    } else if (actionType === 'deleteBackup') {
+      title = 'Hapus Berkas Cadangan';
+      message = `Apakah Anda yakin ingin menghapus berkas cadangan "${extraData}" secara permanen dari server?`;
+      isDanger = true;
+    } else if (actionType === 'restoreBackup') {
+      title = 'Pulihkan Sistem dari Cadangan';
+      message = `PENTING: Seluruh data saat ini akan ditimpa dengan data dari cadangan "${extraData}". Anda yakin ingin melanjutkan?`;
+      isDanger = true;
     }
+
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      actionType,
+      extraData,
+      isDanger
+    });
   };
 
-  const handleRestoreBackup = async (filename: string) => {
-    if (!confirm('PENTING: Seluruh data saat ini akan ditimpa dengan data cadangan ini. Anda yakin ingin melanjutkan?')) return;
-    setBackupsLoading(true);
-    try {
-      const res = await fetch('/api/backup/restore-local', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showNotification(data.message || 'Sistem berhasil dipulihkan dari cadangan lokal!');
-        setTimeout(() => window.location.reload(), 1500);
-      } else {
-        showNotification(data.message || 'Gagal memulihkan sistem.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      showNotification('Gagal memulihkan sistem.', 'error');
-    } finally {
-      setBackupsLoading(false);
-    }
-  };
+  const handleConfirmAction = async () => {
+    const { actionType, extraData } = confirmDialog;
+    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
 
-  const handleCheckIntegrity = async () => {
-    try {
-      const res = await fetch('/api/backup/integrity');
-      const data = await res.json();
-      if (res.ok) {
-        if (data.missingCount === 0) {
-          alert('Integritas OK: Seluruh record database memiliki berkas lampiran PDF yang lengkap.');
+    const setLoading = (key: string, val: boolean) => {
+      setActiveLoading(prev => ({ ...prev, [key]: val }));
+    };
+
+    if (actionType === 'createBackup') {
+      setLoading('create', true);
+      try {
+        const res = await fetch('/api/backup/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ includePdf: includePdfBackup })
+        });
+        if (res.ok) {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Cadangan Berhasil',
+            message: 'Berkas cadangan baru berhasil dibuat di server.',
+            type: 'success'
+          });
+          fetchBackups();
+          fetchDbStats();
         } else {
-          alert(`Integritas Peringatan: Ditemukan ${data.missingCount} record surat yang berkas lampiran PDF-nya hilang di server.`);
+          const errData = await res.json().catch(() => ({}));
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Cadangkan',
+            message: errData.message || 'Gagal membuat file cadangan di server.',
+            type: 'error'
+          });
         }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal terhubung ke server.',
+          type: 'error'
+        });
+      } finally {
+        setLoading('create', false);
       }
-    } catch (err) {
-      console.error(err);
-      showNotification('Gagal memeriksa integritas data.', 'error');
     }
-  };
 
-  const handleCleanupOrphans = async () => {
-    if (!confirm('Hapus seluruh berkas PDF di folder uploads yang tidak terhubung ke record database surat mana pun?')) return;
-    try {
-      const res = await fetch('/api/backup/integrity/cleanup', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        showNotification(data.message || 'Pembersihan berkas yatim berhasil dilakukan.');
+    else if (actionType === 'exportData') {
+      setLoading('export', true);
+      try {
+        window.open('/api/backup/export-zip', '_blank');
+        setAlertDialog({
+          isOpen: true,
+          title: 'Ekspor Berhasil',
+          message: 'Berkas ekspor ZIP berhasil diunduh.',
+          type: 'success'
+        });
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Gagal Ekspor',
+          message: err.message || 'Gagal mengunduh file ekspor.',
+          type: 'error'
+        });
+      } finally {
+        setLoading('export', false);
       }
-    } catch (err) {
-      console.error(err);
     }
-  };
 
-  const handleReconstructMetadata = async () => {
-    if (!confirm('Jalankan rekonstruksi? Sistem akan memindai folder uploads dan membuat record surat baru untuk setiap berkas PDF yang tidak memiliki record database.')) return;
-    try {
-      const res = await fetch('/api/backup/integrity/reconstruct', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        showNotification(data.message || 'Rekonstruksi metadata berhasil dilakukan.');
-        window.location.reload();
+    else if (actionType === 'checkIntegrity') {
+      setLoading('integrity', true);
+      try {
+        const res = await fetch('/api/backup/integrity');
+        const data = await res.json();
+        if (res.ok) {
+          const isOk = data.missingCount === 0;
+          setDbStats(prev => ({
+            ...prev,
+            integrityStatus: isOk ? 'ok' : 'warning'
+          }));
+          setAlertDialog({
+            isOpen: true,
+            title: 'Hasil Pemeriksaan Integritas',
+            message: isOk 
+              ? 'INTEGRITAS OK: Seluruh record database memiliki berkas lampiran PDF yang lengkap di server.'
+              : `PERINGATAN INTEGRITAS: Ditemukan ${data.missingCount} record surat yang berkas lampiran PDF-nya hilang di server.`,
+            type: isOk ? 'success' : 'info'
+          });
+        } else {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Periksa',
+            message: 'Gagal memeriksa integritas data dari server.',
+            type: 'error'
+          });
+        }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal terhubung ke server.',
+          type: 'error'
+        });
+      } finally {
+        setLoading('integrity', false);
       }
-    } catch (err) {
-      console.error(err);
     }
-  };
 
-  const handleClearSystem = async () => {
-    if (!confirm('CAUTION: Tindakan ini akan menghapus SELURUH record surat, seluruh file uploads PDF lampiran, dan mereset kredensial admin ke bawaan. Lanjutkan?')) return;
-    try {
-      const res = await fetch('/api/backup/clear', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        showNotification(data.message || 'Sistem berhasil dibersihkan!');
-        setTimeout(() => window.location.reload(), 1500);
+    else if (actionType === 'cleanupOrphans') {
+      setLoading('cleanup', true);
+      try {
+        const res = await fetch('/api/backup/integrity/cleanup', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Pembersihan Berhasil',
+            message: data.message || 'Pembersihan berkas yatim berhasil dilakukan.',
+            type: 'success'
+          });
+          fetchDbStats();
+        } else {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Pembersihan',
+            message: data.message || 'Gagal membersihkan berkas yatim.',
+            type: 'error'
+          });
+        }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal melakukan pembersihan berkas.',
+          type: 'error'
+        });
+      } finally {
+        setLoading('cleanup', false);
       }
-    } catch (err) {
-      console.error(err);
+    }
+
+    else if (actionType === 'reconstructMetadata') {
+      setLoading('reconstruct', true);
+      try {
+        const res = await fetch('/api/backup/integrity/reconstruct', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Rekonstruksi Sukses',
+            message: (data.message || 'Rekonstruksi metadata berhasil dilakukan.') + ' Halaman akan dimuat ulang otomatis dalam 3 detik...',
+            type: 'success',
+            countdown: 3
+          });
+        } else {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Rekonstruksi',
+            message: data.message || 'Gagal merekonstruksi metadata.',
+            type: 'error'
+          });
+        }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal melakukan rekonstruksi.',
+          type: 'error'
+        });
+      } finally {
+        setLoading('reconstruct', false);
+      }
+    }
+
+    else if (actionType === 'clearSystem') {
+      setLoading('clear', true);
+      try {
+        const res = await fetch('/api/backup/clear', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Sistem Dibersihkan',
+            message: (data.message || 'Sistem berhasil dibersihkan!') + ' Halaman akan dimuat ulang otomatis dalam 3 detik...',
+            type: 'success',
+            countdown: 3
+          });
+        } else {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Reset',
+            message: data.message || 'Gagal mereset sistem.',
+            type: 'error'
+          });
+        }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal mereset sistem.',
+          type: 'error'
+        });
+      } finally {
+        setLoading('clear', false);
+      }
+    }
+
+    else if (actionType === 'deleteBackup') {
+      const filename = extraData;
+      setLoading(`delete_${filename}`, true);
+      try {
+        const res = await fetch(`/api/backup/delete/${filename}`, { method: 'DELETE' });
+        if (res.ok) {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Cadangan Dihapus',
+            message: 'Berkas cadangan berhasil dihapus secara permanen.',
+            type: 'success'
+          });
+          fetchBackups();
+          fetchDbStats();
+        } else {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Hapus',
+            message: 'Gagal menghapus berkas cadangan dari server.',
+            type: 'error'
+          });
+        }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal menghapus berkas cadangan.',
+          type: 'error'
+        });
+      } finally {
+        setLoading(`delete_${filename}`, false);
+      }
+    }
+
+    else if (actionType === 'restoreBackup') {
+      const filename = extraData;
+      setLoading(`restore_${filename}`, true);
+      try {
+        const res = await fetch('/api/backup/restore-local', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Sistem Dipulihkan',
+            message: (data.message || 'Sistem berhasil dipulihkan dari cadangan lokal!') + ' Halaman akan dimuat ulang otomatis dalam 3 detik...',
+            type: 'success',
+            countdown: 3
+          });
+        } else {
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Pemulihan',
+            message: data.message || 'Gagal memulihkan sistem.',
+            type: 'error'
+          });
+        }
+      } catch (err: any) {
+        setAlertDialog({
+          isOpen: true,
+          title: 'Kesalahan Sistem',
+          message: err.message || 'Gagal memulihkan sistem.',
+          type: 'error'
+        });
+      } finally {
+        setLoading(`restore_${filename}`, false);
+      }
     }
   };
 
@@ -363,6 +647,7 @@ export default function Settings({
     if (!file) return;
 
     setBackupsLoading(true);
+    setActiveLoading(prev => ({ ...prev, import: true }));
     try {
       if (file.name.endsWith('.zip')) {
         const buffer = await file.arrayBuffer();
@@ -373,10 +658,20 @@ export default function Settings({
         });
         const data = await res.json();
         if (res.ok) {
-          showNotification(data.message || 'Sistem berhasil dipulihkan dari berkas ZIP cadangan!');
-          setTimeout(() => window.location.reload(), 1500);
+          setAlertDialog({
+            isOpen: true,
+            title: 'Sistem Dipulihkan',
+            message: (data.message || 'Sistem berhasil dipulihkan dari berkas ZIP cadangan!') + ' Halaman akan dimuat ulang otomatis dalam 3 detik...',
+            type: 'success',
+            countdown: 3
+          });
         } else {
-          showNotification(data.message || 'Gagal memulihkan dari ZIP.', 'error');
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Pemulihan',
+            message: data.message || 'Gagal memulihkan dari ZIP.',
+            type: 'error'
+          });
         }
       } else if (file.name.endsWith('.json')) {
         const text = await file.text();
@@ -384,8 +679,12 @@ export default function Settings({
         try {
           dbData = JSON.parse(text);
         } catch {
-          showNotification('File backup JSON tidak valid.', 'error');
-          setBackupsLoading(false);
+          setAlertDialog({
+            isOpen: true,
+            title: 'Berkas Tidak Valid',
+            message: 'File backup JSON tidak valid.',
+            type: 'error'
+          });
           return;
         }
 
@@ -396,24 +695,60 @@ export default function Settings({
         });
         const data = await res.json();
         if (res.ok) {
-          showNotification('Database berhasil dipulihkan dari cadangan JSON!');
-          setTimeout(() => window.location.reload(), 1500);
+          setAlertDialog({
+            isOpen: true,
+            title: 'Sistem Dipulihkan',
+            message: 'Database berhasil dipulihkan dari cadangan JSON! Halaman akan dimuat ulang otomatis dalam 3 detik...',
+            type: 'success',
+            countdown: 3
+          });
         } else {
-          showNotification(data.error || 'Gagal memulihkan dari JSON.', 'error');
+          setAlertDialog({
+            isOpen: true,
+            title: 'Gagal Pemulihan',
+            message: data.error || 'Gagal memulihkan dari JSON.',
+            type: 'error'
+          });
         }
       } else {
-        showNotification('Format berkas tidak didukung. Wajib format .json atau .zip.', 'error');
+        setAlertDialog({
+          isOpen: true,
+          title: 'Format Tidak Didukung',
+          message: 'Format berkas tidak didukung. Wajib format .json atau .zip.',
+          type: 'error'
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      showNotification('Terjadi kesalahan koneksi saat memulihkan database.', 'error');
+      setAlertDialog({
+        isOpen: true,
+        title: 'Kesalahan Sistem',
+        message: err.message || 'Terjadi kesalahan koneksi saat memulihkan database.',
+        type: 'error'
+      });
     } finally {
       setBackupsLoading(false);
+      setActiveLoading(prev => ({ ...prev, import: false }));
     }
   };
 
-  const handleExportJson = () => {
-    window.open('/api/backup/export-zip', '_blank');
+  const handleAddSuggestion = () => {
+    const trimmed = newSuggestion.trim();
+    if (!trimmed) {
+      setSuggestionError('Teks saran tidak boleh kosong.');
+      return;
+    }
+    if (penomoranSuggestions.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      setSuggestionError('Saran penomoran sudah terdaftar.');
+      return;
+    }
+    setPenomoranSuggestions([...penomoranSuggestions, trimmed]);
+    setNewSuggestion('');
+    setSuggestionError('');
+  };
+
+  const handleRemoveSuggestion = (val: string) => {
+    setPenomoranSuggestions(penomoranSuggestions.filter(s => s !== val));
   };
 
   const handleSave = () => {
@@ -435,7 +770,8 @@ export default function Settings({
       columnProfiles,
       activeProfileId,
       autoRenamePdf,
-      pdfRenameCols
+      pdfRenameCols,
+      penomoranSuggestions
     };
 
     onSaveConfig(updatedConfig);
@@ -1040,6 +1376,83 @@ export default function Settings({
           </div>
         </div>
 
+        {/* Saran Penomoran (Double Bezel) */}
+        <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
+          <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col gap-6">
+            <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--md-sys-color-on-surface)] font-display">
+              <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">format_list_bulleted</span>
+              Daftar Saran Penomoran
+            </h2>
+            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] -mt-2">
+              Kelola opsi rekomendasi saran pengisian otomatis untuk kolom Penomoran pada form Agenda Surat.
+            </p>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-3 items-start">
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <md-filled-text-field
+                    label="Tambah Saran Baru"
+                    value={newSuggestion}
+                    onInput={(e: any) => {
+                      setNewSuggestion(e.target.value);
+                      if (suggestionError) setSuggestionError('');
+                    }}
+                    onKeyDown={(e: any) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSuggestion();
+                      }
+                    }}
+                    error={!!suggestionError ? true : undefined}
+                    errorText={suggestionError}
+                    className="w-full"
+                  ></md-filled-text-field>
+                </div>
+                <md-filled-button
+                  type="button"
+                  onClick={handleAddSuggestion}
+                  className="h-[56px] flex items-center justify-center cursor-pointer animate-scale"
+                  style={{ '--md-filled-button-container-shape': '12px' }}
+                >
+                  <span className="material-symbols-outlined mr-1">add</span>
+                  Tambah
+                </md-filled-button>
+              </div>
+
+              {penomoranSuggestions.length > 0 ? (
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">
+                    Saran Aktif saat ini ({penomoranSuggestions.length})
+                  </label>
+                  <div className="flex flex-wrap gap-2 p-4 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl">
+                    {penomoranSuggestions.map(sug => (
+                      <div
+                        key={sug}
+                        className="flex items-center gap-1.5 bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-full px-3.5 py-1.5 text-xs transition-premium hover:bg-[var(--md-sys-color-surface-container)]"
+                      >
+                        <span className="font-medium">{sug}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSuggestion(sug)}
+                          className="material-symbols-outlined text-[14px] leading-none text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-error)] cursor-pointer select-none active:scale-95 transition-colors duration-300"
+                          title="Hapus saran ini"
+                        >
+                          close
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 border border-dashed border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl text-[var(--md-sys-color-on-surface-variant)]/60">
+                  <span className="material-symbols-outlined text-2xl mb-1">list</span>
+                  <span className="text-xs">Belum ada saran penomoran.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Backup & Pemulihan (Double Bezel) */}
         <div className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[2.5rem] p-1.5 transition-premium shadow-sm">
           <div className="bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[calc(2.5rem-0.375rem)] p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col gap-6">
@@ -1047,6 +1460,48 @@ export default function Settings({
               <span className="material-symbols-outlined text-[var(--md-sys-color-primary)] font-fill">backup</span>
               Sistem Database Backup & Pemulihan
             </h2>
+
+            {/* Database Status Summary Card */}
+            <div className="bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-3xl p-5 flex flex-col gap-4">
+              <div className="flex items-center gap-2 text-[var(--md-sys-color-primary)] font-bold text-xs uppercase tracking-wider">
+                <span className="material-symbols-outlined text-sm font-fill">analytics</span>
+                Ringkasan Status Database
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-[var(--md-sys-color-surface-container-low)] p-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)]/40 text-center">
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider font-bold">Total Agenda</p>
+                  <p className="text-lg font-black text-[var(--md-sys-color-on-surface)] mt-1 font-mono">{dbStats.totalMails}</p>
+                </div>
+                <div className="bg-[var(--md-sys-color-surface-container-low)] p-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)]/40 text-center">
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider font-bold">Berkas PDF</p>
+                  <p className="text-lg font-black text-[var(--md-sys-color-on-surface)] mt-1 font-mono">{dbStats.totalPdfs}</p>
+                </div>
+                <div className="bg-[var(--md-sys-color-surface-container-low)] p-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)]/40 text-center">
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider font-bold">Ukuran Uploads</p>
+                  <p className="text-lg font-black text-[var(--md-sys-color-on-surface)] mt-1 font-mono">{dbStats.totalSizeMb} MB</p>
+                </div>
+                <div className="bg-[var(--md-sys-color-surface-container-low)] p-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)]/40 text-center">
+                  <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider font-bold">Integritas Berkas</p>
+                  <div className="mt-1 flex items-center justify-center gap-1.5">
+                    {dbStats.integrityStatus === 'ok' ? (
+                      <span className="text-emerald-500 flex items-center gap-1 text-xs font-bold">
+                        <span className="material-symbols-outlined text-sm font-fill">check_circle</span> OK
+                      </span>
+                    ) : dbStats.integrityStatus === 'warning' ? (
+                      <span className="text-amber-500 flex items-center gap-1 text-xs font-bold">
+                        <span className="material-symbols-outlined text-sm">warning</span> Peringatan
+                      </span>
+                    ) : (
+                      <span className="text-[var(--md-sys-color-on-surface-variant)]/60 text-xs font-bold">Belum Dicek</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-[var(--md-sys-color-on-surface-variant)] border-t border-[var(--md-sys-color-outline-variant)]/40 pt-2 px-1">
+                <span>Terakhir Backup Otomatis: <strong className="font-mono">{dbStats.lastBackup}</strong></span>
+                <span className="text-emerald-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Offline-Ready & Portabel</span>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <md-filled-text-field
@@ -1070,61 +1525,194 @@ export default function Settings({
 
             {/* Grouped Actions (Utama, Diagnostik, Bahaya) */}
             <div className="flex flex-col gap-6 bg-[var(--md-sys-color-surface-container-low)] p-6 rounded-2xl border border-[var(--md-sys-color-outline-variant)]">
+              {/* Tindakan Utama */}
               <div className="flex flex-col gap-3">
                 <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Tindakan Utama</span>
-                <div className="flex flex-wrap gap-3">
-                  <md-filled-button
-                    onClick={handleCreateBackup}
-                    disabled={backupsLoading ? true : undefined}
-                    className="w-full sm:w-auto"
-                  >
-                    <span slot="icon" className="material-symbols-outlined">cloud_upload</span>
-                    Buat Cadangan Baru
-                  </md-filled-button>
-                  <md-outlined-button onClick={handleExportJson} className="w-full sm:w-auto">
-                    <span slot="icon" className="material-symbols-outlined">download</span>
-                    Ekspor File Data
-                  </md-outlined-button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Buat Cadangan */}
+                  <div className="flex flex-col justify-between p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-base">cloud_upload</span>
+                        Buat Cadangan Baru
+                      </h4>
+                      <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed mt-1">
+                        Membuat berkas arsip database baru di server (mencakup PDF jika dicentang).
+                      </p>
+                    </div>
+                    <md-filled-button
+                      onClick={() => triggerAction('createBackup')}
+                      disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                      className="w-full"
+                    >
+                      {activeLoading.create ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                          Memproses...
+                        </span>
+                      ) : (
+                        'Cadangkan Sekarang'
+                      )}
+                    </md-filled-button>
+                  </div>
+
+                  {/* Ekspor */}
+                  <div className="flex flex-col justify-between p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-base">download</span>
+                        Ekspor File Data
+                      </h4>
+                      <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed mt-1">
+                        Mengompresi dan mengunduh seluruh data persuratan saat ini ke perangkat lokal Anda.
+                      </p>
+                    </div>
+                    <md-outlined-button
+                      onClick={() => triggerAction('exportData')}
+                      disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                      className="w-full"
+                    >
+                      {activeLoading.export ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                          Mengekspor...
+                        </span>
+                      ) : (
+                        'Ekspor Berkas ZIP'
+                      )}
+                    </md-outlined-button>
+                  </div>
                 </div>
               </div>
 
+              {/* Utilitas & Diagnostik */}
               <div className="flex flex-col gap-3 border-t border-[var(--md-sys-color-outline-variant)] pt-4">
                 <span className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider ml-1">Utilitas & Diagnostik</span>
-                <div className="flex flex-wrap gap-3">
-                  <md-outlined-button onClick={handleCheckIntegrity} className="w-full sm:w-auto">
-                    <span slot="icon" className="material-symbols-outlined font-fill">verified_user</span>
-                    Periksa Integritas
-                  </md-outlined-button>
-                  <md-outlined-button onClick={handleCleanupOrphans} className="w-full sm:w-auto">
-                    <span slot="icon" className="material-symbols-outlined">clean_hands</span>
-                    Bersihkan File Yatim
-                  </md-outlined-button>
-                  <md-outlined-button onClick={handleReconstructMetadata} className="w-full sm:w-auto">
-                    <span slot="icon" className="material-symbols-outlined">construction</span>
-                    Rekonstruksi Metadata
-                  </md-outlined-button>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {/* Periksa Integritas */}
+                  <div className="flex flex-col justify-between p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl gap-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm font-fill text-[var(--md-sys-color-primary)]">verified_user</span>
+                        Periksa Integritas
+                      </h4>
+                      <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed mt-1">
+                        Memverifikasi kelengkapan seluruh berkas PDF lampiran fisik pada server.
+                      </p>
+                    </div>
+                    <md-outlined-button
+                      onClick={() => triggerAction('checkIntegrity')}
+                      disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                      className="w-full"
+                    >
+                      {activeLoading.integrity ? (
+                        <span className="flex items-center justify-center gap-1">
+                          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                        </span>
+                      ) : (
+                        'Periksa'
+                      )}
+                    </md-outlined-button>
+                  </div>
+
+                  {/* Bersihkan File Yatim */}
+                  <div className="flex flex-col justify-between p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl gap-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-[var(--md-sys-color-primary)]">clean_hands</span>
+                        Bersihkan File Yatim
+                      </h4>
+                      <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed mt-1">
+                        Menghapus PDF uploads di server yang tidak terhubung ke record database mana pun.
+                      </p>
+                    </div>
+                    <md-outlined-button
+                      onClick={() => triggerAction('cleanupOrphans')}
+                      disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                      className="w-full"
+                    >
+                      {activeLoading.cleanup ? (
+                        <span className="flex items-center justify-center gap-1">
+                          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                        </span>
+                      ) : (
+                        'Bersihkan'
+                      )}
+                    </md-outlined-button>
+                  </div>
+
+                  {/* Rekonstruksi Metadata */}
+                  <div className="flex flex-col justify-between p-4 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl gap-3">
+                    <div>
+                      <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-[var(--md-sys-color-primary)]">construction</span>
+                        Rekonstruksi Metadata
+                      </h4>
+                      <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed mt-1">
+                        Memulihkan record surat baru secara otomatis berdasarkan file PDF yatim di server.
+                      </p>
+                    </div>
+                    <md-outlined-button
+                      onClick={() => triggerAction('reconstructMetadata')}
+                      disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                      className="w-full"
+                    >
+                      {activeLoading.reconstruct ? (
+                        <span className="flex items-center justify-center gap-1">
+                          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                        </span>
+                      ) : (
+                        'Rekonstruksi'
+                      )}
+                    </md-outlined-button>
+                  </div>
                 </div>
               </div>
 
+              {/* Zona Bahaya */}
               <div className="flex flex-col gap-3 border-t border-[var(--md-sys-color-outline-variant)] pt-4">
                 <span className="text-[10px] font-bold text-[var(--md-sys-color-error)] uppercase tracking-wider ml-1">Zona Bahaya</span>
-                <div className="flex flex-wrap gap-3">
-                  <md-outlined-button
-                    onClick={handleClearSystem}
-                    className="w-full sm:w-auto"
-                    style={{ '--md-outlined-button-outline-color': 'var(--md-sys-color-error)', '--md-outlined-button-label-text-color': 'var(--md-sys-color-error)' } as any}
-                  >
-                    <span slot="icon" className="material-symbols-outlined">delete_forever</span>
-                    Hapus Seluruh Data
-                  </md-outlined-button>
+                <div className="flex flex-col p-5 bg-[var(--md-sys-color-error-container)]/10 rounded-2xl border border-[var(--md-sys-color-error)]/30 gap-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-[var(--md-sys-color-error)] flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-base">warning</span>
+                      Hapus Seluruh Data Sistem
+                    </h4>
+                    <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed mt-1.5">
+                      PENTING: Tindakan destruktif ini akan menghapus seluruh data agenda surat, seluruh file uploads PDF di server, dan mereset kredensial admin ke bawaan.
+                    </p>
+                  </div>
+                  <div className="flex justify-start">
+                    <md-filled-button
+                      onClick={() => triggerAction('clearSystem')}
+                      disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                      style={{ '--md-filled-button-container-color': 'var(--md-sys-color-error)', '--md-filled-button-label-text-color': 'var(--md-sys-color-on-error)' }}
+                      className="w-full sm:w-auto"
+                    >
+                      {activeLoading.clear ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                          Menghapus...
+                        </span>
+                      ) : (
+                        'Hapus Seluruh Data'
+                      )}
+                    </md-filled-button>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Import drag and drop / upload zone */}
             <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-6 text-center cursor-pointer bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)]/50 hover:border-[var(--md-sys-color-primary)] transition-premium flex flex-col items-center justify-center gap-1.5"
+              onClick={() => {
+                if (!Object.values(activeLoading).some(Boolean)) {
+                  fileInputRef.current?.click();
+                }
+              }}
+              className={`border-2 border-dashed border-[var(--md-sys-color-outline-variant)] rounded-[2rem] p-6 text-center cursor-pointer bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-highest)]/50 hover:border-[var(--md-sys-color-primary)] transition-premium flex flex-col items-center justify-center gap-1.5 ${
+                Object.values(activeLoading).some(Boolean) ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
+              }`}
             >
               <span className="material-symbols-outlined text-3xl text-[var(--md-sys-color-primary)] font-fill">upload_file</span>
               <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">Unggah berkas JSON atau ZIP ekspor Anda</p>
@@ -1135,20 +1723,22 @@ export default function Settings({
                 onChange={handleImportFileChange}
                 accept=".json,.zip"
                 className="hidden"
+                disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
               />
             </div>
 
             {/* Backups List Table */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                 <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">DAFTAR CADANGAN DI SERVER</h4>
-                 <button
-                   onClick={fetchBackups}
-                   className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 hover:underline flex items-center gap-1 cursor-pointer transition-premium"
-                 >
-                   <span className="material-symbols-outlined text-sm">sync</span>
-                   Segarkan
-                 </button>
+                <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest ml-1">DAFTAR CADANGAN DI SERVER</h4>
+                <button
+                  onClick={fetchBackups}
+                  disabled={Object.values(activeLoading).some(Boolean)}
+                  className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:text-[var(--md-sys-color-primary)]/80 hover:underline flex items-center gap-1 cursor-pointer transition-premium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-sm">sync</span>
+                  Segarkan
+                </button>
               </div>
 
               <div className="border border-[var(--md-sys-color-outline-variant)] rounded-2xl overflow-x-auto bg-[var(--md-sys-color-surface-container-low)]">
@@ -1176,24 +1766,41 @@ export default function Settings({
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => handleRestoreBackup(b.filename)}
-                              className="px-2.5 py-1 bg-[var(--md-sys-color-primary-container)] hover:bg-[var(--md-sys-color-primary-container)]/80 text-[var(--md-sys-color-on-primary-container)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer"
+                              onClick={() => triggerAction('restoreBackup', b.filename)}
+                              disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                              className="px-2.5 py-1 bg-[var(--md-sys-color-primary-container)] hover:bg-[var(--md-sys-color-primary-container)]/80 text-[var(--md-sys-color-on-primary-container)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              Pulihkan
+                              {activeLoading[`restore_${b.filename}`] ? (
+                                <span className="flex items-center gap-1">
+                                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                                  Proses
+                                </span>
+                              ) : (
+                                'Pulihkan'
+                              )}
                             </button>
                             <a
                               href={`/api/backup/download/${b.filename}`}
-                              className="px-2.5 py-1 bg-[var(--md-sys-color-surface-container-high)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] rounded-lg font-bold transition-premium active:scale-95 inline-flex items-center gap-0.5"
+                              className={`px-2.5 py-1 bg-[var(--md-sys-color-surface-container-high)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] rounded-lg font-bold transition-premium active:scale-95 inline-flex items-center gap-0.5 ${
+                                Object.values(activeLoading).some(Boolean) ? 'opacity-50 pointer-events-none' : ''
+                              }`}
                               title="Unduh berkas backup"
                             >
                               <span className="material-symbols-outlined text-xs">download</span>
                             </a>
                             <button
-                              onClick={() => handleDeleteBackup(b.filename)}
-                              className="px-2.5 py-1 bg-[var(--md-sys-color-error-container)]/40 hover:bg-[var(--md-sys-color-error-container)]/80 text-[var(--md-sys-color-error)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer"
+                              onClick={() => triggerAction('deleteBackup', b.filename)}
+                              disabled={Object.values(activeLoading).some(Boolean) ? true : undefined}
+                              className="px-2.5 py-1 bg-[var(--md-sys-color-error-container)]/40 hover:bg-[var(--md-sys-color-error-container)]/80 text-[var(--md-sys-color-error)] rounded-lg font-bold transition-premium active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Hapus backup dari server"
                             >
-                              <span className="material-symbols-outlined text-xs">delete</span>
+                              {activeLoading[`delete_${b.filename}`] ? (
+                                <span className="flex items-center justify-center">
+                                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                                </span>
+                              ) : (
+                                <span className="material-symbols-outlined text-xs">delete</span>
+                              )}
                             </button>
                           </div>
                         </td>
@@ -1581,6 +2188,124 @@ export default function Settings({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Custom Confirmation Dialog */}
+      <AnimatePresence>
+        {confirmDialog.isOpen && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            {/* Dialog Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="relative w-full max-w-md bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[2rem] border border-[var(--md-sys-color-outline-variant)] shadow-2xl overflow-hidden p-6 sm:p-8 flex flex-col gap-4"
+            >
+              <div className="flex items-center gap-3">
+                <span className={`material-symbols-outlined text-2xl ${confirmDialog.isDanger ? 'text-[var(--md-sys-color-error)] animate-pulse' : 'text-[var(--md-sys-color-primary)]'}`}>
+                  {confirmDialog.isDanger ? 'warning' : 'help'}
+                </span>
+                <h3 className="text-base font-bold font-display">{confirmDialog.title}</h3>
+              </div>
+              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                {confirmDialog.message}
+              </p>
+              <div className="flex justify-end gap-2.5 mt-2">
+                <md-text-button onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}>
+                  Batal
+                </md-text-button>
+                <md-filled-button
+                  onClick={handleConfirmAction}
+                  style={confirmDialog.isDanger ? { '--md-filled-button-container-color': 'var(--md-sys-color-error)', '--md-filled-button-label-text-color': 'var(--md-sys-color-on-error)' } : undefined}
+                >
+                  Lanjutkan
+                </md-filled-button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Alert & Progress Dialog */}
+      <AnimatePresence>
+        {alertDialog.isOpen && (
+          <div className="fixed inset-0 z-[1001] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            {/* Dialog Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 15 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className="relative w-full max-w-sm bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] rounded-[2rem] border border-[var(--md-sys-color-outline-variant)] shadow-2xl overflow-hidden p-6 sm:p-8 flex flex-col gap-4 text-center items-center"
+            >
+              {/* Spinner / Progress circle */}
+              {alertDialog.countdown !== undefined && alertDialog.countdown > 0 ? (
+                <div className="w-16 h-16 relative flex items-center justify-center mb-1">
+                  {/* Outer circle */}
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      className="stroke-[var(--md-sys-color-outline-variant)]/30 fill-none"
+                      strokeWidth="4"
+                    />
+                    <circle
+                      cx="32"
+                      cy="32"
+                      r="28"
+                      className="stroke-[var(--md-sys-color-primary)] fill-none transition-all duration-1000 ease-linear animate-pulse"
+                      strokeWidth="4"
+                      strokeDasharray={175.9}
+                      strokeDashoffset={175.9 * (1 - alertDialog.countdown / 3)}
+                    />
+                  </svg>
+                  <span className="absolute text-lg font-bold font-mono">{alertDialog.countdown}</span>
+                </div>
+              ) : (
+                <span className={`material-symbols-outlined text-4xl mb-1 ${
+                  alertDialog.type === 'error' ? 'text-[var(--md-sys-color-error)]' :
+                  alertDialog.type === 'success' ? 'text-emerald-500' : 'text-[var(--md-sys-color-primary)]'
+                }`}>
+                  {alertDialog.type === 'error' ? 'error' :
+                   alertDialog.type === 'success' ? 'check_circle' : 'info'}
+                </span>
+              )}
+
+              <h3 className="text-base font-bold font-display">{alertDialog.title}</h3>
+              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                {alertDialog.message}
+              </p>
+
+              {/* Only show Close button if there is no auto-countdown running */}
+              {alertDialog.countdown === undefined && (
+                <md-filled-button
+                  onClick={() => setAlertDialog(prev => ({ ...prev, isOpen: false }))}
+                  className="mt-2 min-w-[80px]"
+                >
+                  Tutup
+                </md-filled-button>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+

@@ -430,3 +430,35 @@ md-filled-button::part(focus-ring), md-outlined-button::part(focus-ring) {
 .animate-premium-in {
   animation: premiumFadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
+
+/* Shake animation for validation errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Modal Animations */
+@keyframes modalBackdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalContentSpringIn {
+  from { opacity: 0; transform: scale(0.93) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.animate-backdrop-in {
+  animation: modalBackdropFadeIn 0.25s cubic-bezier(0.32, 0.94, 0.6, 1) forwards;
+}
+
+.animate-modal-in {
+  animation: modalContentSpringIn 0.35s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+}
+
+

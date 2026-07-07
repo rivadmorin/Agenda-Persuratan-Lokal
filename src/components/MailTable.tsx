@@ -10,9 +10,11 @@ interface MailTableProps {
   onDelete: (id: string) => void;
   onViewMail: (mail: MailRecord) => void;
   onExportExcel: () => void;
+  onOpenImportModal: () => void;
   onBatchDownload: (ids: string[]) => void;
   onPrintReceipt: (ids: string[]) => void;
   isBatchLoading?: boolean;
+  isImporting?: boolean;
   onRefresh: () => void;
   onError?: (title: string, message: string) => void;
 }
@@ -26,10 +28,12 @@ export default function MailTable(props: MailTableProps) {
     onDelete,
     onViewMail,
     onExportExcel,
+    onOpenImportModal,
     onBatchDownload,
     onPrintReceipt,
     onRefresh,
-    isBatchLoading
+    isBatchLoading,
+    isImporting
   } = props;
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -202,11 +206,27 @@ export default function MailTable(props: MailTableProps) {
                </md-outlined-button>
              </>
           )}
-          <md-outlined-button onClick={onExportExcel} className="w-full sm:w-auto">
-            <span slot="icon" className="material-symbols-outlined">description</span>
-            Excel
+          <md-outlined-button 
+            disabled={isImporting || isBatchLoading ? true : undefined} 
+            onClick={onExportExcel} 
+            className="w-full sm:w-auto"
+          >
+            <span slot="icon" className="material-symbols-outlined font-fill">description</span>
+            Ekspor Excel
           </md-outlined-button>
-          <md-filled-button onClick={onAdd} className="w-full sm:w-auto">
+          <md-outlined-button 
+            disabled={isImporting || isBatchLoading ? true : undefined} 
+            onClick={onOpenImportModal} 
+            className="w-full sm:w-auto"
+          >
+            <span slot="icon" className="material-symbols-outlined font-fill">upload_file</span>
+            Impor Excel
+          </md-outlined-button>
+          <md-filled-button 
+            disabled={isImporting || isBatchLoading ? true : undefined} 
+            onClick={onAdd} 
+            className="w-full sm:w-auto"
+          >
             <span slot="icon" className="material-symbols-outlined">add</span>
             Tambah Surat
           </md-filled-button>

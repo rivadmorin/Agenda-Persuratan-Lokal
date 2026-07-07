@@ -166,6 +166,7 @@ const defaultDbConfig = {
   backupRetentionDays: 7,
   autoRenamePdf: true,
   pdfRenameCols: ['tanggalTerima', 'noSurat', 'suratDari'],
+  penomoranSuggestions: ['ROJEMENGAR 1', 'ROJEMENGAR 2', 'ROJEMENGAR 3', 'WAAS 1', 'WAAS 2', 'WAAS 3'],
   columns: [
     { key: 'noUrut', label: 'NOMOR', type: 'text', required: true, order: 1 },
     { key: 'tanggalTerima', label: 'TANGGAL TERIMA', type: 'date', required: true, order: 2 },
@@ -839,22 +840,213 @@ app.get('/api/excel/export', async (req, res) => {
   } catch (err) { res.status(500).send(); }
 });
 
+function normalizeImportedDate(val: any): string {
+  if (!val) return '';
+  
+  if (val instanceof Date) {
+    const day = String(val.getDate()).padStart(2, '0');
+    const month = String(val.getMonth() + 1).padStart(2, '0');
+    const year = val.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  
+  if (typeof val === 'number') {
+    try {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(date.getTime())) {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+    } catch {}
+  }
+  
+  const str = String(val).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+    return str;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const parts = str.split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+    const parts = str.split('-');
+    return `${parts[0]}/${parts[1]}/${parts[2]}`;
+  }
+  
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+  } catch {}
+  
+  return str;
+}
+
 app.post('/api/excel/import', express.raw({ type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', limit: '10mb' }), async (req, res) => {
+  const conflictMode = req.query.conflictMode || 'insert'; // 'insert' | 'skip' | 'merge'
+  
   try {
     const wb = XLSX.read(req.body, { type: 'buffer' });
-    const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    const sheetName = wb.SheetNames[0];
+    if (!sheetName) {
+      return res.status(400).json({ success: false, error: 'Berkas Excel tidak memiliki sheet yang valid.' });
+    }
+    
+    const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName]);
+    if (rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Berkas Excel kosong atau tidak memiliki baris data.' });
+    }
+    
     const db = await readDb();
     const cols = db.config.columns;
-    for (const row of rows) {
-      const meta: any = {};
-      cols.forEach((c: any) => {
-        const key = Object.keys(row).find(k => k.toLowerCase().includes(c.label.toLowerCase()) || k.toLowerCase().includes(c.key.toLowerCase()));
-        if (key) meta[c.key] = row[key];
+    
+    // Check if there is at least one matching column header
+    const firstRow = rows[0];
+    const hasAnyMatchingCol = cols.some((c: any) => {
+      return Object.keys(firstRow).some(k => 
+        k.toLowerCase().includes(c.label.toLowerCase()) || 
+        k.toLowerCase().includes(c.key.toLowerCase())
+      );
+    });
+    
+    if (!hasAnyMatchingCol) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Format header Excel tidak sesuai. Tidak ditemukan kolom yang cocok dengan konfigurasi aplikasi.' 
       });
-      await pool.query('INSERT INTO mails (id, metadata, version_id) VALUES ($1, $2, $3)', [`mail_import_${Date.now()}_${Math.random()}`, meta, 1]);
     }
-    res.json({ success: true });
-  } catch (err) { res.status(500).send(); }
+
+    // Build existing noSurat Map for duplicate checking in O(N)
+    const existingMails = db.mails;
+    const mailMap = new Map<string, any>();
+    existingMails.forEach((m: any) => {
+      const noSurat = m.metadata.noSurat;
+      if (noSurat) {
+        mailMap.set(String(noSurat).trim().toLowerCase(), m);
+      }
+    });
+
+    let importedCount = 0;
+    let mergedCount = 0;
+    let skippedCount = 0;
+
+    // Start SQL Transaction
+    await pool.query('BEGIN');
+
+    try {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowIndex = i + 2; // Offset for 1-based index and header row
+        const meta: any = {};
+
+        cols.forEach((c: any) => {
+          const key = Object.keys(row).find(k => 
+            k.toLowerCase().includes(c.label.toLowerCase()) || 
+            k.toLowerCase().includes(c.key.toLowerCase())
+          );
+          
+          let val = key !== undefined ? row[key] : undefined;
+          
+          if (typeof val === 'string') {
+            val = val.trim();
+          }
+
+          if (c.required && (val === undefined || val === null || val === '')) {
+            throw new Error(`Baris ${rowIndex}: Kolom wajib '${c.label}' tidak boleh kosong.`);
+          }
+
+          if (val !== undefined && val !== null && val !== '') {
+            if (c.type === 'date') {
+              const normalizedDate = normalizeImportedDate(val);
+              if (!/^\d{2}\/\d{2}\/\d{4}$/.test(normalizedDate)) {
+                throw new Error(`Baris ${rowIndex}: Format tanggal pada kolom '${c.label}' tidak valid ('${val}'). Harus berformat DD/MM/YYYY.`);
+              }
+              const [day, month, year] = normalizedDate.split('/').map(Number);
+              const d = new Date(year, month - 1, day);
+              if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
+                throw new Error(`Baris ${rowIndex}: Nilai tanggal pada kolom '${c.label}' tidak valid ('${val}').`);
+              }
+              val = normalizedDate;
+            } else if (c.type === 'number') {
+              const num = Number(val);
+              if (isNaN(num)) {
+                throw new Error(`Baris ${rowIndex}: Kolom '${c.label}' harus berupa angka.`);
+              }
+              val = num;
+            }
+            meta[c.key] = val;
+          }
+        });
+
+        if (!meta.type) {
+          meta.type = 'Masuk';
+        }
+
+        const noSuratVal = meta.noSurat ? String(meta.noSurat).trim().toLowerCase() : '';
+        const existing = noSuratVal ? mailMap.get(noSuratVal) : null;
+
+        if (existing) {
+          if (conflictMode === 'skip') {
+            skippedCount++;
+            continue;
+          } else if (conflictMode === 'merge') {
+            const mergedMetadata = {
+              ...existing.metadata,
+              ...meta
+            };
+            
+            await pool.query(
+              'UPDATE mails SET metadata = $1, version_id = version_id + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+              [mergedMetadata, existing.id]
+            );
+            
+            if (existing.pdfPath) {
+              saveSidecarMeta({
+                id: existing.id,
+                metadata: mergedMetadata,
+                pdfPath: existing.pdfPath,
+                createdAt: existing.createdAt
+              });
+            }
+            
+            mergedCount++;
+            continue;
+          }
+        }
+
+        const newId = `mail_import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await pool.query(
+          'INSERT INTO mails (id, metadata, version_id) VALUES ($1, $2, $3)',
+          [newId, meta, 1]
+        );
+        importedCount++;
+      }
+
+      await pool.query('COMMIT');
+      
+      res.json({
+        success: true,
+        summary: {
+          imported: importedCount,
+          merged: mergedCount,
+          skipped: skippedCount,
+          total: rows.length
+        }
+      });
+      
+    } catch (loopErr: any) {
+      await pool.query('ROLLBACK');
+      res.status(400).json({ success: false, error: loopErr.message });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: 'Terjadi kesalahan sistem saat memproses berkas Excel.' });
+  }
 });
 
 // Backup & Recovery APIs
@@ -1159,6 +1351,58 @@ app.get('/api/backup/integrity', async (req, res) => {
     res.json({ success: true, missingCount: missing.length, missing });
   } catch (err) { res.status(500).send(); }
 });
+
+app.get('/api/backup/stats', async (req, res) => {
+  try {
+    const db = await readDb();
+    const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+    
+    let pdfCount = 0;
+    let totalSizeBytes = 0;
+    
+    function scanDir(dir: string) {
+      if (!fs.existsSync(dir)) return;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scanDir(fullPath);
+        } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.pdf')) {
+          pdfCount++;
+          const stat = fs.statSync(fullPath);
+          totalSizeBytes += stat.size;
+        }
+      }
+    }
+    
+    scanDir(uploadsDir);
+    
+    let lastBackupTime = '-';
+    const backupsDir = path.join(process.cwd(), 'data', 'backups');
+    if (fs.existsSync(backupsDir)) {
+      const files = fs.readdirSync(backupsDir);
+      let newestMtime = 0;
+      for (const file of files) {
+        const stat = fs.statSync(path.join(backupsDir, file));
+        if (stat.mtimeMs > newestMtime) {
+          newestMtime = stat.mtimeMs;
+          lastBackupTime = stat.mtime.toLocaleString('id-ID');
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      totalMails: db.mails ? db.mails.length : 0,
+      totalPdfs: pdfCount,
+      totalSizeMb: parseFloat((totalSizeBytes / (1024 * 1024)).toFixed(2)),
+      lastBackup: lastBackupTime
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal mengambil statistik database.' });
+  }
+});
+
 
 // Files
 app.get('/api/files/*', (req, res) => {

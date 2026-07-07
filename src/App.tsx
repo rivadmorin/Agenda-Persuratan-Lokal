@@ -9,6 +9,7 @@ import Settings from './components/Settings';
 import Login from './components/Login';
 import ConfirmModal from './components/ConfirmModal';
 import ReceiptModal from './components/ReceiptModal';
+import ImportModal from './components/ImportModal';
 import CursorInteraction from './components/CursorInteraction';
 import { MailRecord, AppConfig, User } from './types';
 import { generateM3Theme } from './utils/theme';
@@ -67,6 +68,37 @@ export default function App() {
     isOpen: false,
     mailIds: [],
   });
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleImportExcel = async (file: File, conflictMode: 'insert' | 'skip' | 'merge') => {
+    setIsImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const res = await fetch(`/api/excel/import?conflictMode=${conflictMode}`, {
+        method: 'POST',
+        headers: {
+          ...getHeaders(),
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        },
+        body: buffer
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        fetchMails();
+        return { success: true, summary: data.summary };
+      } else {
+        const err = await res.json().catch(() => ({}));
+        return { success: false, error: err.error || 'Gagal mengimpor data dari Excel.' };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Terjadi kesalahan sistem saat menghubungi server.' };
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   // Initial Load
   useEffect(() => {
@@ -369,11 +401,13 @@ export default function App() {
                   mails={mails}
                   config={config}
                   isBatchLoading={isBatchLoading}
+                  isImporting={isImporting}
                   onAdd={() => { setMailToEdit(null); setDrawerMode('edit'); setIsDrawerOpen(true); }}
                   onEdit={(m) => { setMailToEdit(m); setDrawerMode('edit'); setIsDrawerOpen(true); }}
                   onDelete={handleDeleteMail}
                   onViewMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
                   onExportExcel={() => window.open('/api/excel/export', '_blank')}
+                  onOpenImportModal={() => setIsImportModalOpen(true)}
                   onRefresh={fetchMails}
                   onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
                   onBatchDownload={onBatchDownload}
@@ -403,6 +437,8 @@ export default function App() {
             isOpen={isDrawerOpen}
             onClose={() => setIsDrawerOpen(false)}
             columns={config.columns}
+            mails={mails}
+            penomoranSuggestions={config?.penomoranSuggestions}
             mailToEdit={mailToEdit}
             onSave={handleSaveMail}
             mode={drawerMode}
@@ -441,6 +477,15 @@ export default function App() {
           fetchMails();
         }}
       />
+
+      {config && (
+        <ImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          config={config}
+          onImport={handleImportExcel}
+        />
+      )}
 
       <CursorInteraction />
     </>
