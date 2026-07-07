@@ -319,13 +319,8 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
           <div className="flex flex-col gap-4 overflow-y-auto max-h-[280px] pr-1">
             {recentActivities.map(mail => {
               const isOut = mail.metadata.type === 'Keluar' || mail.metadata.jenisSurat?.toLowerCase().includes('keluar');
-              const iconName = mail.pdfPath ? 'picture_as_pdf' : (isOut ? 'send' : 'mail');
-              const iconColorClass = mail.pdfPath 
-                ? 'bg-rose-100/80 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' 
-                : (isOut 
-                    ? 'bg-teal-100/80 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300' 
-                    : 'bg-indigo-100/80 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'
-                  );
+              const iconName = 'mail';
+              const iconColorClass = 'bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]';
 
               return (
                 <div
