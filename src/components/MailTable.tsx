@@ -304,7 +304,7 @@ export default function MailTable(props: MailTableProps) {
                         aria-label={mail.pdfPath ? "Unduh PDF" : "Tidak ada PDF"}
                         className="btn-action-download"
                       >
-                        <span className="material-symbols-outlined text-[20px]">{mail.pdfPath ? "download" : "download_off"}</span>
+                        <span className="material-symbols-outlined text-[20px]">download</span>
                       </md-icon-button>
                       <md-icon-button
                         onClick={() => onDelete(mail.id)}
