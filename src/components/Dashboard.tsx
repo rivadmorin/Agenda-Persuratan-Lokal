@@ -245,56 +245,81 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
         <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Statistik surat masuk dan log aktivitas sistem terbaru.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-        {/* Reading this as: Premium document archival dashboard for administrative personnel, featuring structural Material 3 design tokens, clean geometric layouts with concentric double-bezel curves, and responsive spring-based hover feedback. */}
-        {[
-          { label: 'Total Agenda', value: stats.total, sub: `${stats.recentCount} dalam 7 hari terakhir`, icon: 'inbox', color: 'teal', tab: 'mails' },
-          { label: 'Dengan Lampiran', value: stats.withPdf, sub: `${stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% memiliki PDF`, icon: 'picture_as_pdf', color: 'indigo', tab: 'mails' },
-          { label: 'Status Disposisi', value: stats.disposedCount, sub: `${stats.disposedPercent}% telah ditindaklanjut`, icon: 'assignment', color: 'green', tab: 'mails' },
-          { label: 'Instansi Teraktif', value: stats.activeSender, sub: stats.activeSenderCount > 0 ? `Mengirim ${stats.activeSenderCount} surat` : 'Belum ada data', icon: 'business', color: 'blue', tab: 'mails' },
-          { label: 'Efisiensi Arsip', value: '100%', sub: 'Penyimpanan lokal terstruktur', icon: 'bolt', color: 'amber', tab: 'dashboard' },
-          { label: 'Waktu & Tanggal', value: formattedTime, sub: `${formattedDay}, ${formattedDate}`, icon: 'schedule', color: 'rose', tab: 'dashboard' },
-        ].map((stat, i) => {
-          const colors = colorClasses[stat.color] || { bg: 'bg-[var(--md-sys-color-surface-container)]', text: 'text-[var(--md-sys-color-on-surface)]', border: 'border-[var(--md-sys-color-outline-variant)]' };
-          const isLongValue = typeof stat.value === 'string' && stat.value.length > 12;
-          
-          // Concentric Radii Math: Outer R = 32px, Padding = 8px (p-2) -> Inner R = 24px (rounded-[24px])
-          return (
-            <div
-              key={i}
-              onClick={() => onNavigateToTab(stat.tab)}
-              className="p-2 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[32px] cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-premium active:scale-[0.98] group flex flex-col justify-stretch"
-            >
-              <div className="p-4 bg-[var(--md-sys-color-surface-container)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06)] dark:shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.02)] rounded-[24px] flex items-center gap-3.5 w-full h-full">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
-                  <span className="material-symbols-outlined text-xl font-fill">
-                    {stat.icon}
-                  </span>
-                </div>
-                <div className="overflow-hidden flex-1">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <p className="text-[9px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider leading-none truncate">{stat.label}</p>
-                    {i === 0 && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-pulse shrink-0" title="Sinkronisasi Live" />
-                    )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        {/* Left: Metrics Bento Grid (2/3 width) */}
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: 'Total Agenda', value: stats.total, sub: `${stats.recentCount} dalam 7 hari terakhir`, icon: 'inbox', color: 'teal', tab: 'mails', span: 'sm:col-span-2' },
+            { label: 'Dengan Lampiran', value: stats.withPdf, sub: `${stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% memiliki PDF`, icon: 'picture_as_pdf', color: 'indigo', tab: 'mails', span: 'sm:col-span-1' },
+            { label: 'Status Disposisi', value: stats.disposedCount, sub: `${stats.disposedPercent}% telah ditindaklanjut`, icon: 'assignment', color: 'green', tab: 'mails', span: 'sm:col-span-1' },
+            { label: 'Instansi Teraktif', value: stats.activeSender, sub: stats.activeSenderCount > 0 ? `Mengirim ${stats.activeSenderCount} surat` : 'Belum ada data', icon: 'business', color: 'blue', tab: 'mails', span: 'sm:col-span-1' },
+            { label: 'Efisiensi Arsip', value: '100%', sub: 'Penyimpanan lokal terstruktur', icon: 'bolt', color: 'amber', tab: 'dashboard', span: 'sm:col-span-1' },
+          ].map((stat, i) => {
+            const colors = colorClasses[stat.color] || { bg: 'bg-[var(--md-sys-color-surface-container)]', text: 'text-[var(--md-sys-color-on-surface)]', border: 'border-[var(--md-sys-color-outline-variant)]' };
+            const isLongValue = typeof stat.value === 'string' && stat.value.length > 12;
+            
+            // Concentric Radii Math: Outer R = 32px, Padding = 8px (p-2) -> Inner R = 24px (rounded-[24px])
+            return (
+              <div
+                key={i}
+                onClick={() => onNavigateToTab(stat.tab)}
+                className={`p-2 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[32px] cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-premium active:scale-[0.98] group flex flex-col justify-stretch ${stat.span}`}
+              >
+                <div className="p-5 bg-[var(--md-sys-color-surface-container)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06)] dark:shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.02)] rounded-[24px] flex items-center gap-4 w-full h-full">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
+                    <span className="material-symbols-outlined text-2xl font-fill">
+                      {stat.icon}
+                    </span>
                   </div>
-                  <p 
-                    className={`${isLongValue ? 'text-[11px] font-bold leading-tight' : 'text-xl font-black leading-none'} text-[var(--md-sys-color-on-surface)] mb-1 truncate`}
-                    title={String(stat.value)}
-                  >
-                    {stat.value}
-                  </p>
-                  <p className="text-[9px] text-[var(--md-sys-color-outline)] font-medium truncate">{stat.sub}</p>
-                </div>
-                {stat.tab !== 'dashboard' && !isLongValue && (
-                  <div className="w-6 h-6 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] flex items-center justify-center group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-premium text-[var(--md-sys-color-on-surface-variant)] shrink-0 shadow-sm">
-                    <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                  <div className="overflow-hidden flex-1">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <p className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider leading-none truncate">{stat.label}</p>
+                      {i === 0 && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-pulse shrink-0" title="Sinkronisasi Live" />
+                      )}
+                    </div>
+                    <p 
+                      className={`${isLongValue ? 'text-sm font-bold leading-tight' : 'text-2xl font-black leading-none'} text-[var(--md-sys-color-on-surface)] mb-1 truncate`}
+                      title={String(stat.value)}
+                    >
+                      {stat.value}
+                    </p>
+                    <p className="text-[10px] text-[var(--md-sys-color-outline)] font-medium truncate">{stat.sub}</p>
                   </div>
-                )}
+                  {stat.tab !== 'dashboard' && !isLongValue && (
+                    <div className="w-8 h-8 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] flex items-center justify-center group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-premium text-[var(--md-sys-color-on-surface-variant)] shrink-0 shadow-sm">
+                      <span className="material-symbols-outlined text-base">arrow_forward</span>
+                    </div>
+                  )}
+                </div>
               </div>
+            );
+          })}
+        </div>
+        
+        {/* Right: Large Clock & Date Hero Card (1/3 width) */}
+        <div className="p-2 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[32px] flex flex-col justify-stretch">
+          <div className="p-6 bg-[var(--md-sys-color-surface-container)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06)] dark:shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.02)] rounded-[24px] flex flex-col justify-center items-center text-center w-full h-full relative overflow-hidden group">
+            {/* Decorative background ambient glow */}
+            <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-[var(--md-sys-color-error-container)] opacity-10 blur-2xl group-hover:scale-110 transition-transform duration-700"></div>
+            <div className="absolute -left-10 -bottom-10 w-40 h-40 rounded-full bg-[var(--md-sys-color-primary-container)] opacity-10 blur-2xl group-hover:scale-110 transition-transform duration-700"></div>
+            
+            <div className="w-16 h-16 rounded-3xl flex items-center justify-center bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] border border-[var(--md-sys-color-outline-variant)] mb-5 shadow-sm">
+              <span className="material-symbols-outlined text-3xl font-fill animate-pulse">
+                schedule
+              </span>
             </div>
-          );
-        })}
+            
+            <p className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest leading-none mb-3">Waktu & Tanggal</p>
+            
+            <h2 className="text-4xl md:text-5xl font-black text-[var(--md-sys-color-primary)] font-mono tracking-tight leading-none mb-3 drop-shadow-sm select-none">
+              {formattedTime}
+            </h2>
+            
+            <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)] mb-1">{formattedDay}</p>
+            <p className="text-[11px] text-[var(--md-sys-color-outline)] font-medium">{formattedDate}</p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
