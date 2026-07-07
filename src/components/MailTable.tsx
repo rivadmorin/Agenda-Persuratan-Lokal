@@ -279,8 +279,18 @@ export default function MailTable(props: MailTableProps) {
                         <span>PDF</span>
                       </md-outlined-button>
                     ) : (
-                      <label className="text-xs text-[var(--md-sys-color-primary)] font-bold cursor-pointer underline decoration-dotted transition-premium">
-                        Unggah
+                      <div className="inline-block">
+                        <md-outlined-button
+                          onClick={(e: any) => {
+                            const parent = e.currentTarget.parentElement;
+                            const input = parent?.querySelector('input[type="file"]');
+                            if (input) input.click();
+                          }}
+                          className="flex items-center gap-1 text-[var(--md-sys-color-primary)] font-bold transition-premium animate-premium-in"
+                        >
+                          <span slot="icon" className="material-symbols-outlined text-sm">upload</span>
+                          <span>Unggah</span>
+                        </md-outlined-button>
                         <input
                           type="file"
                           accept="application/pdf"
@@ -290,7 +300,7 @@ export default function MailTable(props: MailTableProps) {
                             if (file) handleInlineUpload(mail.id, file);
                           }}
                         />
-                      </label>
+                      </div>
                     )}
                   </td>
                    <td className="px-4 py-2 text-right w-48 min-w-[192px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
