@@ -22,6 +22,16 @@ const colorClasses: Record<string, { bg: string; text: string; border: string }>
     bg: 'bg-[var(--md-sys-color-error-container)]', 
     text: 'text-[var(--md-sys-color-on-error-container)]', 
     border: 'border-[var(--md-sys-color-outline-variant)]' 
+  },
+  green: { 
+    bg: 'bg-emerald-100/80 dark:bg-emerald-950/40', 
+    text: 'text-emerald-800 dark:text-emerald-300', 
+    border: 'border-emerald-200 dark:border-emerald-800/40' 
+  },
+  blue: { 
+    bg: 'bg-sky-100/80 dark:bg-sky-950/40', 
+    text: 'text-sky-800 dark:text-sky-300', 
+    border: 'border-sky-200 dark:border-sky-800/40' 
   }
 };
 
@@ -67,8 +77,43 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const recentCount = mails.filter(m => new Date(m.createdAt) >= sevenDaysAgo).length;
+
+    // 1. Disposition count
+    const disposedMails = mails.filter(m => {
+      const disp = m.metadata?.disposisi;
+      return disp && typeof disp === 'string' && disp.trim() !== '' && disp.trim() !== '-';
+    });
+    const disposedCount = disposedMails.length;
+    const disposedPercent = total > 0 ? Math.round((disposedCount / total) * 100) : 0;
+
+    // 2. Most active sender (suratDari)
+    const senderCounts: Record<string, number> = {};
+    mails.forEach(m => {
+      const sender = m.metadata?.suratDari;
+      if (sender && typeof sender === 'string' && sender.trim() !== '' && sender.trim() !== '-') {
+        const cleaned = sender.trim();
+        senderCounts[cleaned] = (senderCounts[cleaned] || 0) + 1;
+      }
+    });
+
+    let activeSender = 'Tidak ada';
+    let activeSenderCount = 0;
+    Object.entries(senderCounts).forEach(([sender, count]) => {
+      if (count > activeSenderCount) {
+        activeSender = sender;
+        activeSenderCount = count;
+      }
+    });
     
-    return { total, withPdf, recentCount };
+    return { 
+      total, 
+      withPdf, 
+      recentCount,
+      disposedCount,
+      disposedPercent,
+      activeSender,
+      activeSenderCount
+    };
   }, [mails]);
 
   const chartData = useMemo(() => {
@@ -200,15 +245,18 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
         <p className="text-sm text-[var(--md-sys-color-on-surface-variant)]">Statistik surat masuk dan log aktivitas sistem terbaru.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {/* Reading this as: Premium document archival dashboard for administrative personnel, featuring structural Material 3 design tokens, clean geometric layouts with concentric double-bezel curves, and responsive spring-based hover feedback. */}
         {[
           { label: 'Total Agenda', value: stats.total, sub: `${stats.recentCount} dalam 7 hari terakhir`, icon: 'inbox', color: 'teal', tab: 'mails' },
           { label: 'Dengan Lampiran', value: stats.withPdf, sub: `${stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% memiliki PDF`, icon: 'picture_as_pdf', color: 'indigo', tab: 'mails' },
+          { label: 'Status Disposisi', value: stats.disposedCount, sub: `${stats.disposedPercent}% telah ditindaklanjut`, icon: 'assignment', color: 'green', tab: 'mails' },
+          { label: 'Instansi Teraktif', value: stats.activeSender, sub: stats.activeSenderCount > 0 ? `Mengirim ${stats.activeSenderCount} surat` : 'Belum ada data', icon: 'business', color: 'blue', tab: 'mails' },
           { label: 'Efisiensi Arsip', value: '100%', sub: 'Penyimpanan lokal terstruktur', icon: 'bolt', color: 'amber', tab: 'dashboard' },
           { label: 'Waktu & Tanggal', value: formattedTime, sub: `${formattedDay}, ${formattedDate}`, icon: 'schedule', color: 'rose', tab: 'dashboard' },
         ].map((stat, i) => {
           const colors = colorClasses[stat.color] || { bg: 'bg-[var(--md-sys-color-surface-container)]', text: 'text-[var(--md-sys-color-on-surface)]', border: 'border-[var(--md-sys-color-outline-variant)]' };
+          const isLongValue = typeof stat.value === 'string' && stat.value.length > 12;
           
           // Concentric Radii Math: Outer R = 32px, Padding = 8px (p-2) -> Inner R = 24px (rounded-[24px])
           return (
@@ -217,25 +265,30 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
               onClick={() => onNavigateToTab(stat.tab)}
               className="p-2 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-[32px] cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-md transition-premium active:scale-[0.98] group flex flex-col justify-stretch"
             >
-              <div className="p-5 bg-[var(--md-sys-color-surface-container)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06)] dark:shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.02)] rounded-[24px] flex items-center gap-5 w-full h-full">
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
-                  <span className="material-symbols-outlined text-2xl font-fill">
+              <div className="p-4 bg-[var(--md-sys-color-surface-container)] dark:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06)] dark:shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.02)] rounded-[24px] flex items-center gap-3.5 w-full h-full">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${colors.bg} ${colors.text} ${colors.border} border shrink-0`}>
+                  <span className="material-symbols-outlined text-xl font-fill">
                     {stat.icon}
                   </span>
                 </div>
                 <div className="overflow-hidden flex-1">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <p className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest leading-none">{stat.label}</p>
+                    <p className="text-[9px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-wider leading-none truncate">{stat.label}</p>
                     {i === 0 && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-pulse shrink-0" title="Sinkronisasi Live" />
                     )}
                   </div>
-                  <p className="text-2xl font-black text-[var(--md-sys-color-on-surface)] leading-none mb-1.5">{stat.value}</p>
-                  <p className="text-[10px] text-[var(--md-sys-color-outline)] font-medium truncate">{stat.sub}</p>
+                  <p 
+                    className={`${isLongValue ? 'text-[11px] font-bold leading-tight' : 'text-xl font-black leading-none'} text-[var(--md-sys-color-on-surface)] mb-1 truncate`}
+                    title={String(stat.value)}
+                  >
+                    {stat.value}
+                  </p>
+                  <p className="text-[9px] text-[var(--md-sys-color-outline)] font-medium truncate">{stat.sub}</p>
                 </div>
-                {stat.tab !== 'dashboard' && (
-                  <div className="w-8 h-8 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] flex items-center justify-center group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-premium text-[var(--md-sys-color-on-surface-variant)] shrink-0 shadow-sm">
-                    <span className="material-symbols-outlined text-base">arrow_forward</span>
+                {stat.tab !== 'dashboard' && !isLongValue && (
+                  <div className="w-6 h-6 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)] flex items-center justify-center group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-premium text-[var(--md-sys-color-on-surface-variant)] shrink-0 shadow-sm">
+                    <span className="material-symbols-outlined text-xs">arrow_forward</span>
                   </div>
                 )}
               </div>
