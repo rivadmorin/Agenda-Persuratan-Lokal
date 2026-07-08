@@ -14,6 +14,7 @@ Aplikasi web modern untuk manajemen agenda surat yang dirancang dengan filosofi:
 ---
 
 ## 🚀 Fitur Utama
+- **Responsive UI (Mobile/Tablet Ready):** Tata letak dioptimalkan menggunakan *drawer sidebar*, kartu yang beradaptasi vertikal, dan *horizontal-scroll* yang stabil, memberikan kenyamanan maksimal saat diakses dari HP atau Tablet.
 - **Manajemen Surat:** Input, edit, dan hapus agenda surat dengan lampiran PDF.
 - **Format Tanggal Baku:** Seluruh ekspor Excel, cetak PDF tanda terima, dan daftar dashboard menampilkan tanggal dalam format `DD/MM/YYYY`.
 - **Material Design 3:** UI yang konsisten dengan standar desain Google terbaru.
@@ -111,3 +112,14 @@ Untuk menjalankan linting dan pemeriksaan tipe TypeScript:
 ```bash
 npm run lint
 ```
+
+
+---
+
+## 📱 Tangkapan Layar (Screenshots)
+
+### Mode Desktop
+![Tampilan Desktop](https://via.placeholder.com/800x450/202124/FFFFFF?text=Agenda+Persuratan+Desktop+View)
+
+### Mode Mobile / Tablet (Responsif)
+![Tampilan Mobile](https://via.placeholder.com/375x812/202124/FFFFFF?text=Mobile+View+dengan+Drawer+Sidebar)
