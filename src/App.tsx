@@ -23,7 +23,7 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [mails, setMails] = useState<MailRecord[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < 768);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
@@ -389,7 +389,7 @@ export default function App() {
             currentUser={currentUser}
             appName={config.appName}
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
+            setActiveTab={(tab) => { setActiveTab(tab); if(window.innerWidth < 768) setSidebarCollapsed(true); }}
             onLogout={handleLogout}
             onlineCount={onlineCount}
             darkMode={darkMode}
@@ -398,11 +398,11 @@ export default function App() {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
 
-          <main className={`flex-1 overflow-y-auto p-6 transition-all duration-300 relative ${sidebarCollapsed ? 'pl-20' : ''}`}>
-            {sidebarCollapsed && (
+          <main className={`flex-1 overflow-y-auto p-4 md:p-6 transition-all duration-300 relative ${sidebarCollapsed ? 'md:pl-20' : ''}`}>
+            {(sidebarCollapsed || window.innerWidth < 768) && (
               <button
                 onClick={() => setSidebarCollapsed(false)}
-                className="fixed top-6 left-6 z-[45] w-10 h-10 rounded-full flex items-center justify-center bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] border border-[var(--md-sys-color-outline-variant)] shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+                className={`fixed top-4 left-4 md:top-6 md:left-6 z-[45] w-12 h-12 md:w-10 md:h-10 rounded-full flex items-center justify-center bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] border border-[var(--md-sys-color-outline-variant)] shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer ${(!sidebarCollapsed && window.innerWidth < 768) ? 'hidden' : ''}`}
                 title="Tampilkan Sidebar"
                 aria-label="Tampilkan Sidebar"
               >
@@ -414,7 +414,7 @@ export default function App() {
                 <Dashboard
                   mails={mails}
                   config={config}
-                  onNavigateToTab={setActiveTab}
+                  onNavigateToTab={(tab) => { setActiveTab(tab); if(window.innerWidth < 768) setSidebarCollapsed(true); }}
                   onSelectMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
                   isOffline={isServerOffline}
                 />

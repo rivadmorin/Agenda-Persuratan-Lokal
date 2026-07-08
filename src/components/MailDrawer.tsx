@@ -351,7 +351,7 @@ export default function MailDrawer({
             className={`fixed top-0 right-0 h-full bg-[var(--md-sys-color-surface)] shadow-2xl z-[101] border-l border-[var(--md-sys-color-outline-variant)] flex flex-col transition-[width,max-width] duration-300 ease-in-out ${
                isExpanded 
                  ? 'w-full max-w-[1000px] lg:max-w-[90vw]' 
-                 : (mode === 'view' ? 'w-full max-w-[550px]' : 'w-full max-w-[600px]')
+                 : (mode === 'view' ? 'w-full max-w-[550px]' : 'w-full max-w-full md:w-[600px]')
             }`}
           >
             {/* Header */}
@@ -803,7 +803,7 @@ export default function MailDrawer({
             </div>
 
             {/* Footer Actions */}
-            <div className="absolute bottom-0 right-0 left-0 p-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex items-center justify-end gap-3 z-10 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+            <div className="absolute bottom-0 right-0 left-0 p-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 z-10 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] pb-safe">
                <button
                  type="button"
                  onClick={onClose}

@@ -38,7 +38,15 @@ export default function Sidebar({
   const filteredItems = menuItems.filter(item => !item.adminOnly || currentUser.role === 'admin');
 
   return (
-    <aside className={`h-screen sticky top-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] justify-between z-10 transition-all duration-300 ease-in-out ${collapsed ? 'w-0 p-0 border-r-0 overflow-hidden opacity-0 pointer-events-none' : 'w-72 p-4 opacity-100'}`}>
+    <>
+      {!collapsed && (
+        <div
+          className="fixed inset-0 bg-black/40 z-[55] md:hidden backdrop-blur-sm transition-opacity"
+          onClick={onToggleCollapse}
+          aria-label="Tutup Sidebar"
+        />
+      )}
+    <aside className={`h-[100dvh] fixed md:sticky top-0 left-0 flex flex-col border-r border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] justify-between z-[60] transition-transform transition-width duration-300 ease-in-out ${collapsed ? '-translate-x-full md:translate-x-0 md:w-0 md:p-0 md:border-r-0 md:overflow-hidden md:opacity-0 md:pointer-events-none' : 'translate-x-0 w-[280px] md:w-72 p-4 opacity-100 shadow-2xl md:shadow-none'}`}>
       <div className="flex flex-col gap-6 min-w-[256px]">
         <div className="flex items-start justify-between gap-4 px-2">
           <div className="flex items-center gap-3">
@@ -120,5 +128,6 @@ export default function Sidebar({
         </div>
       </div>
     </aside>
+    </>
   );
 }
