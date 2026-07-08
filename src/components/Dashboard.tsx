@@ -247,7 +247,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         {/* Left: Metrics Bento Grid (2/3 width) */}
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {[
             { label: 'Total Agenda', value: stats.total, sub: `${stats.recentCount} dalam 7 hari terakhir`, icon: 'inbox', color: 'teal', tab: 'mails', span: 'sm:col-span-2' },
             { label: 'Dengan Lampiran', value: stats.withPdf, sub: `${stats.total > 0 ? Math.round((stats.withPdf / stats.total) * 100) : 0}% memiliki PDF`, icon: 'picture_as_pdf', color: 'indigo', tab: 'mails', span: 'sm:col-span-1' },
@@ -312,7 +312,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
             
             <p className="text-[10px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest leading-none mb-3">Waktu & Tanggal</p>
             
-            <h2 className="text-4xl md:text-5xl font-black text-[var(--md-sys-color-primary)] font-mono tracking-tight leading-none mb-3 drop-shadow-sm select-none">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-[var(--md-sys-color-primary)] font-mono tracking-tight leading-none mb-3 drop-shadow-sm select-none">
               {formattedTime}
             </h2>
             
@@ -323,7 +323,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail }: Dash
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-[var(--md-sys-color-surface-container)] p-8 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] shadow-sm">
+        <div className="lg:col-span-2 bg-[var(--md-sys-color-surface-container)] p-4 md:p-8 rounded-[28px] border border-[var(--md-sys-color-outline-variant)] shadow-sm overflow-hidden">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)]">
               Tren Entri Surat ({timeRange === 'daily' ? 'Harian' : timeRange === 'weekly' ? 'Mingguan' : timeRange === 'monthly' ? 'Bulanan' : 'Tahunan'})

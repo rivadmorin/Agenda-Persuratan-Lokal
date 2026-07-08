@@ -236,7 +236,7 @@ export default function MailTable(props: MailTableProps) {
       <div className="m3-table-container flex flex-col shadow-sm border border-[var(--md-sys-color-outline-variant)] flex-1 overflow-hidden bg-[var(--md-sys-color-surface-container)] rounded-3xl transition-premium">
         {isBatchLoading && <md-linear-progress indeterminate style={{ position: 'sticky', top: 0, zIndex: 10, width: '100%' }}></md-linear-progress>}
         <div className="flex-1 overflow-auto">
-          <table className="m3-table min-w-full">
+          <table className="m3-table min-w-[800px] xl:min-w-full">
             <thead className="bg-[var(--md-sys-color-surface-container-high)] sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-4 w-12">
