@@ -119,7 +119,7 @@ npm run lint
 ## 📱 Tangkapan Layar (Screenshots)
 
 ### Mode Desktop
-![Tampilan Desktop](https://via.placeholder.com/800x450/202124/FFFFFF?text=Agenda+Persuratan+Desktop+View)
+![Tampilan Desktop](docs/images/desktop-view.png)
 
 ### Mode Mobile / Tablet (Responsif)
-![Tampilan Mobile](https://via.placeholder.com/375x812/202124/FFFFFF?text=Mobile+View+dengan+Drawer+Sidebar)
+![Tampilan Mobile](docs/images/mobile-view.png)
