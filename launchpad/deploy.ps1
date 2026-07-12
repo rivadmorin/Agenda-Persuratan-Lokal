@@ -53,10 +53,12 @@ function Execute-Idempotent-Install {
     if (-not (Check-Prereqs)) { return }
 
     Write-Host "`n[+] Installing dependencies (ignoring native scripts)..." -ForegroundColor Blue
+    Write-Host "[!] Downloading NPM packages. This may take a few minutes depending on your internet connection..." -ForegroundColor Yellow
     Set-Location $ProjectDir
     npm install --ignore-scripts
 
     Write-Host "`n[+] Building application..." -ForegroundColor Blue
+    Write-Host "[!] Compiling TypeScript frontend and Express server..." -ForegroundColor Yellow
     npm run build
 
     Write-Host "`n[✓] Installation complete!" -ForegroundColor Green
@@ -74,7 +76,8 @@ function Start-Background-Process {
         Remove-Item ".server.pid" -Force
     }
 
-    $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run start" -RedirectStandardOutput "server.log" -RedirectStandardError "server.log" -WindowStyle Hidden -PassThru
+    $env:NODE_ENV = "production"
+    $process = Start-Process -FilePath "node" -ArgumentList "dist/server.cjs" -RedirectStandardOutput "server.log" -RedirectStandardError "server.log" -WindowStyle Hidden -PassThru
     $process.Id | Out-File ".server.pid"
     Write-Host "[✓] Server started in background. (PID: $($process.Id))" -ForegroundColor Green
 }

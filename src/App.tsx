@@ -23,10 +23,24 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [mails, setMails] = useState<MailRecord[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isTabletOrMobile, setIsTabletOrMobile] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('darkMode') === 'true' || window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+
+  useEffect(() => {
+    const handleResize = () => {
+      const isCompact = window.innerWidth < 1024;
+      setIsTabletOrMobile(isCompact);
+      if (isCompact) {
+        setSidebarCollapsed(true);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (darkMode) {
@@ -385,12 +399,30 @@ export default function App() {
         <Login appName={config?.appName || 'Agenda Persuratan'} onLoginSuccess={handleLoginSuccess} />
       ) : (
         <div className="flex h-screen overflow-hidden bg-[var(--md-sys-color-surface)]">
+          {/* Backdrop Scrim for mobile/tablet when sidebar is open */}
+          {!sidebarCollapsed && isTabletOrMobile && (
+            <div 
+              onClick={() => setSidebarCollapsed(true)}
+              className="fixed inset-0 z-[49] bg-black/50 backdrop-blur-[1px] transition-opacity duration-300"
+            />
+          )}
+
           <Sidebar
             currentUser={currentUser}
             appName={config.appName}
             activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            onLogout={handleLogout}
+            setActiveTab={(tab) => {
+              setActiveTab(tab);
+              if (isTabletOrMobile) {
+                setSidebarCollapsed(true);
+              }
+            }}
+            onLogout={() => {
+              handleLogout();
+              if (isTabletOrMobile) {
+                setSidebarCollapsed(true);
+              }
+            }}
             onlineCount={onlineCount}
             darkMode={darkMode}
             setDarkMode={setDarkMode}
@@ -398,8 +430,8 @@ export default function App() {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           />
 
-          <main className={`flex-1 overflow-y-auto p-6 transition-all duration-300 relative ${sidebarCollapsed ? 'pl-20' : ''}`}>
-            {sidebarCollapsed && (
+          <main className={`flex-1 overflow-y-auto p-6 transition-all duration-300 relative scroll-inertia ${sidebarCollapsed || isTabletOrMobile ? 'pl-20' : ''}`}>
+            {(sidebarCollapsed || isTabletOrMobile) && (
               <button
                 onClick={() => setSidebarCollapsed(false)}
                 className="fixed top-6 left-6 z-[45] w-10 h-10 rounded-full flex items-center justify-center bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] border border-[var(--md-sys-color-outline-variant)] shadow-md hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"

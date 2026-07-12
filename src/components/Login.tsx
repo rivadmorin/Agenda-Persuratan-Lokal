@@ -12,6 +12,16 @@ export default function Login({ appName, onLoginSuccess }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [shouldShake, setShouldShake] = useState(false);
+
+  useEffect(() => {
+    if (error) {
+      setShouldShake(true);
+      const timer = setTimeout(() => setShouldShake(false), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -80,7 +90,7 @@ export default function Login({ appName, onLoginSuccess }: LoginProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--md-sys-color-surface)]">
-      <div className="w-full max-w-md bg-[var(--md-sys-color-surface-container)] rounded-[28px] p-10 border border-[var(--md-sys-color-outline-variant)] shadow-sm">
+      <div className={`w-full max-w-md bg-[var(--md-sys-color-surface-container)] rounded-[28px] p-10 border border-[var(--md-sys-color-outline-variant)] shadow-sm ${shouldShake ? 'animate-shake' : 'animate-premium-in'}`}>
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-[24px] mb-6 bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)]">
              <span className="material-symbols-outlined text-5xl">mail</span>
@@ -90,10 +100,12 @@ export default function Login({ appName, onLoginSuccess }: LoginProps) {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] text-xs font-bold text-center">
-            {error}
+          <div className="mb-6 p-4 rounded-xl bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] text-xs font-bold flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined text-base">warning</span>
+            <span>{error}</span>
           </div>
         )}
+
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <md-filled-text-field

@@ -56,10 +56,12 @@ check_prereqs() {
 execute_idempotent_install() {
     check_prereqs || return 1
     echo -e "\n${BLUE}[+] Installing dependencies (ignoring native scripts)...${NC}"
+    echo -e "${YELLOW}[!] Downloading NPM packages. This may take a few minutes depending on your internet connection...${NC}"
     cd "$PROJECT_DIR" || return 1
     npm install --ignore-scripts
 
     echo -e "\n${BLUE}[+] Building application...${NC}"
+    echo -e "${YELLOW}[!] Compiling TypeScript frontend and Express server...${NC}"
     npm run build
 
     echo -e "\n${GREEN}[✓] Installation complete!${NC}"
@@ -76,7 +78,7 @@ start_background_process() {
         rm .server.pid
     fi
 
-    npm run start > server.log 2>&1 &
+    NODE_ENV=production node dist/server.cjs > server.log 2>&1 &
     echo $! > .server.pid
     echo -e "${GREEN}[✓] Server started in background. (PID: $(cat .server.pid))${NC}"
 }

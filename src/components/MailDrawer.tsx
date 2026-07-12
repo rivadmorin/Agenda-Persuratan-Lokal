@@ -71,6 +71,17 @@ export default function MailDrawer({
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const pdfSource = pdfBase64 || (mailToEdit?.pdfPath && !deletedPdf ? `/api/files/${mailToEdit.pdfPath}` : null);
+
+
+  // Auto shift preview tab from details to pdf/markdown when expanded on desktop
+  useEffect(() => {
+    if (isExpanded && previewTab === 'details') {
+      setPreviewTab(pdfSource ? 'pdf' : 'markdown');
+    }
+  }, [isExpanded, pdfSource]);
+
+
   // State for PWA multi-IP network and QR download
   const [networkInfo, setNetworkInfo] = useState<{
     interfaces: Array<{ name: string; address: string; type: 'local' | 'tailscale' | 'public' | 'unknown'; active: boolean }>;
@@ -327,7 +338,7 @@ export default function MailDrawer({
     return md;
   };
 
-  const pdfSource = pdfBase64 || (mailToEdit?.pdfPath && !deletedPdf ? `/api/files/${mailToEdit.pdfPath}` : null);
+
 
   return (
     <AnimatePresence>
@@ -348,10 +359,10 @@ export default function MailDrawer({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'tween', ease: 'easeOut', duration: 0.2 }}
-            className={`fixed top-0 right-0 h-full bg-[var(--md-sys-color-surface)] shadow-2xl z-[101] border-l border-[var(--md-sys-color-outline-variant)] flex flex-col transition-[width,max-width] duration-300 ease-in-out ${
+            className={`fixed top-0 right-0 h-full bg-[var(--md-sys-color-surface)] shadow-2xl z-[101] border-l border-[var(--md-sys-color-outline-variant)] flex flex-col transition-[width,max-width] duration-300 ease-in-out w-full md:w-auto ${
                isExpanded 
-                 ? 'w-full max-w-[1000px] lg:max-w-[90vw]' 
-                 : (mode === 'view' ? 'w-full max-w-[550px]' : 'w-full max-w-[600px]')
+                 ? 'md:max-w-[1000px] lg:max-w-[90vw] md:w-full' 
+                 : (mode === 'view' ? 'md:max-w-[550px] md:w-full' : 'md:max-w-[600px] md:w-full')
             }`}
           >
             {/* Header */}
@@ -381,7 +392,7 @@ export default function MailDrawer({
             <div className="flex-1 overflow-hidden flex flex-col">
               <div className="flex-1 overflow-y-auto">
                 {mode === 'edit' ? (
-                  <form className="p-6 flex flex-col gap-8 pb-32" onSubmit={handleSubmit}>
+                  <form className="p-4 md:p-6 flex flex-col gap-6 md:gap-8 pb-32 scroll-inertia" onSubmit={handleSubmit}>
 
                     {/* Metadata Fields */}
                     <div className="flex flex-col gap-6">
@@ -544,73 +555,96 @@ export default function MailDrawer({
                     </div>
                   </form>
                 ) : (
-                  <div className="flex flex-col h-full overflow-hidden">
-                    <div className="flex border-b border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewTab('details')}
-                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative cursor-pointer ${
-                          previewTab === 'details'
-                            ? 'text-[var(--md-sys-color-primary)]'
-                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-lg">info</span>
-                        Rincian
-                        {previewTab === 'details' && (
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewTab('markdown')}
-                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative cursor-pointer ${
-                          previewTab === 'markdown'
-                            ? 'text-[var(--md-sys-color-primary)]'
-                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-lg">description</span>
-                        Markdown
-                        {previewTab === 'markdown' && (
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => pdfSource && setPreviewTab('qr')}
-                        disabled={!pdfSource}
-                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer ${
-                          previewTab === 'qr'
-                            ? 'text-[var(--md-sys-color-primary)]'
-                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-lg">qr_code_2</span>
-                        Unduh QR
-                        {previewTab === 'qr' && (
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => pdfSource && setPreviewTab('pdf')}
-                        disabled={!pdfSource}
-                        className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer ${
-                          previewTab === 'pdf'
-                            ? 'text-[var(--md-sys-color-primary)]'
-                            : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
-                        Preview PDF
-                        {previewTab === 'pdf' && (
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
-                        )}
-                      </button>
-                    </div>
+                  <div className="flex flex-col lg:flex-row h-full overflow-hidden">
+                    {/* Left Pane (Details) - only shown when isExpanded is true on desktop */}
+                    {isExpanded && (
+                      <div className="hidden lg:flex lg:w-[45%] lg:flex-col lg:h-full lg:border-r border-[var(--md-sys-color-outline-variant)] overflow-y-auto p-6 scroll-inertia bg-[var(--md-sys-color-surface-container-lowest)]">
+                        <div className="flex flex-col gap-4">
+                          <h3 className="text-xs font-black uppercase tracking-wider text-[var(--md-sys-color-primary)] mb-2">Rincian Agenda</h3>
+                          {sortedColumns.map(col => (
+                            <div key={col.key} className="flex flex-col gap-1 p-4 rounded-2xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50">
+                              <span className="text-[9px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-[0.2em] opacity-80">{col.label}</span>
+                              <span className="text-sm font-medium text-[var(--md-sys-color-on-surface)] leading-relaxed whitespace-pre-wrap">
+                                {col.type === 'date' && mailToEdit?.metadata[col.key]
+                                  ? formatDate(mailToEdit?.metadata[col.key])
+                                  : String(mailToEdit?.metadata[col.key] || '-')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                    <div className="flex-1 overflow-y-auto bg-[var(--md-sys-color-surface)]">
+                    {/* Right Pane (Tabs + Tab Contents) */}
+                    <div className="flex-1 flex flex-col h-full overflow-hidden">
+                      <div className="flex border-b border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container-low)] shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTab('details')}
+                          className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative cursor-pointer ${
+                            isExpanded ? 'lg:hidden' : 'flex'
+                          } ${
+                            previewTab === 'details'
+                              ? 'text-[var(--md-sys-color-primary)]'
+                              : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-lg">info</span>
+                          Rincian
+                          {previewTab === 'details' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTab('markdown')}
+                          className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative cursor-pointer ${
+                            previewTab === 'markdown'
+                              ? 'text-[var(--md-sys-color-primary)]'
+                              : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-lg">description</span>
+                          Markdown
+                          {previewTab === 'markdown' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => pdfSource && setPreviewTab('qr')}
+                          disabled={!pdfSource}
+                          className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer ${
+                            previewTab === 'qr'
+                              ? 'text-[var(--md-sys-color-primary)]'
+                              : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-lg">qr_code_2</span>
+                          Unduh QR
+                          {previewTab === 'qr' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => pdfSource && setPreviewTab('pdf')}
+                          disabled={!pdfSource}
+                          className={`flex-1 py-4 flex flex-col items-center gap-1 text-xs font-bold transition-all relative disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer ${
+                            previewTab === 'pdf'
+                              ? 'text-[var(--md-sys-color-primary)]'
+                              : 'text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-on-surface-variant)]/10'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-lg">picture_as_pdf</span>
+                          Preview PDF
+                          {previewTab === 'pdf' && (
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--md-sys-color-primary)] rounded-t-full" />
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto bg-[var(--md-sys-color-surface)] scroll-inertia">
                       {previewTab === 'details' && (
                         <div className="p-6 flex flex-col gap-4 pb-32">
                            {sortedColumns.map(col => (
@@ -797,6 +831,7 @@ export default function MailDrawer({
                         </div>
                       )}
                     </div>
+                  </div>
                   </div>
                 )}
               </div>

@@ -225,7 +225,7 @@ export default function MailTable(props: MailTableProps) {
           <md-filled-button 
             disabled={isImporting || isBatchLoading ? true : undefined} 
             onClick={onAdd} 
-            className="w-full sm:w-auto"
+            className="hidden md:inline-flex"
           >
             <span slot="icon" className="material-symbols-outlined">add</span>
             Tambah Surat
@@ -235,7 +235,9 @@ export default function MailTable(props: MailTableProps) {
 
       <div className="m3-table-container flex flex-col shadow-sm border border-[var(--md-sys-color-outline-variant)] flex-1 overflow-hidden bg-[var(--md-sys-color-surface-container)] rounded-3xl transition-premium">
         {isBatchLoading && <md-linear-progress indeterminate style={{ position: 'sticky', top: 0, zIndex: 10, width: '100%' }}></md-linear-progress>}
-        <div className="flex-1 overflow-auto">
+        
+        {/* Desktop Table View */}
+        <div className="flex-1 overflow-auto hidden md:block scroll-inertia">
           <table className="m3-table min-w-full">
             <thead className="bg-[var(--md-sys-color-surface-container-high)] sticky top-0 z-10">
               <tr>
@@ -323,7 +325,7 @@ export default function MailTable(props: MailTableProps) {
                       </div>
                     )}
                   </td>
-                   <td className="px-4 py-2 text-right w-48 min-w-[192px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-4 py-2 text-right w-48 min-w-[192px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2 action-btn-group">
                       <md-icon-button onClick={() => onEdit(mail)} aria-label="Edit Agenda" className="btn-action-edit">
                         <span className="material-symbols-outlined text-[20px]">edit</span>
@@ -353,6 +355,137 @@ export default function MailTable(props: MailTableProps) {
             <div className="py-24 text-center text-[var(--md-sys-color-outline)] animate-premium-in">
                <span className="material-symbols-outlined text-6xl mb-4 text-[var(--md-sys-color-primary)] opacity-20 font-fill">inventory_2</span>
                <p className="text-sm font-medium">Tidak ada data surat ditemukan.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Card List View */}
+        <div className="flex-1 overflow-auto md:hidden p-4 flex flex-col gap-4 scroll-inertia">
+          {displayedMails.map(mail => {
+            const primaryCol = sortedColumns[0];
+            const otherCols = sortedColumns.slice(1).filter(col => {
+              return col.key !== 'catatan' && col.key !== 'disposisi';
+            }).slice(0, 4);
+
+            return (
+              <div 
+                key={mail.id} 
+                onClick={() => onViewMail(mail)}
+                className="bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl p-4 flex flex-col gap-3 hover:bg-[var(--md-sys-color-surface-container-highest)] transition-premium cursor-pointer relative"
+              >
+                {/* Card Header: Checkbox + Type Badge + Quick Actions */}
+                <div className="flex items-center justify-between gap-2 border-b border-[var(--md-sys-color-outline-variant)]/50 pb-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2">
+                    <md-checkbox
+                      checked={selectedIds.includes(mail.id)}
+                      onClick={() => toggleSelect(mail.id)}
+                    ></md-checkbox>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      mail.type === 'Masuk' 
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' 
+                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    }`}>
+                      {mail.type}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-1">
+                    <md-icon-button onClick={() => onEdit(mail)} aria-label="Edit" className="w-8 h-8">
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                    </md-icon-button>
+                    <md-icon-button
+                      onClick={mail.pdfPath ? () => window.open(`/api/files/${mail.pdfPath}`, '_blank') : undefined}
+                      disabled={mail.pdfPath ? undefined : true}
+                      aria-label="Download"
+                      className="w-8 h-8"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">download</span>
+                    </md-icon-button>
+                    <md-icon-button onClick={() => onDelete(mail.id)} aria-label="Delete" className="w-8 h-8">
+                      <span className="material-symbols-outlined text-[18px] text-[var(--md-sys-color-error)]">delete</span>
+                    </md-icon-button>
+                  </div>
+                </div>
+
+                {/* Card Content: Dynamic metadata columns */}
+                <div className="flex flex-col gap-2">
+                  {primaryCol && (
+                    <div className="text-sm font-bold text-[var(--md-sys-color-on-surface)] break-all leading-tight">
+                      {mail.metadata[primaryCol.key] || '-'}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-y-1.5 mt-1">
+                    {otherCols.map(col => {
+                      const val = col.type === 'date'
+                        ? formatDate(mail.metadata[col.key])
+                        : String(mail.metadata[col.key] || '-');
+                      return (
+                        <div key={col.key} className="text-xs flex justify-between border-b border-[var(--md-sys-color-outline-variant)]/30 pb-1">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-[var(--md-sys-color-on-surface-variant)] shrink-0 pr-2">
+                            {col.label}
+                          </span>
+                          <span className="text-[var(--md-sys-color-on-surface)] truncate max-w-full font-medium text-right">
+                            {val}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* PDF Status / Inline Upload */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--md-sys-color-outline-variant)]/50 mt-1" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-[9px] text-[var(--md-sys-color-on-surface-variant)] font-medium">
+                    Oleh: {mail.createdByName || mail.createdBy || '-'}
+                  </div>
+                  
+                  <div>
+                    {uploadingMailId === mail.id ? (
+                      <div className="flex items-center gap-1.5 text-[var(--md-sys-color-primary)] animate-pulse">
+                        <md-circular-progress indeterminate style={{ '--md-circular-progress-size': '16px' }}></md-circular-progress>
+                        <span className="text-[9px] font-black uppercase">Mengunggah</span>
+                      </div>
+                    ) : mail.pdfPath ? (
+                      <span className="text-[9px] font-bold text-[var(--md-sys-color-primary)] flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                        <span>PDF Tersedia</span>
+                      </span>
+                    ) : (
+                      <div className="inline-block">
+                        <md-outlined-button
+                          onClick={(e: any) => {
+                            const parent = e.currentTarget.parentElement;
+                            const input = parent?.querySelector('input[type="file"]');
+                            if (input) input.click();
+                          }}
+                          className="h-7 text-[9px] font-bold"
+                          style={{ '--md-outlined-button-label-text-size': '10px', height: '28px' }}
+                        >
+                          <span slot="icon" className="material-symbols-outlined text-xs" style={{ fontSize: '14px' }}>upload</span>
+                          <span>Unggah PDF</span>
+                        </md-outlined-button>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleInlineUpload(mail.id, file);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredMails.length === 0 && (
+            <div className="py-16 text-center text-[var(--md-sys-color-outline)] animate-premium-in">
+              <span className="material-symbols-outlined text-5xl mb-3 text-[var(--md-sys-color-primary)] opacity-20 font-fill">inventory_2</span>
+              <p className="text-xs font-medium">Tidak ada data surat ditemukan.</p>
             </div>
           )}
         </div>
@@ -418,6 +551,16 @@ export default function MailTable(props: MailTableProps) {
           </div>
         </div>
       </div>
+
+      {/* Floating Action Button (FAB) for mobile view */}
+      <button
+        onClick={onAdd}
+        className="fixed bottom-6 right-6 z-[40] w-14 h-14 rounded-2xl flex items-center justify-center bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] shadow-lg hover:shadow-xl active:scale-95 transition-all duration-200 cursor-pointer md:hidden border border-[var(--md-sys-color-outline-variant)]"
+        title="Tambah Agenda Surat"
+        aria-label="Tambah Agenda Surat"
+      >
+        <span className="material-symbols-outlined text-2xl font-bold">add</span>
+      </button>
     </div>
   );
 }

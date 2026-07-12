@@ -14,5 +14,6 @@ if not exist dist (
 echo.
 echo [+] Memulai server lokal (SQLite)...
 echo.
-call npm run start
+set NODE_ENV=production
+node dist/server.cjs
 pause

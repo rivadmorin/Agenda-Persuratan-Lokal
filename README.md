@@ -26,6 +26,25 @@ Aplikasi web modern untuk manajemen agenda surat yang dirancang dengan filosofi:
 ## 🛠️ Persyaratan Sistem
 - **Node.js** v20+
 - **npm** (Manajer paket bawaan Node.js)
+- **Git** (Hanya untuk opsi pemasangan instan)
+
+---
+
+## ⚡ Pemasangan Instan (One-Line Installer)
+
+### 🐧 Di Linux / macOS (Terminal)
+Anda dapat mengunduh, mengkloning, memasang seluruh dependensi, dan membangun aplikasi ini secara otomatis cukup dengan menjalankan perintah berikut:
+```bash
+curl -sSL https://raw.githubusercontent.com/rivadmorin/Agenda-Persuratan-Lokal/main/install.sh | bash
+```
+
+### 🪟 Di Windows (PowerShell)
+Buka PowerShell (sebagai Administrator atau User biasa) dan jalankan perintah satu baris berikut:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/rivadmorin/Agenda-Persuratan-Lokal/main/install.ps1)"
+```
+
+Setelah proses selesai, ikuti petunjuk di terminal/PowerShell untuk langsung menjalankan server lokal.
 
 ---
 

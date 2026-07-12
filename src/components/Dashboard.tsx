@@ -682,7 +682,7 @@ export default function Dashboard({ mails, onNavigateToTab, onSelectMail, isOffl
               })}
             </div>
           </div>
-          <div className="h-[280px] w-full">
+          <div className="h-[200px] md:h-[280px] w-full">
             {chartData.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-[var(--md-sys-color-on-surface-variant)] italic text-sm">
                 <span className="material-symbols-outlined text-5xl mb-2">analytics</span>
