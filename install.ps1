@@ -45,6 +45,8 @@ Write-Host "`n[+] Menjalankan instalasi aplikasi..." -ForegroundColor Blue
 Write-Host "[!] Catatan: Proses ini memerlukan waktu beberapa menit untuk mengunduh semua berkas (node_modules) dan mem-build sistem. Harap tunggu dan jangan menutup PowerShell Anda..." -ForegroundColor Yellow
 if (Test-Path "launchpad/deploy.ps1") {
     powershell -NoProfile -ExecutionPolicy Bypass -File "launchpad/deploy.ps1" install
+    Write-Host "`n[+] Menjalankan pemeriksaan akhir (Doctor Check)..." -ForegroundColor Blue
+    powershell -NoProfile -ExecutionPolicy Bypass -File "launchpad/deploy.ps1" doctor
 } else {
     Write-Host "[ERROR] Skrip install internal tidak ditemukan!" -ForegroundColor Red
     return

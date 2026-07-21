@@ -57,6 +57,8 @@ echo -e "\n${BLUE}[+] Menjalankan instalasi aplikasi...${NC}"
 echo -e "${YELLOW}[!] Catatan: Proses ini memerlukan waktu beberapa menit untuk mengunduh semua berkas (node_modules) dan mem-build sistem. Harap tunggu dan jangan menutup terminal Anda...${NC}"
 if [ -f "launchpad/deploy.sh" ]; then
     bash launchpad/deploy.sh install
+    echo -e "\n${BLUE}[+] Menjalankan pemeriksaan akhir (Doctor Check)...${NC}"
+    bash launchpad/deploy.sh doctor || true
 else
     echo -e "${RED}[ERROR] Skrip install internal tidak ditemukan!${NC}"
     exit 1

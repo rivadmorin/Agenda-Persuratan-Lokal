@@ -18,6 +18,7 @@ function Show-Help {
     Write-Host "Usage: .\launchpad\deploy.ps1 [command]"
     Write-Host "Commands:"
     Write-Host "  check-prereqs : Verifies system dependencies (Node, npm)" -ForegroundColor Green
+    Write-Host "  doctor        : Runs deep system diagnostics and health checks" -ForegroundColor Green
     Write-Host "  install       : Installs dependencies and builds the application" -ForegroundColor Green
     Write-Host "  start         : Starts the Node.js server with SQLite" -ForegroundColor Green
     Write-Host "  stop          : Stops the Node.js server" -ForegroundColor Green
@@ -49,6 +50,21 @@ function Check-Prereqs {
     return $true
 }
 
+function Run-Doctor {
+    # Check Node first before executing doctor.cjs
+    $nodeCheck = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeCheck) {
+        Write-Host "[ERROR] Node.js tidak terpasang! Silakan pasang Node.js v20+ terlebih dahulu." -ForegroundColor Red
+        return
+    }
+    $doctorPath = Join-Path $ScriptDir "doctor.cjs"
+    if (Test-Path $doctorPath) {
+        node $doctorPath
+    } else {
+        Write-Host "[ERROR] File diagnostik launchpad/doctor.cjs tidak ditemukan!" -ForegroundColor Red
+    }
+}
+
 function Execute-Idempotent-Install {
     if (-not (Check-Prereqs)) { return }
 
@@ -56,10 +72,18 @@ function Execute-Idempotent-Install {
     Write-Host "[!] Downloading NPM packages. This may take a few minutes depending on your internet connection..." -ForegroundColor Yellow
     Set-Location $ProjectDir
     npm install --ignore-scripts
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Gagal memasang dependensi (npm install)!" -ForegroundColor Red
+        return
+    }
 
     Write-Host "`n[+] Building application..." -ForegroundColor Blue
     Write-Host "[!] Compiling TypeScript frontend and Express server..." -ForegroundColor Yellow
     npm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Gagal mem-build aplikasi (npm run build)!" -ForegroundColor Red
+        return
+    }
 
     Write-Host "`n[✓] Installation complete!" -ForegroundColor Green
 }
@@ -116,21 +140,23 @@ function Show-InteractiveMenu {
         Show-Banner
         Write-Host "Pilih menu pilihan (masukkan angka):"
         Write-Host "  [1] Periksa Kesiapan Sistem (Node.js & npm)" -ForegroundColor Green
-        Write-Host "  [2] Instal Aplikasi (Pasang Dependensi & Build)" -ForegroundColor Green
-        Write-Host "  [3] Jalankan Server (Latar Belakang)" -ForegroundColor Green
-        Write-Host "  [4] Hentikan Server" -ForegroundColor Green
-        Write-Host "  [5] Hapus Instalasi (Wipe Environment)" -ForegroundColor Green
-        Write-Host "  [6] Keluar" -ForegroundColor Green
+        Write-Host "  [2] Jalankan Diagnostik Sistem (Doctor Mode)" -ForegroundColor Green
+        Write-Host "  [3] Instal Aplikasi (Pasang Dependensi & Build)" -ForegroundColor Green
+        Write-Host "  [4] Jalankan Server (Latar Belakang)" -ForegroundColor Green
+        Write-Host "  [5] Hentikan Server" -ForegroundColor Green
+        Write-Host "  [6] Hapus Instalasi (Wipe Environment)" -ForegroundColor Green
+        Write-Host "  [7] Keluar" -ForegroundColor Green
         Write-Host ""
-        $choice = Read-Host "Masukkan pilihan Anda [1-6]"
+        $choice = Read-Host "Masukkan pilihan Anda [1-7]"
         Write-Host ""
         switch ($choice) {
             "1" { Check-Prereqs }
-            "2" { Execute-Idempotent-Install }
-            "3" { Start-Background-Process }
-            "4" { Graceful-Shutdown-Process }
-            "5" { Clean-Environment-Wipe }
-            "6" { Write-Host "Keluar." -ForegroundColor Green; exit 0 }
+            "2" { Run-Doctor }
+            "3" { Execute-Idempotent-Install }
+            "4" { Start-Background-Process }
+            "5" { Graceful-Shutdown-Process }
+            "6" { Clean-Environment-Wipe }
+            "7" { Write-Host "Keluar." -ForegroundColor Green; exit 0 }
             default { Write-Host "[!] Pilihan tidak valid. Silakan coba lagi." -ForegroundColor Red }
         }
         Write-Host ""
@@ -144,11 +170,33 @@ if ([string]::IsNullOrEmpty($command)) {
     Show-InteractiveMenu
 } else {
     switch ($command) {
-        "check-prereqs" { Check-Prereqs }
-        "install"       { Execute-Idempotent-Install }
-        "start"         { Start-Background-Process }
-        "stop"          { Graceful-Shutdown-Process }
-        "uninstall"     { Clean-Environment-Wipe }
-        default         { Show-Help }
+        "check-prereqs" { 
+            $res = Check-Prereqs
+            if ($res) { exit 0 } else { exit 1 }
+        }
+        "doctor"        { 
+            Run-Doctor
+            exit $LASTEXITCODE
+        }
+        "install"       { 
+            Execute-Idempotent-Install
+            exit $LASTEXITCODE
+        }
+        "start"         { 
+            Start-Background-Process
+            exit $LASTEXITCODE
+        }
+        "stop"          { 
+            Graceful-Shutdown-Process
+            exit $LASTEXITCODE
+        }
+        "uninstall"     { 
+            Clean-Environment-Wipe
+            exit $LASTEXITCODE
+        }
+        default         { 
+            Show-Help
+            exit 0
+        }
     }
 }

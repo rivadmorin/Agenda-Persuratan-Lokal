@@ -26,6 +26,7 @@ show_help() {
     echo -e "Usage: ./launchpad/deploy.sh [command]"
     echo -e "Commands:"
     echo -e "  ${GREEN}check-prereqs${NC} : Verifies system dependencies (Node, npm)"
+    echo -e "  ${GREEN}doctor${NC}        : Runs deep system diagnostics and health checks"
     echo -e "  ${GREEN}install${NC}       : Installs dependencies and builds the application"
     echo -e "  ${GREEN}start${NC}         : Starts the Node.js server with SQLite"
     echo -e "  ${GREEN}stop${NC}          : Stops the Node.js server"
@@ -51,6 +52,20 @@ check_prereqs() {
     fi
     echo -e "${GREEN}[✓] npm found: $(npm -v)${NC}"
     return 0
+}
+
+run_doctor() {
+    # Check Node first before executing doctor.cjs
+    if ! command -v node &> /dev/null; then
+        echo -e "${RED}[ERROR] Node.js tidak terpasang! Silakan pasang Node.js v20+ terlebih dahulu.${NC}"
+        return 1
+    fi
+    if [ -f "$PROJECT_DIR/launchpad/doctor.cjs" ]; then
+        node "$PROJECT_DIR/launchpad/doctor.cjs"
+    else
+        echo -e "${RED}[ERROR] File diagnostik launchpad/doctor.cjs tidak ditemukan!${NC}"
+        return 1
+    fi
 }
 
 execute_idempotent_install() {
@@ -119,21 +134,23 @@ interactive_menu() {
         show_banner
         echo -e "Pilih menu pilihan (masukkan angka):"
         echo -e "  [1] Periksa Kesiapan Sistem (Node.js & npm)"
-        echo -e "  [2] Instal Aplikasi (Pasang Dependensi & Build)"
-        echo -e "  [3] Jalankan Server (Latar Belakang)"
-        echo -e "  [4] Hentikan Server"
-        echo -e "  [5] Hapus Instalasi (Wipe Environment)"
-        echo -e "  [6] Keluar"
+        echo -e "  [2] Jalankan Diagnostik Sistem (Doctor Mode)"
+        echo -e "  [3] Instal Aplikasi (Pasang Dependensi & Build)"
+        echo -e "  [4] Jalankan Server (Latar Belakang)"
+        echo -e "  [5] Hentikan Server"
+        echo -e "  [6] Hapus Instalasi (Wipe Environment)"
+        echo -e "  [7] Keluar"
         echo ""
-        read -p "Masukkan pilihan Anda [1-6]: " choice
+        read -p "Masukkan pilihan Anda [1-7]: " choice
         echo ""
         case "$choice" in
             1) check_prereqs ;;
-            2) execute_idempotent_install ;;
-            3) start_background_process ;;
-            4) graceful_shutdown_process ;;
-            5) clean_environment_wipe ;;
-            6) echo -e "${GREEN}Keluar.${NC}"; exit 0 ;;
+            2) run_doctor ;;
+            3) execute_idempotent_install ;;
+            4) start_background_process ;;
+            5) graceful_shutdown_process ;;
+            6) clean_environment_wipe ;;
+            7) echo -e "${GREEN}Keluar.${NC}"; exit 0 ;;
             *) echo -e "${RED}[!] Pilihan tidak valid. Silakan coba lagi.${NC}" ;;
         esac
         echo -e "\nTekan [Enter] untuk melanjutkan..."
@@ -146,6 +163,7 @@ if [ -z "$1" ]; then
 else
     case "$1" in
         check-prereqs) check_prereqs ;;
+        doctor)        run_doctor ;;
         install)       execute_idempotent_install ;;
         start)         start_background_process ;;
         stop)          graceful_shutdown_process ;;
