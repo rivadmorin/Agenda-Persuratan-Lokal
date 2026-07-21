@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import MailTable from './components/MailTable';
@@ -172,7 +172,7 @@ export default function App() {
     }
   };
 
-  const fetchMails = async () => {
+  const fetchMails = useCallback(async () => {
     setLoadingMails(true);
     try {
       const res = await fetch('/api/mails', {
@@ -191,7 +191,7 @@ export default function App() {
     } finally {
       setLoadingMails(false);
     }
-  };
+  }, []);
 
   const setupSSE = () => {
     const eventSource = new EventSource('/api/sse/online');
@@ -277,7 +277,7 @@ export default function App() {
     }
   };
 
-  const handleDeleteMail = (id: string) => {
+  const handleDeleteMail = useCallback((id: string) => {
     setConfirmModal({
       isOpen: true,
       title: 'Hapus Agenda Surat',
@@ -306,7 +306,7 @@ export default function App() {
         }
       }
     });
-  };
+  }, [fetchMails]);
 
   const handleSaveConfig = async (newConfig: AppConfig) => {
     try {
@@ -366,7 +366,7 @@ export default function App() {
     }
   };
 
-  const onBatchDownload = async (ids: string[]) => {
+  const onBatchDownload = useCallback(async (ids: string[]) => {
     setIsBatchLoading(true);
     try {
       const res = await fetch('/api/pdf/batch-download', {
@@ -391,7 +391,18 @@ export default function App() {
     } finally {
       setIsBatchLoading(false);
     }
-  };
+  }, []);
+
+
+  const handleAddMail = useCallback(() => { setMailToEdit(null); setDrawerMode('edit'); setIsDrawerOpen(true); }, []);
+  const handleEditMail = useCallback((m: MailRecord) => { setMailToEdit(m); setDrawerMode('edit'); setIsDrawerOpen(true); }, []);
+  const handleViewMail = useCallback((m: MailRecord) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }, []);
+  const handleExportExcel = useCallback(() => window.open('/api/excel/export', '_blank'), []);
+  const handleOpenImportModal = useCallback(() => setIsImportModalOpen(true), []);
+  const handleError = useCallback((title: string, message: string) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} }), []);
+  const handlePrintReceipt = useCallback((ids: string[]) => {
+    setReceiptModal({ isOpen: true, mailIds: ids });
+  }, []);
 
   return (
     <>
@@ -458,21 +469,16 @@ export default function App() {
                   config={config}
                   isBatchLoading={isBatchLoading}
                   isImporting={isImporting}
-                  onAdd={() => { setMailToEdit(null); setDrawerMode('edit'); setIsDrawerOpen(true); }}
-                  onEdit={(m) => { setMailToEdit(m); setDrawerMode('edit'); setIsDrawerOpen(true); }}
+                  onAdd={handleAddMail}
+                  onEdit={handleEditMail}
                   onDelete={handleDeleteMail}
-                  onViewMail={(m) => { setMailToEdit(m); setDrawerMode('view'); setIsDrawerOpen(true); }}
-                  onExportExcel={() => window.open('/api/excel/export', '_blank')}
-                  onOpenImportModal={() => setIsImportModalOpen(true)}
+                  onViewMail={handleViewMail}
+                  onExportExcel={handleExportExcel}
+                  onOpenImportModal={handleOpenImportModal}
                   onRefresh={fetchMails}
-                  onError={(title, message) => setConfirmModal({ isOpen: true, title, message, onConfirm: () => {} })}
+                  onError={handleError}
                   onBatchDownload={onBatchDownload}
-                  onPrintReceipt={(ids) => {
-                    setReceiptModal({
-                      isOpen: true,
-                      mailIds: ids
-                    });
-                  }}
+                  onPrintReceipt={handlePrintReceipt}
                 />
               )}
 

@@ -19,7 +19,7 @@ interface MailTableProps {
   onError?: (title: string, message: string) => void;
 }
 
-export default function MailTable(props: MailTableProps) {
+const MailTable = React.memo(function MailTable(props: MailTableProps) {
   const {
     mails,
     config,
@@ -563,4 +563,5 @@ export default function MailTable(props: MailTableProps) {
       </button>
     </div>
   );
-}
+});
+export default MailTable;
